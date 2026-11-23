@@ -12,6 +12,12 @@ if [ ! -d "$data_dir" ] || [ ! -w "$data_dir" ]; then
   exit 1
 fi
 
+# A pull-only upgrade of the previous Compose still sets MGO_AUTH_DIR.
+# Recognize that deployment while it migrates to the current Compose file.
+if [ -z "${MGO_LAN_MODE:-}" ] && [ -n "${MGO_AUTH_DIR:-}" ]; then
+  export MGO_LAN_MODE=1
+fi
+
 if [ "${KEM_XVFB:-1}" = "1" ]; then
   export DISPLAY="${KEM_DISPLAY:-:99}"
   rm -f "/tmp/.X11-unix/X${DISPLAY#:}" "/tmp/.X${DISPLAY#:}-lock"

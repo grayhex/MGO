@@ -100,7 +100,7 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
   const soundfont = new SoundfontStore(cfg.dataDir);
   const sessions = new SessionManager(cfg, library, () => soundfont.path());
   const java = await javaVersion(cfg.javaBin);
-  const metadataGateway = process.env.MGO_METADATA_GATEWAY;
+  const metadataGateway = process.env.MGO_METADATA_GATEWAY ?? process.env.AAS_PROXY_URL;
   const moby = new MobyClient(() => settings.mobygamesKey(), { base: process.env.MOBYGAMES_API_BASE || DEFAULT_API_BASE, ...(!process.env.MOBYGAMES_API_BASE && metadataGateway ? { fetch: mobyGatewayFetch(metadataGateway) } : {}), ...(process.env.MOBYGAMES_MIN_INTERVAL_MS ? { minIntervalMs: Number(process.env.MOBYGAMES_MIN_INTERVAL_MS) } : {}), onWait: (until) => metadata.setWaiting(until) });
   const metadata = new MetadataService(library, cfg.dataDir, () => moby, () => moby.hasKey());
   const scan = new ScanManager(cfg, library, {
