@@ -16,6 +16,7 @@ update_os
 msg_info "Installing Dependencies"
 $STD apt install -y \
   openjdk-21-jre-headless \
+  python3 \
   xvfb \
   libgl1 \
   libglx-mesa0 \

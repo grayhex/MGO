@@ -30,7 +30,7 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  assert.equal((await sessions())[0].id,sid);assert.equal((await sessions())[0].width,128);
  await p.getByRole('button',{name:'Restart with selected profile'}).click();
  await wait(async()=> (await sessions()).some(s=>s.state==='running'&&s.width===320));
- await p.getByText('Advanced: choose skin and profile independently',{exact:true}).click();
+ await p.getByText('Advanced profile',{exact:true}).click();
  await p.getByLabel('Device preset',{exact:true}).selectOption('132x176-siemens-full-screen');
  await wait(async()=>{const games=await(await fetch(base+'/api/games')).json();return games.find(g=>g.id===game.id).settings.device==='132x176-siemens-full-screen';}); // saved before leaving for /phones
  await choosePhone(/K750i/);

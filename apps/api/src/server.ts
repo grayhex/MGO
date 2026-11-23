@@ -1,3 +1,5 @@
+import { ArchiveService, type ArchiveWorker } from './archive/service.js';
+import { registerArchiveRoutes } from './archive/routes.js';
 import { KemulatorUpdates } from './kemulator/updates.js';
 import { NgageCatalog } from './ngageCatalog.js';
 import { isGenre, isPlatform, platformOfFile, resolvePhone } from '@mgo/protocol';
@@ -72,13 +74,12 @@ export interface App {
   close(): Promise<void>;
 }
 
-export async function buildApp(cfg: Config = loadConfig()): Promise<App> {
+export async function buildApp(cfg: Config = loadConfig(), options: { archiveWorker?: ArchiveWorker } = {}): Promise<App> {
   const app = Fastify({ logger: { level: cfg.logLevel }, bodyLimit: 64 * 1024, trustProxy: process.env.TRUST_PROXY === '1' });
   cfg = { ...cfg };
   const kemulatorUpdates = new KemulatorUpdates(cfg);
   const library = new Library(cfg.dataDir);
   const ngageCatalog = new NgageCatalog(library, cfg.dataDir);
-  library.enrich = game => ngageCatalog.enrich(game);
   // runtime settings (web UI) are layered over the environment; installations without a settings file behave exactly as before
   const settings = new SettingsStore(cfg.dataDir, cfg);
   settings.markLegacyIfPopulated(library.count());
@@ -99,6 +100,8 @@ export async function buildApp(cfg: Config = loadConfig()): Promise<App> {
       }
     },
   });
+  const archive = new ArchiveService(cfg, library, scan, options.archiveWorker);
+  library.enrich = game => archive.matching.enrich(ngageCatalog.enrich(game));
   let emuClasses: { dir: string; classes: Set<string> } | null = null;
   const devicePresets = () => {
     try {
@@ -501,6 +504,7 @@ export async function buildApp(cfg: Config = loadConfig()): Promise<App> {
 
   registerAdminRoutes(app, { cfg, sessions, library, store: settings, soundfont, scan, metadata, moby, version: VERSION, java });
   registerSymbianRoutes(app, { cfg, sessions });
+  registerArchiveRoutes(app, archive);
 
   // --- static web UI (production) ---
   if (cfg.webDir) {
@@ -526,7 +530,7 @@ export async function buildApp(cfg: Config = loadConfig()): Promise<App> {
       return closing ??= (async()=>{
         scan.cancel();metadata.cancel();ngageCatalog.stop();
         // Save MIDlet RMS promptly even if a cancelled metadata request is slow to finish.
-        await Promise.all([sessions.stopAll(),Promise.allSettled([scan.idle(),metadata.idle(),ngageCatalog.idle()])]);
+        await Promise.all([sessions.stopAll(),Promise.allSettled([scan.idle(),metadata.idle(),ngageCatalog.idle(),archive.close()])]);
         await app.close();library.close();
       })();
     },

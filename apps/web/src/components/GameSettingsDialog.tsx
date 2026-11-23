@@ -6,7 +6,8 @@ import { useState } from 'react';
 import { api } from '../api';
 import type { Toast } from '../App';
 import { Modal } from './Modal';
-import { Switch } from './ui';
+import { GameFilesPanel } from './GameFilesPanel';
+import { Panel, Switch } from './ui';
 
 export function GameSettingsDialog({ game, toast, onClose, onChanged }: { game: GameMeta; toast: (k: Toast['kind'], t: string) => void; onClose: () => void; onChanged: () => void }) {
   const j2me = (game.platform ?? 'j2me') === 'j2me';
@@ -75,6 +76,9 @@ export function GameSettingsDialog({ game, toast, onClose, onChanged }: { game: 
           </select>
         </label>
       )}
+      <Panel icon="library" title="Game files" open={false}>
+        <GameFilesPanel gameId={game.id} toast={toast} refreshKey={game.id} />
+      </Panel>
       </> : <p className="note">{translateUI('Native games use their own firmware and framebuffer. Choose the device and check readiness in the player.')}</p>}
       <div className="modal-actions">
         <Switch checked={delSaves} onChange={setDelSaves}>{translateUI("also delete saves")}</Switch>

@@ -4,6 +4,9 @@ import { Fragment, useEffect, useState } from 'react';
 import { api } from '../api';
 import { useServerSettings } from '../serverSettings';
 import { Candidates } from './Moby';
+import { ArchiveBrowser, ArchiveFacts } from './ArchiveBrowser';
+import { archiveMatchLabel } from './ArchiveSettings';
+import { navigate } from '../router';
 import { Modal } from './Modal';
 
 export function GameInfoDialog({ game, toast, onClose, onChanged }: { game: GameMeta; toast: (k: 'info' | 'error', t: string) => void; onClose: () => void; onChanged: () => void }) {
@@ -11,6 +14,7 @@ export function GameInfoDialog({ game, toast, onClose, onChanged }: { game: Game
   const hasKey = server?.secrets.mobygames.configured ?? false;
   const [info, setInfo] = useState<GameInfo | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
   const [change, setChange] = useState(false);
   useEffect(() => { api.gameInfo(game.id).then(setInfo, (e) => toast('error', (e as Error).message)); }, [game.id, toast]);
 
@@ -18,6 +22,8 @@ export function GameInfoDialog({ game, toast, onClose, onChanged }: { game: Game
     setBusy(true);
     try { setInfo(await f()); onChanged(); } catch (e) { toast('error', (e as Error).message); } finally { setBusy(false); }
   };
+  const archive = game.archiveMatch;
+  if (showArchive && archive?.build) return <ArchiveBrowser initialSha={archive.build.sha256} onClose={() => setShowArchive(false)} onImported={onChanged} onPlay={id => { onClose(); navigate('/play/' + id); }} />;
   const has = info && (info.status === 'matched' || info.status === 'manual');
   return (
     <Modal title={translateUI(info?.title ?? game.name)} onClose={onClose} wide>
@@ -25,6 +31,18 @@ export function GameInfoDialog({ game, toast, onClose, onChanged }: { game: Game
         {game.ngageInfo.hasCover && <img className="info-cover" src={`/api/games/${game.id}/ngage-cover`} alt={game.ngageInfo.title} />}
         <div><h3>{game.ngageInfo.title}</h3><dl className="facts">{Object.entries({ Genre: game.ngageInfo.genre, Publisher: game.ngageInfo.publisher, Developer: game.ngageInfo.developer, Released: game.ngageInfo.released ?? game.ngageInfo.year, Multiplayer: game.ngageInfo.multiplayer, Rating: game.ngageInfo.rating === null ? null : `${game.ngageInfo.rating}%`, 'Product code': game.ngageInfo.productCode }).map(([label,value]) => value !== null && value !== '' ? <Fragment key={label}><dt>{translateUI(label)}</dt><dd>{value}</dd></Fragment> : null)}</dl><a href={game.ngageInfo.sourceUrl} target="_blank" rel="noreferrer">All About Symbian ↗</a></div>
       </div>}
+      {archive && <details className="archive-alternatives" open={!!archive.build}>
+        <summary>J2ME Archive · {translateUI(archiveMatchLabel[archive.state])}</summary>
+        <div className="stack">
+          <small className="muted">{archive.indexVersion}{archive.confidence === 'candidate' ? ' · ' + translateUI('Related build · different SHA-256') : ''}</small>
+          {archive.build && <ArchiveFacts build={archive.build} />}
+          <div className="btn-row">
+            <a href={archive.sourceUrl} target="_blank" rel="noreferrer">{translateUI("Archive search")} ↗</a>
+            {archive.build && <button className="btn sm" onClick={() => setShowArchive(true)}>{translateUI("Possible alternate builds")}</button>}
+            {archive.state === 'review' && <button className="btn sm" onClick={() => { onClose(); navigate('/settings#mobygames'); }}>{translateUI("Review possible matches")}</button>}
+          </div>
+        </div>
+      </details>}
       {!info && <p className="muted">{translateUI("Loading…")}</p>}
       {info && has && (
         <div className="info-grid">
@@ -50,7 +68,7 @@ export function GameInfoDialog({ game, toast, onClose, onChanged }: { game: Game
       {info && !has && !game.ngageInfo && (
         <div className="stack">
           <dl className="facts"><dt>{translateUI("Name")}</dt><dd>{game.name}</dd><dt>{translateUI("Vendor")}</dt><dd>{game.vendor}</dd><dt>{translateUI("Version")}</dt><dd>{game.version || '—'}</dd></dl>
-          <p className="muted">{translateUI(info.status === 'ambiguous' ? 'MobyGames has several possible matches. Choose the right one:' : info.status === 'unmatched' ? 'MobyGames has no clear match for this title.' : hasKey ? 'No information from MobyGames yet.' : 'This game only has the information inside its JAR file. Add a MobyGames API key in Settings to fetch covers and descriptions.')}</p>
+          <p className="muted">{translateUI(info.status === 'ambiguous' ? 'MobyGames has several possible matches. Choose the right one:' : info.status === 'unmatched' ? 'MobyGames has no clear match for this title.' : hasKey ? 'No information from MobyGames yet.' : 'Add a MobyGames API key in Settings to fetch covers and descriptions.')}</p>
         </div>
       )}
       {info && hasKey && (!has || change) && (info.status !== 'none' || change) && <Candidates gameId={game.id} info={info} toast={toast} onChanged={(i) => { setInfo(i); if (i.status === 'manual') { setChange(false); onChanged(); } }} />}

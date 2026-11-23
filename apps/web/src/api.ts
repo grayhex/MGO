@@ -1,4 +1,4 @@
-import type { CatalogReport, DevicePreset, GameClassification, Genre, GenreSummary, EmulationTweaks, GameFileEntry, GameInfo, GameMeta, GameSettings, HealthStatus, KemulatorRelease, KemulatorUpdateStatus, LibraryCheck, LibraryRoot, MetadataJob, MobyCandidate, PublicSettings, Platform, ScanReport, SessionStatus, SettingsResponse, SymbianJob, SymbianStatus, SystemStatus } from '@mgo/protocol';
+import type { ArchiveStatus, ArchiveTransfer, ArchiveMatchJob, ArchiveReviewItem, ArchiveMatch, ArchiveSearchItem, ArchiveDownload, CatalogReport, DevicePreset, GameClassification, Genre, GenreSummary, EmulationTweaks, GameFileEntry, GameInfo, GameMeta, GameSettings, HealthStatus, KemulatorRelease, KemulatorUpdateStatus, LibraryCheck, LibraryRoot, MetadataJob, MobyCandidate, PublicSettings, Platform, ScanReport, SessionStatus, SettingsResponse, SymbianJob, SymbianStatus, SystemStatus } from '@mgo/protocol';
 
 export type GameSettingsPatch = Partial<Omit<GameSettings, 'device' | 'emulation' | 'symbianDevice' | 'emulatedDeviceId'>> & { device?: string | null; emulation?: EmulationTweaks | null; symbianDevice?: string | null; emulatedDeviceId?: string | null };
 
@@ -54,6 +54,20 @@ export const api = {
   installKemulatorUpdate: (release: KemulatorRelease) => req<KemulatorUpdateStatus>('/api/kemulator/install-update', jsonInit('POST', { version: release.version, sha256: release.sha256 })),
   restoreBundledKemulator: () => req<KemulatorUpdateStatus>('/api/kemulator/restore-bundled', jsonInit('POST', {})),
   login: (token: string) => req<{ ok: true }>('/api/auth/login', jsonInit('POST', { token })),
+  archiveStatus: () => req<ArchiveStatus>('/api/archive'),
+  archiveIndex: () => req<ArchiveTransfer>('/api/archive/index', { method: 'POST' }),
+  archiveCancelIndex: () => req<{ cancelled: boolean }>('/api/archive/index/job', { method: 'DELETE' }),
+  archiveRemoveIndex: () => req<void>('/api/archive/index', { method: 'DELETE' }),
+  archiveMatch: (resume: boolean) => req<ArchiveMatchJob>('/api/archive/match', jsonInit('POST', { resume })),
+  archivePause: () => req<{ paused: boolean }>('/api/archive/match/job', { method: 'DELETE' }),
+  archiveApply: () => req<ArchiveMatchJob>('/api/archive/match/apply', { method: 'POST' }),
+  archiveReview: (preview: boolean, page: number) => req<{ rows: ArchiveReviewItem[]; more: boolean }>(`/api/archive/match/results?preview=${preview ? '1' : '0'}&page=${page}`),
+  archiveConfirm: (id: string, sha256: string | null) => req<ArchiveMatch>(`/api/archive/match/${id}`, jsonInit('PUT', { sha256 })),
+  archiveSearch: (q: string, within: string, page: number) => req<{ builds: ArchiveSearchItem[]; more: boolean }>('/api/archive/search?' + new URLSearchParams({ q, within, page: String(page) })),
+  archiveBuild: (sha: string) => req<{ build: ArchiveSearchItem; alternatives: ArchiveSearchItem[]; indexVersion: string }>(`/api/archive/builds/${sha}`),
+  archiveDownload: () => req<{ job: ArchiveDownload | null }>('/api/archive/download'),
+  archiveStartDownload: (sha256: string, root: string, folder: string) => req<ArchiveDownload>('/api/archive/download', jsonInit('POST', { sha256, root, folder })),
+  archiveCancelDownload: () => req<{ cancelled: boolean }>('/api/archive/download', { method: 'DELETE' }),
   games: () => req<GameMeta[]>('/api/games'),
   upload: async (jar: File, jad?: File) => {
     const fd = new FormData();

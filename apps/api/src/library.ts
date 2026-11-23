@@ -151,6 +151,10 @@ function infoSummary(m: { status: string; data_json: string }): GameInfoSummary 
   return { status: m.status as MetaStatus, ...(d.title ? { title: d.title } : {}), year: d.year ?? null, genres: d.genres ?? [], hasCover: !!d.hasCover };
 }
 
+export function javaGroupKey(name: string, vendor: string): string {
+  return createHash('sha1').update(`${cleanVendor(vendor).toLowerCase()}\0${cleanTitle(name).toLowerCase()}`).digest('hex').slice(0, 12);
+}
+
 export class Library {
   enrich: (game: GameMeta) => GameMeta = game => game;
   readonly db: DatabaseSync;
@@ -198,6 +202,7 @@ export class Library {
         missing INTEGER NOT NULL DEFAULT 0, last_seen_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS sources_game ON sources(game_id);
+      CREATE INDEX IF NOT EXISTS games_group ON games(group_key);
       CREATE TABLE IF NOT EXISTS scans (
         id TEXT PRIMARY KEY, started_at TEXT NOT NULL, finished_at TEXT, report_json TEXT NOT NULL
       );
@@ -512,7 +517,7 @@ export class Library {
     const settings: GameSettings = { ...DEFAULT_SETTINGS, ...(opts.defaults ?? {}) };
     const firstMidlet = info.midlets[0];
     if (info.midlets.length > 1 && firstMidlet) settings.midlet = firstMidlet.className;
-    const groupKey = createHash('sha1').update(`${cleanVendor(vendor).toLowerCase()}\0${cleanTitle(name).toLowerCase()}`).digest('hex').slice(0, 12);
+    const groupKey = javaGroupKey(name, vendor);
     this.db
       .prepare(
         `INSERT INTO games (id, sha256, name, vendor, version, group_key, midlets_json, class_version, size_bytes, has_icon, has_jad,

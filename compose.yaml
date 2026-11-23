@@ -30,6 +30,8 @@ services:
       # Optional override: MGO_TOKEN still works. Empty = auto-generate once in mgo-auth.
       TRUST_PROXY: "1"
       AAS_PROXY_URL: http://gateway:9090
+      MGO_ARCHIVE_PROXY_URL: http://gateway:9090
+      ARCHIVE_INDEX_MB: ${ARCHIVE_INDEX_MB:-1024}
       LIBRARY_ROOTS: /mnt/mgo-library
       AUTH_TOKEN: ${MGO_TOKEN:-}
       MGO_AUTH_DIR: /mgo-auth

@@ -13,8 +13,8 @@ export const MAX_DEPTH = 16;
 export const MAX_ENTRIES = 100_000;
 const CHECK_BUDGET_MS = 4000;
 
-export function allowedRoots(cfg: Pick<Config, 'libraryRoots' | 'dataDir'>): string[] {
-  return [...new Set([...cfg.libraryRoots, path.join(cfg.dataDir, 'import')])];
+export function allowedRoots(cfg: Pick<Config, 'libraryRoots' | 'dataDir' | 'archiveWritableRoot'>): string[] {
+  return [...new Set([...cfg.libraryRoots, ...(cfg.archiveWritableRoot ? [cfg.archiveWritableRoot] : []), path.join(cfg.dataDir, 'import')])];
 }
 
 function realOrNull(p: string): string | null {
@@ -31,7 +31,7 @@ export function isInside(root: string, candidate: string): boolean {
 }
 
 /** The real path of `p` when it is a root or inside one, else null (also null when it does not exist). */
-export function resolveInsideRoots(cfg: Pick<Config, 'libraryRoots' | 'dataDir'>, p: string): { real: string; root: string } | null {
+export function resolveInsideRoots(cfg: Pick<Config, 'libraryRoots' | 'dataDir' | 'archiveWritableRoot'>, p: string): { real: string; root: string } | null {
   if (typeof p !== 'string' || !path.isAbsolute(p) || p.includes('\0')) return null;
   const real = realOrNull(p);
   if (!real) return null;
@@ -51,7 +51,7 @@ function can(p: string, mode: number): boolean {
   }
 }
 
-export function listRoots(cfg: Pick<Config, 'libraryRoots' | 'dataDir'>): LibraryRoot[] {
+export function listRoots(cfg: Pick<Config, 'libraryRoots' | 'dataDir' | 'archiveWritableRoot'>): LibraryRoot[] {
   return allowedRoots(cfg).map((r) => {
     const real = realOrNull(r);
     if (!real) return { path: r, exists: false, readable: false, writable: false, note: 'not present: add the directory (see docs/PROXMOX.md, "Game library")' };
@@ -122,7 +122,7 @@ export async function* walkLibrary(root: string, stats: WalkStats, isCancelled: 
 }
 
 /** Is the path usable as the game library? Also counts what is in there (bounded, so a huge tree cannot stall the API). */
-export async function checkLibraryDir(cfg: Pick<Config, 'libraryRoots' | 'dataDir'>, p: string): Promise<LibraryCheck> {
+export async function checkLibraryDir(cfg: Pick<Config, 'libraryRoots' | 'dataDir' | 'archiveWritableRoot'>, p: string): Promise<LibraryCheck> {
   const out: LibraryCheck = { ok: false, path: p, exists: false, isDirectory: false, readable: false, writable: false, insideRoot: false, jarCount: 0, jadCount: 0, packageCount: 0, totalBytes: 0, truncated: false, problems: [], warnings: [] };
   if (typeof p !== 'string' || !path.isAbsolute(p) || p.includes('\0')) {
     out.problems.push('The path must be absolute.');
@@ -175,7 +175,7 @@ export interface BrowseResult {
 }
 
 /** Sub-directory names below an allowed root, for the folder picker. `null` lists the roots themselves. */
-export function browseLibrary(cfg: Pick<Config, 'libraryRoots' | 'dataDir'>, p: string | null): BrowseResult | null {
+export function browseLibrary(cfg: Pick<Config, 'libraryRoots' | 'dataDir' | 'archiveWritableRoot'>, p: string | null): BrowseResult | null {
   if (p === null || p === '') {
     return { path: null, parent: null, dirs: listRoots(cfg).filter((r) => r.exists).map((r) => ({ name: r.path, path: r.path })), truncated: false };
   }

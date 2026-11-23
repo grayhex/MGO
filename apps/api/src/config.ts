@@ -47,6 +47,9 @@ export interface Config {
    * `<dataDir>/import` is always allowed. The API never reads anything outside these directories.
    */
   libraryRoots: string[];
+  /** An optional separately mounted write-enabled Java ME import root. */
+  archiveWritableRoot?: string;
+  archiveIndexBytes?: number;
   /** Extra JVM args, space separated. */
   jvmExtraArgs: string[];
   /** Wrapper command prepended to the JVM (e.g. "xvfb-run -a"). Space separated. */
@@ -98,6 +101,8 @@ export function loadConfig(env = process.env): Config {
     libraryRoots: (env.LIBRARY_ROOTS === undefined ? ['/mnt/mgo-library', '/srv/mgo-library'] : list(env, 'LIBRARY_ROOTS'))
       .filter((p) => path.isAbsolute(p))
       .map((p) => path.resolve(p)),
+    ...(env.ARCHIVE_WRITABLE_ROOT && path.isAbsolute(env.ARCHIVE_WRITABLE_ROOT) ? { archiveWritableRoot: path.resolve(env.ARCHIVE_WRITABLE_ROOT) } : {}),
+    archiveIndexBytes: Math.max(128, Math.min(4096, Math.floor(int(env, 'ARCHIVE_INDEX_MB', 1024)))) * 1024 * 1024,
     jvmExtraArgs: list(env, 'KEM_JVM_ARGS'),
     launchWrapper: list(env, 'KEM_LAUNCH_WRAPPER'),
   };

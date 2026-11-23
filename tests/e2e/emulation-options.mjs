@@ -39,7 +39,7 @@ try {
   await p.getByLabel('Font size small').fill('20');
   await p.getByLabel('Font size large').fill('40');
   await p.getByText('Preload resources', { exact: true }).click();
-  await p.getByText('Tell the game the phone has a touch screen', { exact: true }).click();
+  await p.getByText('Touch events', { exact: true }).click();
   await wait(async () => { const g = (await (await fetch(base + '/api/games')).json()).find((x) => x.id === props.id); return g.settings.emulation?.locale === 'ru-RU' && g.settings.emulation?.pointerEvents === false && g.settings.emulation?.preloadResources === true; }, 'options saved for the game');
   await p.locator('.ctrl-col').getByRole('button', { name: 'Start', exact: true }).click();
   await wait(async () => { const s = await running(); return s && (await (await fetch(base + '/api/sessions/' + s.id)).json()).logTail.some((l) => /PROPS locale=ru-RU pointer=false/.test(l)); }, 'the game sees the options');
@@ -49,12 +49,27 @@ try {
   await p.reload();
   await p.getByText('Game compatibility options', { exact: true }).click();
   await wait(async () => (await p.getByLabel('Language of the phone').inputValue()) === 'ru-RU', 'saved options are shown after a reload');
-  await p.getByRole('button', { name: 'Back to the emulator defaults' }).click();
+  await p.getByRole('button', { name: 'Reset options' }).click();
   await wait(async () => { const g = (await (await fetch(base + '/api/games')).json()).find((x) => x.id === props.id); return g.settings.emulation === undefined; }, 'defaults restored');
 
   // ---- game speed ----
   const game = await upload('tests/fixtures/labgames/build/kemgame.jar');
+  await p.setViewportSize({ width: 1280, height: 720 });
   await p.goto(base + '/play/' + game.id);
+  const panel = p.locator('.ctrl-col');
+  for (const [language, label] of [['RU', 'Ограничение кадров (fps)'], ['EN', 'Frame limit (fps)']]) {
+    await p.locator('.sidebar .seg.lang').getByRole('radio', { name: language }).click();
+    const fps = panel.getByRole('radiogroup', { name: label, exact: true });
+    await fps.waitFor();
+    assert.deepEqual((await fps.getByRole('radio').allTextContents()).slice(-2), ['30', '60']);
+    const fits = await panel.evaluate(el => {
+      const panel = el.getBoundingClientRect();
+      const fps = el.querySelector('.player-seg').getBoundingClientRect();
+      return panel.bottom <= innerHeight && fps.right < panel.right && fps.height < 38;
+    });
+    assert.ok(fits, `compact side panel fits at 1280×720 in ${language}`);
+    assert.equal(await panel.getByText('Game files', { exact: true }).count(), 0);
+  }
   const limits = p.getByRole('radiogroup', { name: 'Frame limit (fps)' });
   await limits.getByRole('radio', { name: 'Force 30 FPS' }).click();
   await p.locator('.ctrl-col').getByRole('button', { name: 'Start', exact: true }).click();
