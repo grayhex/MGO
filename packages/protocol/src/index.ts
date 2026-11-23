@@ -20,6 +20,8 @@ import type { Platform, EmulatorBackend } from './platforms.js';
 export interface EmulationTweaks {
   /** `FrameRate`: the frame limit of the drawing loop, 1..120 fps. */
   frameRate?: number;
+  /** KEmulator 2.22.1+: read game resources into memory at startup. */
+  preloadResources?: boolean;
   /** `StartAppOnResume`: call `pauseApp` when the game is suspended and `startApp` when it resumes (as phones do); off = only hideNotify/showNotify. */
   startAppOnResume?: boolean;
   /** `MIDPLocale`: the `microedition.locale` property, e.g. `en-US`, `ru-RU`. */
@@ -86,6 +88,8 @@ export interface GameMeta {
   lastPlayedAt: string | null;
   /** Time this version has been running, in seconds (counted while its session runs). */
   playSeconds?: number;
+  /** Known target display size, independent of the selected emulator profile. */
+  nativeResolution?: { width: number; height: number; source: string };
   /** Other uploaded versions of the same (vendor, name). */
   groupKey: string;
   settings: GameSettings;
@@ -380,6 +384,8 @@ export interface StartFailure {
 }
 
 export interface SessionStatus {
+  /** KEmulator drawing limit applied at launch. */
+  frameRateLimit?: number;
   /** Which emulator runs the game. */
   backend?: EmulatorBackend;
   /** Set when a Symbian / N-Gage start failed: the facts and the explanation. */
@@ -421,7 +427,7 @@ export interface SessionStatus {
 export interface HealthStatus {
   ok: boolean;
   version: string;
-  kemulator: { commit: string | null; jarPresent: boolean };
+  kemulator: { commit: string | null; version?: string | null; jarPresent: boolean };
   adapter: { present: boolean };
   java: { present: boolean; version: string | null };
   activeSessions: number;
@@ -665,3 +671,6 @@ export interface FirmwareInstallRequest {
 }
 
 export interface NgageInfo { title: string; sourceUrl: string; attribution: string; genre: string; publisher: string; developer: string | null; year: number | null; released: string | null; multiplayer: string | null; productCode: string | null; rating: number | null; hasCover: boolean; fetchedAt: string }
+
+export interface KemulatorRelease { version: string; tag: string; asset: string; sha256: string; bytes: number }
+export interface KemulatorUpdateStatus { supported: boolean; version: string | null; bundledVersion: string | null; updated: boolean; busy: boolean }

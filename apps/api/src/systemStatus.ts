@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { accessSync, constants, existsSync, readdirSync, statfsSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { SystemCheck, SystemStatus } from '@mgo/protocol';
-import { type Config, readKemCommit } from './config.js';
+import { type Config, readKemVersion } from './config.js';
 import type { Library } from './library.js';
 import { resolveInsideRoots } from './libraryPath.js';
 import type { SettingsStore } from './settingsStore.js';
@@ -69,9 +69,9 @@ export async function systemStatus(cfg: Config, library: Library, store: Setting
   checks.push(java
     ? { id: 'java', label: 'Java', state: 'ok', detail: `OpenJDK ${java}` }
     : { id: 'java', label: 'Java', state: 'error', detail: `"${cfg.javaBin}" was not found or does not start.`, hint: 'apt install openjdk-21-jre-headless, or run `mgo doctor`' });
-  const commit = readKemCommit(cfg.kemDir);
+  const kemVersion = readKemVersion(cfg.kemDir);
   checks.push(existsSync(jarPath)
-    ? { id: 'kemulator', label: 'KEmulator', state: 'ok', detail: commit ? `KEmulator nnmod, commit ${commit.slice(0, 10)}` : 'KEmulator.jar present (commit unknown)' }
+    ? { id: 'kemulator', label: 'KEmulator', state: 'ok', detail: kemVersion ? `KEmulator nnmod v${kemVersion}` : 'KEmulator.jar present (version unknown)' }
     : { id: 'kemulator', label: 'KEmulator', state: 'error', detail: 'KEmulator.jar is missing from the installation.', hint: '`mgo update`, or `mgo rollback` if it was working before' });
   const adapterOk = existsSync(cfg.adapterBin) && canExec(cfg.adapterBin);
   const runOk = (() => { try { return existsSync(cfg.runDir) ? writable(cfg.runDir) : true; } catch { return false; } })();

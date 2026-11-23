@@ -8,7 +8,7 @@ ARG BASE_REGISTRY=docker.io/library
 
 # ---- 1. KEmulator nnmod (pinned commit + our patches) -------------------------------------
 FROM ${BASE_REGISTRY}/ubuntu:24.04 AS kem-build
-ARG KEM_COMMIT=9ec1005af5448bca63a420e1dfa884ef53842d0f
+ARG KEM_COMMIT=02d5822d2dad15759666872e76249c0f77703ca1
 ARG KEM_REPO=https://github.com/shinovon/KEmulator
 RUN apt-get update && apt-get install -y --no-install-recommends openjdk-21-jdk-headless git ca-certificates unzip \
     && rm -rf /var/lib/apt/lists/*

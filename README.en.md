@@ -162,7 +162,7 @@ browser (React) ⇄ WebSocket / REST ⇄ apps/api (Fastify) ⇄ kem-adapter (Rus
 | `runtime/` | KEmulator build and patches |
 | `packaging/`, `ct/`, `install/` | release, the `mgo` command, Proxmox VE install |
 
-More: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). KEmulator nnmod v2.22 (commit `9ec1005`) is built from source with small patches ([docs/BRIDGE.md](docs/BRIDGE.md)); its code is not part of this repository.
+More: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). KEmulator nnmod v2.22.1 (commit `02d5822`) is built from source with small patches ([docs/BRIDGE.md](docs/BRIDGE.md)); its code is not part of this repository.
 
 ## Security
 

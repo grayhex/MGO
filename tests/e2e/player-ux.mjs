@@ -31,6 +31,13 @@ try {
   const p = await ctx.newPage();
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
+  const assertStageFits = async () => {
+    const { top, bottom, height } = await p.locator('.stage-card').evaluate((card) => {
+      const { top, bottom } = card.getBoundingClientRect();
+      return { top, bottom, height: window.innerHeight };
+    });
+    assert.ok(top >= 0 && bottom <= height + 2, `the game card fits the window: ${top},${bottom},${height}`);
+  };
 
   // ---- the sidebar item "Game" appears once a game was opened and leads back to it ----
   await p.goto(base + '/');
@@ -53,12 +60,16 @@ try {
   await sleep(500);
   const m = await p.evaluate(() => ({ box: document.querySelector('.skin-box').getBoundingClientRect().height, win: window.innerHeight, header: 0 }));
   assert.ok(m.box >= (m.win - m.header) * 0.88, `phone height ${m.box}px of ${m.win - m.header}px available`);
-  const sh = await p.evaluate(() => { const r = document.querySelector('.stage-card').getBoundingClientRect(); return [r.top, r.bottom, window.innerHeight]; }); assert.ok(sh[0] >= 0 && sh[1] <= sh[2] + 2, 'the game card fits the window: ' + sh);
+  await assertStageFits();
   console.log(`✔ the phone is ${Math.round(m.box)}px tall in a ${m.win}px window (was about 520px), game card fits the window`);
 
   // ---- help texts are tooltips ----
   await p.locator('.ctrl-col').getByRole('button', { name: 'Start', exact: true }).click();
   await wait(async () => (await (await fetch(base + '/api/sessions')).json()).some((s) => s.state === 'running' && s.framesReceived > 5), 'running');
+  await p.setViewportSize({ width: 1280, height: 900 });
+  await p.locator('.stage-bar').getByRole('button', { name: /Pause/ }).waitFor();
+  await assertStageFits();
+  await p.setViewportSize({ width: 1440, height: 900 });
   assert.equal(await p.getByText(/Stop requests a safe MIDlet shutdown/).count(), 0, 'no Stop paragraph');
   assert.match(await p.locator('.ctrl-col').getByRole('button', { name: 'Stop', exact: true }).getAttribute('title'), /safe MIDlet shutdown/);
   console.log('✔ the Stop explanation is a tooltip');

@@ -1,4 +1,4 @@
-import type { CatalogReport, DevicePreset, GameClassification, Genre, GenreSummary, EmulationTweaks, GameFileEntry, GameInfo, GameMeta, GameSettings, HealthStatus, LibraryCheck, LibraryRoot, MetadataJob, MobyCandidate, PublicSettings, Platform, ScanReport, SessionStatus, SettingsResponse, SymbianJob, SymbianStatus, SystemStatus } from '@mgo/protocol';
+import type { CatalogReport, DevicePreset, GameClassification, Genre, GenreSummary, EmulationTweaks, GameFileEntry, GameInfo, GameMeta, GameSettings, HealthStatus, KemulatorRelease, KemulatorUpdateStatus, LibraryCheck, LibraryRoot, MetadataJob, MobyCandidate, PublicSettings, Platform, ScanReport, SessionStatus, SettingsResponse, SymbianJob, SymbianStatus, SystemStatus } from '@mgo/protocol';
 
 export type GameSettingsPatch = Partial<Omit<GameSettings, 'device' | 'emulation' | 'symbianDevice' | 'emulatedDeviceId'>> & { device?: string | null; emulation?: EmulationTweaks | null; symbianDevice?: string | null; emulatedDeviceId?: string | null };
 
@@ -49,6 +49,10 @@ const jsonInit = (method: string, body: unknown): RequestInit => ({ method, head
 export const api = {
   logout: () => req<{ ok: boolean }>('/api/auth/logout', jsonInit('POST', {})),
   health: () => req<HealthStatus>('/api/health'),
+  kemulatorRuntime: () => req<KemulatorUpdateStatus>('/api/kemulator/runtime'),
+  checkKemulatorUpdate: () => req<{ release: KemulatorRelease | null }>('/api/kemulator/check-update', jsonInit('POST', {})),
+  installKemulatorUpdate: (release: KemulatorRelease) => req<KemulatorUpdateStatus>('/api/kemulator/install-update', jsonInit('POST', { version: release.version, sha256: release.sha256 })),
+  restoreBundledKemulator: () => req<KemulatorUpdateStatus>('/api/kemulator/restore-bundled', jsonInit('POST', {})),
   login: (token: string) => req<{ ok: true }>('/api/auth/login', jsonInit('POST', { token })),
   games: () => req<GameMeta[]>('/api/games'),
   upload: async (jar: File, jad?: File) => {

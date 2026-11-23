@@ -12,8 +12,8 @@ runtime_dir="$(dirname "$here")"
 # shellcheck source=lib.sh
 . "$here/lib.sh"
 KEM_REPO="${KEM_REPO:-https://github.com/shinovon/KEmulator}"
-# v2.22 (tag object resolves to this commit)
-KEM_REF="${KEM_REF:-9ec1005af5448bca63a420e1dfa884ef53842d0f}"
+# v2.22.1 (tag object resolves to this commit)
+KEM_REF="${KEM_REF:-02d5822d2dad15759666872e76249c0f77703ca1}"
 KEM_SRC="${KEM_SRC:-}"          # optional: existing checkout to build from (it will be reset!)
 outdir="$(realpath -m "${1:-$runtime_dir/build/kemulator}")"
 work="$(mktemp -d)"
@@ -74,4 +74,7 @@ cp home/sensorsimulator.jar home/swt-gtk-linux-x86_64.jar \
    home/lwjgl-natives-linux.jar home/lwjgl-opengl-natives-linux.jar home/lwjgl-glfw-natives-linux.jar \
    home/lwjgl3-swt-linux.jar home/libjinput-linux64.so "$outdir/"
 echo "$actual" > "$outdir/KEM_COMMIT"
+version=$(sed -nE 's/^[[:space:]]*public static String version = "([0-9]+\.[0-9]+(\.[0-9]+)?)";.*/\1/p' src/main/emulator/Emulator.java)
+[ -n "$version" ] || { echo "KEmulator version not found" >&2; exit 1; }
+echo "$version" > "$outdir/KEM_VERSION"
 echo "built $outdir/KEmulator.jar ($(du -h "$outdir/KEmulator.jar" | cut -f1)) from $actual"

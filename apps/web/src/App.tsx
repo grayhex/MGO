@@ -85,7 +85,8 @@ export function App() {
     void refreshHealth();
     api.games().then(() => void boot(), (e) => { if (e instanceof ApiError && e.status === 401) setNeedLogin(true); else void boot(); });
     const t = window.setInterval(() => { api.health().then(setHealth, () => undefined); }, 15000);
-    return () => window.clearInterval(t);
+    window.addEventListener('mgo:kemulator-changed', refreshHealth);
+    return () => { window.clearInterval(t); window.removeEventListener('mgo:kemulator-changed', refreshHealth); };
   }, [refreshHealth, boot]);
   useEffect(() => {
     if (!ready || needLogin) return;

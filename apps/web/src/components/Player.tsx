@@ -14,7 +14,7 @@ import { Recorder, Replayer } from '../recording';
 import { downloadBlob, fileSafe, framePng } from '../snapshot';
 import { GamepadPoller, loadPadProfile, type PadAction, type PadState } from '../gamepad';
 import { GamepadSettings } from './GamepadSettings';
-import { KEY_LAYOUTS, SCREEN_PRESETS, type PhoneCatalog, type DevicePreset, type EmulationTweaks, type GameMeta, type HealthStatus, type LayoutId, type ServerEvent, type SessionState, type SessionStatus } from '@mgo/protocol';
+import { EMULATION_DEFAULTS, KEY_LAYOUTS, SCREEN_PRESETS, type PhoneCatalog, type DevicePreset, type EmulationTweaks, type GameMeta, type HealthStatus, type LayoutId, type ServerEvent, type SessionState, type SessionStatus } from '@mgo/protocol';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, type JarAnalysisView } from '../api';
 import type { Toast } from '../App';
@@ -333,6 +333,7 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
   const launchVersion = useRef(0);
   const emuPatch = Object.keys(tweaks).length ? tweaks : null;
   const emuKey = JSON.stringify(tweaks);
+  const pendingFrameLimit = session?.frameRateLimit !== undefined && session.frameRateLimit !== (tweaks.frameRate ?? EMULATION_DEFAULTS.frameRate);
   const start = async () => {
     if (!game || busy || !loaded || (j2me ? !advanced && !matched : !native.data?.plan.ready && !(live && session?.backend === 'eka2l1' && native.data?.plan.code === 'symbian_busy'))) return;
     const version = ++launchVersion.current;
@@ -559,11 +560,11 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
             {live && <button className="btn ghost sm" onClick={() => send({ t: 'pause', on: !(pauseInfo?.on && pauseInfo.reason === 'manual') })} aria-pressed={!!pauseInfo?.on && pauseInfo.reason === 'manual'} title={translateUI('Suspend the game: pauseApp is called, the picture stops')}>{translateUI(pauseInfo?.on && pauseInfo.reason === 'manual' ? '▶ Resume' : '⏸ Pause')}</button>}
             {(!monoblock || skin?.config.id === 'nokia-n8') && <Seg label={translateUI("View")} value={prefs.view} onChange={(view) => setPrefs({ view })} options={[{ value: 'full', label: <><Icon name="phone" /> {translateUI("Phone")}</>, title: 'Whole phone, body keys active' }, { value: 'screen', label: <><Icon name="zoom" /> {translateUI("Screen")}</>, title: 'Enlarged display; controls below' }]} />}
             {view === 'screen' && <button className="btn ghost sm" onClick={()=>setLights(v=>!v)} aria-label={translateUI("Lights Out")} aria-pressed={lights} title={translateUI("Lights Out · Alt+L")}>{translateUI("☾ Lights Out")}</button>}
-            <button className="btn ghost sm icon" onClick={() => turnTo(nextRotation(rotation))} aria-label={translateUI("Rotate the picture")} title={translateUI("Rotate the picture (for games made for landscape)")} data-testid="rotate"><Icon name="rotate" /></button>
-            <button className="btn ghost sm icon" onClick={() => void shot('save')} disabled={!lastFrame.current} aria-label={translateUI("Save a screenshot")} title={translateUI("Save a screenshot (PNG, the game's own size)")} data-testid="screenshot"><Icon name="camera" /></button>
-            <button className={`btn ghost sm icon${showFps ? ' on' : ''}`} onClick={() => setShowFps(!showFps)} aria-pressed={showFps} aria-label={translateUI("Show the frame rate")} title={translateUI("Show the frame rate in the corner of the screen")} data-testid="fps-toggle"><Icon name="pulse" /></button>
-            <button className="btn ghost sm icon" onClick={() => void shot('copy')} disabled={!lastFrame.current} aria-label={translateUI("Copy a screenshot")} title={translateUI("Copy a screenshot to the clipboard")} data-testid="screenshot-copy"><Icon name="copy" /></button>
-            <button className="btn ghost sm icon" onClick={fullscreen} aria-label={translateUI("Toggle fullscreen")} title={translateUI("Fullscreen")}><Icon name="fullscreen" /></button>
+            <button className="btn ghost sm stage-tool" onClick={() => turnTo(nextRotation(rotation))} aria-label={translateUI("Rotate the picture")} title={translateUI("Rotate the picture (for games made for landscape)")} data-testid="rotate"><Icon name="rotate" /><span>{translateUI("Rotate")}</span></button>
+            <button className="btn ghost sm stage-tool" onClick={() => void shot('save')} disabled={!lastFrame.current} aria-label={translateUI("Save a screenshot")} title={translateUI("Save a screenshot (PNG, the game's own size)")} data-testid="screenshot"><Icon name="camera" /><span>{translateUI("Screenshot")}</span></button>
+            <button className={`btn ghost sm stage-tool${showFps ? ' on' : ''}`} onClick={() => setShowFps(!showFps)} aria-pressed={showFps} aria-label={translateUI("Show the frame rate")} title={translateUI("Show the frame rate in the corner of the screen")} data-testid="fps-toggle"><Icon name="pulse" /><span>{translateUI("FPS")}</span></button>
+            <button className="btn ghost sm stage-tool" onClick={() => void shot('copy')} disabled={!lastFrame.current} aria-label={translateUI("Copy a screenshot")} title={translateUI("Copy a screenshot to the clipboard")} data-testid="screenshot-copy"><Icon name="copy" /><span>{translateUI("Copy")}</span></button>
+            <button className="btn ghost sm stage-tool" onClick={fullscreen} aria-label={translateUI("Toggle fullscreen")} title={translateUI("Fullscreen")}><Icon name="fullscreen" /><span>{translateUI("Fullscreen")}</span></button>
           </div>
         </div>
 
@@ -604,6 +605,23 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
               : <button className="btn danger grow" onClick={stop} disabled={(busy && j2me) || state === 'stopping'} title={translateUI("Stop requests a safe MIDlet shutdown. An unresponsive game may be forcibly closed after 8 seconds; unsaved in-game progress can be lost. Save inside the game first.")}><img className="act-icon" src="/graphics/actions/stop-icon.svg" alt="" width={20} height={20} /> {translateUI("Stop")}</button>}
             {running && <button className="btn" disabled={busy || state === 'stopping' || (!j2me && !native.data?.plan.ready && native.data?.plan.code !== 'symbian_busy')} onClick={async () => { if (await stop()) setTimeout(start, 400); }}><img className="act-icon" src="/graphics/actions/restart-icon.svg" alt="" width={20} height={20} /> {translateUI("Restart")}</button>}
           </div>
+          {game && j2me && health?.ok !== false && <div className="field">
+            <span className="label-caps">{translateUI('Frame limit (fps)')}</span>
+            <Seg label="Frame limit (fps)" value={String(tweaks.frameRate ?? 'default')}
+              options={[
+                { value: 'default', label: 'Default' },
+                { value: '30', label: 'Force 30 FPS' },
+                { value: '60', label: 'Force 60 FPS' },
+                ...(tweaks.frameRate !== undefined && ![30, 60].includes(tweaks.frameRate) ? [{ value: String(tweaks.frameRate), label: `${tweaks.frameRate} FPS` }] : []),
+              ]}
+              onChange={value => setTweaks(previous => {
+                const next = { ...previous };
+                if (value === 'default') delete next.frameRate;
+                else next.frameRate = Number(value);
+                return next;
+              })} />
+            {running && pendingFrameLimit && <p className="muted small" role="status">{translateUI('Restart to apply the frame limit.')}</p>}
+          </div>}
           {running && j2me && <div className="field"><span className="label-caps">{translateUI("Game speed")}</span>
             <Seg<string> label={translateUI("Game speed")} value={String(speed)} onChange={(v) => send({ t: 'speed', modifier: Number(v) })}
               options={[{ value: '-75', label: '×0.25' }, { value: '-50', label: '×0.5' }, { value: '1', label: '×1' }, { value: '2', label: '×2' }, { value: '4', label: '×4' }]} />

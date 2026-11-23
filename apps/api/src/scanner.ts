@@ -234,7 +234,7 @@ export class ScanManager {
       else if (this.library.sourcesOf(existing.id).some((s) => !s.missing && s.rel_path !== jar.rel)) r.unchanged++; // counted as a duplicate when the groups are collected
       else r.unchanged++;
     } else {
-      const { game } = this.library.add(bytes, jadBytes, this.cfg.libraryQuotaBytes, { origin: 'import', defaults });
+      const { game } = this.library.add(bytes, jadBytes, this.cfg.libraryQuotaBytes, { origin: 'import', fileName: path.basename(jar.rel), defaults });
       gameId = game.id;
       if (prev) r.updated++;
       else r.added++;

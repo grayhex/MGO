@@ -1,6 +1,6 @@
 # KEmulator Bridge: что проверено на практике
 
-Источник: `shinovon/KEmulator`, тег **v2.22**, commit `9ec1005af5448bca63a420e1dfa884ef53842d0f`
+Текущая сборка: `shinovon/KEmulator` **v2.22.1**, commit `02d5822d2dad15759666872e76249c0f77703ca1`. Исторические заметки ниже относятся к v2.22
 (`BridgeFrontendDocs.md`, `src/main/emulator/ui/bridge/*`, `Emulator.java`). Протокол помечен автором как экспериментальный.
 
 ## Как мы его используем

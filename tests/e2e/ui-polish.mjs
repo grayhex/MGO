@@ -23,7 +23,7 @@ try {
   const names = [['Alpha Racer', 'Gameloft'], ['Beta Blocks With A Really Long Title That Must Be Cut Instead Of Pushing The Columns', 'A Publisher With A Long Name Ltd'], ['Gamma', 'X']];
   for (const [n, v] of names) {
     const fd = new FormData();
-    fd.append('jar', new Blob([makeJar(n, { vendor: v })]), `${n.slice(0, 8)}.jar`);
+    fd.append('jar', new Blob([makeJar(n, { vendor: v, extra: n.startsWith('Alpha') ? 'Nokia-MIDlet-Original-Display-Size: 240,320' : '' })]), `${n.slice(0, 8)}${n.startsWith('Beta') ? '-176x220' : ''}.jar`);
     assert.equal((await fetch(base + '/api/games', { method: 'POST', body: fd })).status, 201);
   }
   browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox'] });
@@ -55,16 +55,20 @@ try {
   await p.goto(base + '/');
   await p.getByRole('radio', { name: 'List' }).click();
   await p.locator('.game-row').first().waitFor();
+  assert.equal(await p.locator('.game-row .resolution-tag.blue').textContent(), '240×320');
+  assert.equal(await p.locator('.game-row .resolution-tag.green').textContent(), '176×220');
+  assert.equal(await p.locator('.game-row [aria-label="Native resolution unknown"]').count(), 1);
   const cols = await p.evaluate(() => [...document.querySelectorAll('.game-row')].map((r) => {
     const x = (sel, side) => Math.round(r.querySelector(sel).getBoundingClientRect()[side]);
-    return { vendor: x('.c-vendor', 'left'), genre: x('.c-genre', 'left'), version: x('.c-version', 'left'), timeRight: x('.c-time', 'right'), actions: x('.actions', 'left'), width: Math.round(r.getBoundingClientRect().width), h: Math.round(r.getBoundingClientRect().height) };
+    return { vendor: x('.c-vendor', 'left'), genre: x('.c-genre', 'left'), version: x('.c-version', 'left'), resolution: x('.c-resolution', 'left'), timeRight: x('.c-time', 'right'), actions: x('.actions', 'left'), width: Math.round(r.getBoundingClientRect().width), h: Math.round(r.getBoundingClientRect().height) };
   }));
-  for (const k of ['vendor', 'genre', 'version', 'timeRight', 'actions', 'width']) assert.equal(new Set(cols.map((c) => c[k])).size, 1, `column "${k}" lines up in every row: ${JSON.stringify(cols.map((c) => c[k]))}`);
+  for (const k of ['vendor', 'genre', 'version', 'resolution', 'timeRight', 'actions', 'width']) assert.equal(new Set(cols.map((c) => c[k])).size, 1, `column "${k}" lines up in every row: ${JSON.stringify(cols.map((c) => c[k]))}`);
   const head = await p.evaluate(() => ({ vendor: Math.round(document.querySelector('.lib-table-head .c-vendor').getBoundingClientRect().left), genre: Math.round(document.querySelector('.lib-table-head .c-genre').getBoundingClientRect().left) }));
   assert.ok(Math.abs(head.vendor - cols[0].vendor) <= 2 && Math.abs(head.genre - cols[0].genre) <= 2, `the header sits over its columns ${JSON.stringify([head, cols[0]])}`);
   assert.ok(cols.every((c) => c.h < 80), 'rows stay compact even with a long title');
   console.log('✔ list view: one table, columns line up', JSON.stringify(cols[0]));
   await p.getByRole('radio', { name: 'Tiles' }).click();
+  assert.equal(await p.locator('.game-card .resolution-tag.blue').textContent(), '240×320');
 
   // ---- rename a game ----
   const target = (await games()).find((g) => g.name === 'Gamma');
@@ -83,6 +87,8 @@ try {
   // ---- the player: no top bar, a bigger phone ----
   await p.goto(base + '/play/' + target.id);
   await p.locator('.skin-box').waitFor();
+  assert.equal(await p.getByTestId('screenshot').textContent(), 'Screenshot');
+  assert.equal(await p.getByTestId('fps-toggle').textContent(), 'FPS');
   await sleep(500);
   const m = await p.evaluate(() => ({ box: document.querySelector('.skin-box').getBoundingClientRect().height, win: window.innerHeight, top: document.querySelector('.stage-card').getBoundingClientRect().top }));
   assert.ok(m.box >= m.win * 0.88, `the phone uses the freed space: ${Math.round(m.box)}px of a ${m.win}px window`);
@@ -93,6 +99,7 @@ try {
   const mob = await (await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })).newPage();
   await mob.goto(base + '/');
   await mob.locator('.game-card').first().waitFor();
+  await mob.getByText('240×320', { exact: true }).waitFor();
   assert.equal(await mob.locator('header.header').isVisible(), true);
   await mob.getByRole('button', { name: 'Open menu' }).click();
   await mob.locator('.sidebar .seg.lang').waitFor({ state: 'visible' });
