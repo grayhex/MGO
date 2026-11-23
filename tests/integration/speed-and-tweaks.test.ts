@@ -94,6 +94,15 @@ describe('per-game emulation options', () => {
     await g.done();
   });
 
+  it('declares pointer support according to the selected physical phone', async () => {
+    for (const [skinId, expectsTouch] of [['sony-ericsson-k790i', false], ['nokia-5800', true]] as const) {
+      const g = await play(lab('kemprops.jar'), { skinId });
+      const line = await waitFor(async () => (await g.log()).match(/PROPS locale=en-US pointer=(true|false)/), skinId);
+      assert.equal(line[1], String(expectsTouch), skinId);
+      await g.done();
+    }
+  });
+
   it('frameRate limits the drawing loop', async () => {
     const rate = async (fps: number) => {
       const g = await play(lab('kemgame.jar'), { emulation: { frameRate: fps } });

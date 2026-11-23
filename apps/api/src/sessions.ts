@@ -530,7 +530,9 @@ export class SessionManager {
     this.lib.pruneLogs();
     // Per-app emulator settings (device preset, key codes of the chosen layout) go to midlets.ini
     writeSoundfontProperty(userPath, this.soundfontPath());
-    writeMidletsIni(userPath, { jarPath: paths.jar, width: overrides.width, height: overrides.height, keys: KEY_LAYOUTS[overrides.layout].keys, preset, tweaks: { ...overrides.emulation, pointerEvents: overrides.emulation?.pointerEvents ?? phoneHasTouch(overrides.skinId) } });
+    const touch = overrides.emulation?.pointerEvents ?? (overrides.skinId ? phoneHasTouch(overrides.skinId) : undefined);
+    const tweaks = touch === undefined ? overrides.emulation : { ...overrides.emulation, pointerEvents: touch };
+    writeMidletsIni(userPath, { jarPath: paths.jar, width: overrides.width, height: overrides.height, keys: KEY_LAYOUTS[overrides.layout].keys, preset, tweaks });
     const adapter = new KEmulatorAdapter({
       adapterBin: this.cfg.adapterBin,
       javaBin: this.cfg.javaBin,
