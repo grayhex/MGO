@@ -1,4 +1,3 @@
-import csv
 import gzip
 import hashlib
 import json
@@ -27,34 +26,30 @@ class ArchiveWorkerTests(unittest.TestCase):
             with self.subTest(url=url), self.assertRaises(ValueError):
                 route(url)
 
-    def test_verified_csv_and_shard(self):
+    def test_verified_record_and_mini_map(self):
         sha = "1" * 64
         sha1 = "2" * 40
-        record = [sha, sha1, 5, [[0, "Racing.JAR", "Racing.JAR", "d87f7e0c"]], ["Гонки", "Publisher", "2.1", "CLDC-1.0", "MIDP-1.0"]]
-        fixture = json.dumps({"schema_version": 4, "total_rows": 2, "unique_files": 1, "record_chunk": 4096}).encode()
+        record = [sha, sha1, 5, [[2, "Racing.JAR", "Racing.JAR", "d87f7e0c"]], ["Гонки", "Publisher", "2.1", "CLDC-1.0", "MIDP-1.0"]]
+        fixture = {
+            "manifest.json": json.dumps({"schema_version": 4, "total_rows": 1, "unique_files": 1, "record_chunk": 4096}).encode(),
+            "mini/cli.json.gz": gzip.compress(json.dumps({"sha256": {sha: [sha1, "%23.7z/Racing.JAR", 5, "D87F7E0C"]}}).encode()),
+            "records/0000.json.gz": gzip.compress(json.dumps([record]).encode()),
+        }
+        digests = "\n".join(
+            hashlib.sha1(f"blob {len(data)}\x00".encode() + data).hexdigest() + " " + name for name, data in fixture.items()
+        )
         def fetch(url, target, _cap):
-            target.write_bytes(fixture if url.endswith("manifest.json") else gzip.compress(json.dumps([record]).encode()))
-        with tempfile.TemporaryDirectory() as temp:
+            target.write_bytes(fixture[url.removeprefix("fixture/")])
+        with tempfile.TemporaryDirectory() as temp, patch("build_index.fetch", fetch), patch("build_index.Path.read_text", return_value=digests):
             directory = Path(temp)
-            source = directory / "source.csv.gz"
-            with gzip.open(source, "wt", newline="") as f:
-                out = csv.writer(f)
-                out.writerow(["collection", "filename", "archive_path", "size_bytes", "crc32", "sha1", "sha256", "archive_file"])
-                for collection in ("first", "second"):
-                    out.writerow([collection, "Racing.JAR", "Racing.JAR", 5, "D87F7E0C", sha1, sha, "fixture.7z"])
-            checksum = hashlib.sha256(source.read_bytes()).hexdigest()
-            with patch("build_index.fetch", fetch):
-                args = ("unused", "fixture", "index-v2", 2, 1, 8388608, source)
-                with self.assertRaisesRegex(ValueError, "checksum mismatch"):
-                    main(directory / "invalid.sqlite", args[0], "0" * 64, *args[1:])
-                result = directory / "verified.sqlite"
-                main(result, args[0], checksum, *args[1:])
-                with sqlite3.connect(result) as db:
-                    self.assertEqual(db.execute("SELECT title,vendor,version FROM builds WHERE sha256=?", (sha,)).fetchall(), [("Гонки", "Publisher", "2.1")])
-                    self.assertEqual(db.execute("SELECT count(*) FROM search WHERE search MATCH 'гон*'").fetchone()[0], 1)
-                record[2] = 6
-                with self.assertRaisesRegex(ValueError, "version mismatch"):
-                    main(directory / "mismatch.sqlite", args[0], checksum, *args[1:])
+            result = directory / "verified.sqlite"
+            main(result, "fixture", "index-v2", 1, 1, 8388608)
+            with sqlite3.connect(result) as db:
+                self.assertEqual(db.execute("SELECT title,vendor,version,archiveFile FROM builds WHERE sha256=?", (sha,)).fetchall(), [("Гонки", "Publisher", "2.1", "#.7z")])
+                self.assertEqual(db.execute("SELECT count(*) FROM search WHERE search MATCH 'гон*'").fetchone()[0], 1)
+            fixture["records/0000.json.gz"] = b"tampered"
+            with self.assertRaisesRegex(ValueError, "verification failed: records/0000"):
+                main(directory / "mismatch.sqlite", "fixture", "index-v2", 1, 1, 8388608)
 
 
 if __name__ == "__main__":

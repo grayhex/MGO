@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { appendFile } from 'node:fs/promises';
-import { mkdirSync, rmSync } from 'node:fs';
+import { appendFile, readFile } from 'node:fs/promises';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   type ClientEvent,
@@ -16,6 +16,7 @@ import {
   type SessionStatus,
   WS_BIN_AUDIO,
 } from '@mgo/protocol';
+import { FrameResolution } from './frameResolution.js';
 import { ResourceMeter } from './procstats.js';
 import { writeMidletsIni, writeSoundfontProperty } from './appSettings.js';
 import { findPreset, loadDevicePresets } from './devices.js';
@@ -27,6 +28,7 @@ import { AgentError, agentFromConfig } from './eka2l1/agentClient.js';
 import { Eka2l1Adapter } from './eka2l1/adapter.js';
 import { newId, type Library } from './library.js';
 import type { Config } from './config.js';
+import { parseJar, parseJad, repairedJad, type JarInfo } from './jar.js';
 
 export class SessionError extends Error {
   constructor(
@@ -51,8 +53,8 @@ export interface StreamClient {
 }
 
 const DIAG_RULES: { re: RegExp; msg: (m: RegExpMatchArray) => string }[] = [
-  { re: /ClassNotFoundException:?\s*([\w.$/]+)/, msg: (m) => `Missing class ${m[1]} — API not provided by the emulator (or the JAR is incomplete).` },
-  { re: /NoClassDefFoundError:?\s*([\w.$/]+)/, msg: (m) => `Missing class definition ${m[1]} — unsupported API.` },
+  { re: /ClassNotFoundException:?\s*([\w.$/]+)/, msg: (m) => `Missing class ${m[1]} — check the game package and the emulator’s supported APIs.` },
+  { re: /NoClassDefFoundError:?\s*([\w.$/]+)/, msg: (m) => `Missing class definition ${m[1]} — check the game package and the emulator’s supported APIs.` },
   { re: /(NoSuchMethodError|NoSuchFieldError|AbstractMethodError):?\s*(.*)/, msg: (m) => `${m[1]}: ${m[2]} — API mismatch.` },
   { re: /Invalid class version:?\s*(\d+)/, msg: (m) => `Class file version ${m[1]} is not supported (J2ME classes must be <= 48).` },
   { re: /OutOfMemoryError/, msg: () => 'Out of memory — raise "Heap (MB)" in the game settings.' },
@@ -97,6 +99,7 @@ export class Session {
   /** permission prompts waiting for a viewer's answer (id -> deny timer) */
   private pendingPerms = new Map<number, NodeJS.Timeout>();
   private logFile: string;
+  private readonly resolutionDetector: FrameResolution | null;
 
   constructor(
     readonly id: string,
@@ -108,8 +111,10 @@ export class Session {
     logFile: string,
     private cfg: Config,
     private onEnded: (s: Session) => void,
+    private onGameResolution?: (resolution: NonNullable<GameMeta['nativeResolution']>) => void,
   ) {
     this.logFile = logFile;
+    this.resolutionDetector = onGameResolution && !game.nativeResolution ? new FrameResolution() : null;
     adapter.on('frame', (f) => this.onFrame(f));
     adapter.on('audio', (a) => this.onAudio(a));
     adapter.on('state', (t, b) => this.onStatePacket(t, b));
@@ -185,6 +190,15 @@ export class Session {
   private onFrame(f: FrameMsg): void {
     this.latencyMs = Math.max(0, Date.now() - f.tsUs / 1000);
     if (f.width && f.height) this.picture = { width: f.width, height: f.height };
+    if (this.resolutionDetector && this.state === 'running' && this.displayable === 'canvas' && Date.now() - this.createdAt > 1200) {
+      const detected = this.resolutionDetector.sample(f, f.width ?? this.settings.width, f.height ?? this.settings.height, performance.now());
+      if (detected) {
+        this.game.nativeResolution = detected;
+        try { this.onGameResolution?.(detected); }
+        catch { this.pushLog('[session] Could not save the detected game resolution in the library.'); }
+        this.broadcastText({ t: 'game-resolution', resolution: detected });
+      }
+    }
     const hdr = encodeFrameHeader(f.seq, f.enc, f.width ?? this.settings.width, f.height ?? this.settings.height, Date.now() & 0xffffffff);
     const packed = Buffer.concat([hdr, f.data]);
     this.lastPacked = packed;
@@ -328,6 +342,7 @@ export class Session {
     this.clients.set(c.id, { c, held: new Set(), audio: false, visible: true });
     this.clearIdle();
     c.sendText(JSON.stringify({ t: 'hello', sessionId: this.id, width: this.settings.width, height: this.settings.height, state: this.state } satisfies ServerEvent));
+    if (this.game.nativeResolution) c.sendText(JSON.stringify({ t: 'game-resolution', resolution: this.game.nativeResolution } satisfies ServerEvent));
     c.sendText(JSON.stringify({ t: 'softkeys', ...this.softkeys } satisfies ServerEvent));
     if (this.title !== null) c.sendText(JSON.stringify({ t: 'title', title: this.title } satisfies ServerEvent));
     if (this.pendingMenu) c.sendText(JSON.stringify(this.pendingMenu));
@@ -502,8 +517,19 @@ export class SessionManager {
       const dev = plan.deviceId ? emulatedDevice(plan.deviceId) : undefined;
       overrides = { ...overrides, symbianDevice: plan.firmwareCode!, layout: 'nokia', ...(dev ? { width: dev.screen.width, height: dev.screen.height } : {}), ...(plan.skinId && !overrides.skinId ? { skinId: plan.skinId } : {}) };
     }
-    if (!external && game.classVersion >= 49) {
-      throw new SessionError('unsupported_jar', `This JAR contains Java ${game.classVersion - 44}+ class files; KEmulator only runs J2ME-era classes (version <= 48).`, 422);
+    const paths = this.lib.paths(game.id);
+    let java: JarInfo | undefined;
+    let midlet = overrides.midlet;
+    if (!external) {
+      const [jar, jad] = await Promise.all([readFile(paths.jar), paths.jad ? readFile(paths.jad) : null]);
+      java = parseJar(jar, jad ? parseJad(jad) : undefined);
+      if (midlet?.replaceAll('/', '.') === java.repairedMidlet) midlet = undefined;
+      if ((midlet && !java.fileHasClass(midlet)) || (!midlet && java.missingMidlet)) {
+        throw new SessionError('missing_midlet_class', 'The MIDlet class declared for this game is missing from the JAR. Upload a complete copy of the game with its matching JAD.', 422, { className: midlet ?? java.missingMidlet });
+      }
+      if (java.classVersion >= 49) {
+        throw new SessionError('unsupported_jar', `This JAR contains Java ${java.classVersion - 44}+ class files; KEmulator only runs J2ME-era classes (version <= 48).`, 422);
+      }
     }
     // Starting a game while the limit is reached ends the oldest running game first (its MIDlet gets destroyApp, RMS is
     // written), instead of refusing with an error the viewer can do nothing about but click Stop and Start again.
@@ -513,7 +539,6 @@ export class SessionManager {
       await oldest.stop('replaced by the game that was started next');
     }
     if (external) return this.createExternal(game, overrides, owner);
-    const paths = this.lib.paths(game.id);
     let preset;
     if (overrides.device) {
       try {
@@ -533,25 +558,32 @@ export class SessionManager {
     const touch = overrides.emulation?.pointerEvents ?? (overrides.skinId ? phoneHasTouch(overrides.skinId) : undefined);
     const tweaks = touch === undefined ? overrides.emulation : { ...overrides.emulation, pointerEvents: touch };
     writeMidletsIni(userPath, { jarPath: paths.jar, width: overrides.width, height: overrides.height, keys: KEY_LAYOUTS[overrides.layout].keys, preset, tweaks });
+    let jadPath = paths.jad ?? undefined;
+    if (java?.repairedMidlet && (!midlet || midlet === java.midlets[0]?.className)) {
+      // KEmulator's explicit -midlet option skips loading app properties in some releases.
+      jadPath = path.join(bridgeDir, 'launch.jad');
+      writeFileSync(jadPath, repairedJad(java), { mode: 0o600 });
+      midlet = undefined;
+    }
     const adapter = new KEmulatorAdapter({
       adapterBin: this.cfg.adapterBin,
       javaBin: this.cfg.javaBin,
       kemDir: this.cfg.kemDir,
       bridgeDir,
       jarPath: paths.jar,
-      jadPath: paths.jad ?? undefined,
+      jadPath,
       userPath,
       width: overrides.width,
       height: overrides.height,
       heapMb: overrides.heapMb,
-      midlet: overrides.midlet,
+      midlet,
       frameEncoding: this.cfg.frameEncoding,
       cpuSeconds: this.cfg.cpuSeconds,
       display: this.cfg.display,
       jvmExtraArgs: this.cfg.jvmExtraArgs,
       launchWrapper: this.cfg.launchWrapper,
     });
-    const session = new Session(sid, game, overrides, owner, adapter, bridgeDir, this.lib.sessionLogPath(sid), this.cfg, (s) => this.onEnded(s));
+    const session = new Session(sid, game, overrides, owner, adapter, bridgeDir, this.lib.sessionLogPath(sid), this.cfg, (s) => this.onEnded(s), resolution => this.lib.recordGameResolution(game.id, resolution));
     this.sessions.set(session.id, session);
     this.lib.touchPlayed(game.id);
     try {

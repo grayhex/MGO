@@ -137,6 +137,7 @@ export class KEmulatorAdapter extends EventEmitter<AdapterEvents> implements Emu
       '-Dfile.encoding=UTF-8',
       '-Dswt.autoScale=false',
       `-Dkem.userpath=${o.userPath}`,
+      `-Djava.util.prefs.userRoot=${o.userPath}`,
       // no sound card in the container: route Java Sound to our mixer, which writes PCM to the adapter
       `-Dkem.audio.out=${path.join(o.bridgeDir, 'audio')}`,
       '-Djavax.sound.sampled.Clip=cc.j2meweb.audio.WebMixerProvider',

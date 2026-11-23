@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'mgo-emu-'));
 const port = 21600 + Math.floor(Math.random() * 300);
@@ -15,7 +16,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const wait = async (fn, what) => { for (let i = 0; i < 150; i++) { try { if (await fn()) return; } catch {} await sleep(100); } throw Error(`timeout: ${what}`); };
 const upload = async (file) => {
   const fd = new FormData();
-  fd.append('jar', new Blob([readFileSync(file)]), path.basename(file));
+  fd.append('jar', new Blob([typeof file === 'string' ? readFileSync(file) : file]), typeof file === 'string' ? path.basename(file) : 'padded.jar');
   const r = await fetch(base + '/api/games', { method: 'POST', body: fd });
   assert.equal(r.status, 201);
   return (await r.json()).game;
@@ -63,16 +64,16 @@ try {
   await p.goto(base + '/play/' + game.id);
   const panel = p.locator('.ctrl-col');
   for (const [language, label] of [['RU', 'Ограничение кадров (fps)'], ['EN', 'Frame limit (fps)']]) {
-    await p.locator('.sidebar .seg.lang').getByRole('radio', { name: language }).click();
+    await panel.locator('.seg.lang').getByRole('radio', { name: language }).click();
     const fps = panel.getByRole('radiogroup', { name: label, exact: true });
     await fps.waitFor();
     assert.deepEqual((await fps.getByRole('radio').allTextContents()).slice(-2), ['30', '60']);
     const fits = await panel.evaluate(el => {
       const panel = el.getBoundingClientRect();
       const fps = el.querySelector('.player-seg').getBoundingClientRect();
-      return panel.bottom <= innerHeight && fps.right < panel.right && fps.height < 38;
+      return { bottom: panel.bottom, height: innerHeight, fpsRight: fps.right, panelRight: panel.right, fpsHeight: fps.height };
     });
-    assert.ok(fits, `compact side panel fits at 1280×720 in ${language}`);
+    assert.ok(fits.bottom <= fits.height && fits.fpsRight < fits.panelRight && fits.fpsHeight < 38, `compact side panel fits at 1280×720 in ${language}: ${JSON.stringify(fits)}`);
     assert.equal(await panel.getByText('Game files', { exact: true }).count(), 0);
   }
   const limits = p.getByRole('radiogroup', { name: 'Frame limit (fps)' });
@@ -95,6 +96,28 @@ try {
   await p.reload();
   await p.getByRole('radio', { name: '×2', exact: true }).waitFor();
   await wait(async () => (await p.getByRole('radio', { name: '×2', exact: true }).getAttribute('aria-checked')) === 'true', 'speed shown after a reload');
+  await panel.getByRole('button', { name: 'Stop', exact: true }).click();
+  await wait(async () => !(await running()), 'first game stopped');
+  const files = unzipSync(readFileSync('tests/fixtures/testmidlet/build/kemtest.jar'));
+  const manifest = 'META-INF/MANIFEST.MF';
+  files[manifest] = strToU8(strFromU8(files[manifest])
+    .replace('MIDlet-Name: KemTest', 'MIDlet-Name: Small viewport')
+    .replace('MIDlet-1: KemTest, , kemtest.KemTest', 'MIDlet-1: Small viewport, , MissingMain\r\nMGO-Padded-Test: true'));
+  const padded = await upload(zipSync(files));
+  assert.equal(padded.nativeResolution, undefined);
+  await p.goto(base + '/play/' + padded.id);
+  await panel.getByRole('progressbar', { name: 'Memory' }).waitFor();
+  await panel.getByRole('button', { name: 'Start', exact: true }).click();
+  await p.getByTestId('game-resolution').filter({ hasText: 'Game 176×220' }).waitFor();
+  const recommendation = p.getByTestId('phone-suggestion');
+  assert.match(await recommendation.innerText(), /Game 176×220 · Emulator 240×320/);
+  await p.getByTestId('phone-suggestion-switch').click();
+  await wait(async () => {
+    const g = await (await fetch(base + '/api/games/' + padded.id)).json();
+    return g.settings.width === 176 && g.settings.height === 220;
+  }, 'the suggested handset applies its screen size');
+  await p.locator('.stage-left').getByRole('button', { name: 'Library' }).click();
+  await p.locator('.game-card', { hasText: 'Small viewport' }).locator('.resolution-tag:visible').filter({ hasText: '176×220' }).first().waitFor();
   assert.deepEqual(errors, []);
   console.log('emulation options e2e OK');
 } finally {

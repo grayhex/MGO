@@ -7,8 +7,6 @@ const project = 'toca-1/new-j2me-software-archive-search';
 export const SEARCH_URL = 'https://toca-1.github.io/new-j2me-software-archive-search/';
 export const SOURCE = {
   version: 'index-v2',
-  csv: `https://github.com/${project}/releases/download/index-v2/jarchive-combined-verified-v2.csv.gz`,
-  checksum: 'ce4e1203c70291e8c601ae2251ab84cdae8aa7fe76bef6126ac36c6d5c9402f8',
   records: `https://raw.githubusercontent.com/${project}/d0775dcca7061a5e64584f03ae18b21a3ca3546f/data`,
   rows: 817643,
   builds: 621715,

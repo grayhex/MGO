@@ -7,9 +7,14 @@ import { AAS_SNAPSHOT, AAS_SNAPSHOT_DATE } from './ngageSnapshot.js';
 export const AAS_ORIGIN = 'https://allaboutsymbian.com';
 const AAS_HOSTS = new Set([AAS_ORIGIN, 'https://www.allaboutsymbian.com']);
 export const AAS_INDEX = '/n-gage-games/original/';
+export const LAUNCHBOX_ORIGIN = 'https://gamesdb.launchbox-app.com';
+export const LAUNCHBOX_INDEX = '/platforms/games/213-nokia-n-gage';
+const LAUNCHBOX_IMAGES = 'https://images.launchbox-app.com';
+const LAUNCHBOX_GAME_IMAGES = /^\/games\/images\/\d+-[a-z0-9-]+$/;
+const IMAGE_PATH = /^\/[a-f0-9-]{36}\.(?:png|jpe?g|webp)$/i;
 const TTL = 30 * 86400_000;
-const text = (s: string) => s.replace(/<[^>]*>/g, '').replace(/&#(?:x([\da-f]+)|(\d+));/gi, (_, h, d) => String.fromCodePoint(parseInt(h || d, h ? 16 : 10))).replace(/&(amp|quot|apos|lt|gt|nbsp|middot);/g, (_, n) => ({amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',nbsp:' ',middot:'·'})[n as string] ?? '').trim();
-export interface CatalogEntry { title: string; url: string; genre: string; publisher: string; year: number | null; cover: string | null }
+const text = (s: string) => s.replace(/<[^>]*>/g, '').replace(/&#(?:x([\da-f]+)|(\d+));/gi, (_, h, d) => (parseInt(h || d, h ? 16 : 10) <= 0x10ffff ? String.fromCodePoint(parseInt(h || d, h ? 16 : 10)) : '�')).replace(/&(amp|quot|apos|lt|gt|nbsp|middot);/g, (_, n) => ({amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',nbsp:' ',middot:'·'})[n as string] ?? '').trim();
+export interface CatalogEntry { title: string; url: string; genre: string; publisher: string; year: number | null; cover: string | null; released?: string }
 export function parseAasIndex(html: string): CatalogEntry[] {
   const released = html.split(/<h2[^>]+id="unreleased"/i)[0]!;
   const entries: CatalogEntry[] = []; let genre = '';
@@ -24,6 +29,29 @@ export function parseAasIndex(html: string): CatalogEntry[] {
   if (!entries.length) throw new Error('All About Symbian returned an unrecognized game directory');
   return entries;
 }
+export function parseLaunchBoxIndex(html: string): CatalogEntry[] {
+  const entries: CatalogEntry[] = [];
+  for (const [, url, card] of html.matchAll(/<a\b[^>]*href="(\/games\/details\/\d+-[a-z0-9-]+)"[^>]*>([\s\S]*?)<\/a>/gi)) {
+    const title = text(/<h3\b[^>]*>([\s\S]*?)<\/h3>/i.exec(card!)?.[1] ?? '');
+    const released = text(/class="releaseDate"[^>]*>\s*<span[^>]*>Released<\/span>\s*<h5[^>]*>([\s\S]*?)<\/h5>/i.exec(card!)?.[1] ?? '');
+    const year = Number(/\b(19\d\d|20\d\d)\b/.exec(released)?.[1]);
+    if (!title || !year) continue;
+    entries.push({ title, url: LAUNCHBOX_ORIGIN + url, genre: '', publisher: '', year, released, cover: null });
+  }
+  if (!entries.length) throw new Error('LaunchBox returned an unrecognized game directory');
+  return entries;
+}
+
+export function parseLaunchBoxCover(html: string): string | null {
+  for (const [tag] of html.matchAll(/<img\b[^>]*>/gi)) {
+    const alt = /\balt="([^"]+)"/i.exec(tag)?.[1] ?? '';
+    if (!alt.endsWith(' - Box - Front Image') || alt.includes(' - Fanart - ')) continue;
+    const image = /\bsrc="https:\/\/images\.launchbox-app\.com(\/[^"]+)"/i.exec(tag)?.[1];
+    if (image && IMAGE_PATH.test(image)) return LAUNCHBOX_IMAGES + image;
+  }
+  return null;
+}
+
 /**
  * Words of a title as they are compared. Everything a dump adds around the name is dropped: region and version tags in brackets
  * ("(E)", "[!]", "(Europe)", "v1.1"), the word N-Gage, punctuation, case and accents; "&" is "and", Roman numerals are digits.
@@ -70,7 +98,7 @@ export function parseAasDetails(html: string, entry: CatalogEntry): NgageInfo {
 
 /** What is known about a game from the directory index alone (no page was fetched): enough for genre, publisher and year. */
 function indexInfo(entry: CatalogEntry, fetchedAt: string): NgageInfo {
-  return { title: entry.title, sourceUrl: entry.url, attribution: 'All About Symbian', genre: entry.genre, publisher: entry.publisher, developer: null, year: entry.year, released: null, multiplayer: null, productCode: null, rating: null, hasCover: false, fetchedAt };
+  return { title: entry.title, sourceUrl: entry.url, attribution: entry.url.startsWith(LAUNCHBOX_ORIGIN) ? 'LaunchBox Games Database' : 'All About Symbian', genre: entry.genre, publisher: entry.publisher, developer: null, year: entry.year, released: entry.released ?? null, multiplayer: null, productCode: null, rating: null, hasCover: false, fetchedAt };
 }
 
 /**
@@ -82,7 +110,9 @@ function indexInfo(entry: CatalogEntry, fetchedAt: string): NgageInfo {
  */
 export class NgageCatalog {
   private entries: CatalogEntry[] = AAS_SNAPSHOT;
+  private launchBox: CatalogEntry[] = [];
   private live = false;
+  private progress: { done: number; total: number } | null = null;
   private info = new Map<string, NgageInfo>();
   private quick = new Map<string, { name: string; info: NgageInfo | null }>();
   private running: Promise<void> | null = null;
@@ -97,6 +127,7 @@ export class NgageCatalog {
     try {
       const saved = JSON.parse(readFileSync(path.join(this.dir, 'catalog.json'), 'utf8'));
       if (Array.isArray(saved.entries) && saved.entries.length) { this.entries = saved.entries; this.live = true; }
+      if (Array.isArray(saved.launchBox)) this.launchBox = saved.launchBox;
       this.lastIndex = saved.updatedAt ?? 0; this.info = new Map(saved.info);
     } catch { /* first refresh populates the cache */ }
   }
@@ -104,7 +135,7 @@ export class NgageCatalog {
   status() {
     const unmatched = this.ngageGames().filter(g => !this.lookup(g)).map(g => g.name).sort();
     return {
-      running: !!this.running, entries: this.entries.length, matched: this.ngageGames().length - unmatched.length, unmatched,
+      running: !!this.running, progress: this.progress, entries: this.entries.length, matched: this.ngageGames().length - unmatched.length, unmatched,
       updatedAt: this.lastIndex ? new Date(this.lastIndex).toISOString() : null, error: this.error, sourceUrl: AAS_ORIGIN + AAS_INDEX,
       /** `live`: the directory was downloaded from the source; `snapshot`: the list that ships with MGO is used. */
       source: this.live ? 'live' as const : 'snapshot' as const, snapshotDate: AAS_SNAPSHOT_DATE,
@@ -117,7 +148,7 @@ export class NgageCatalog {
     const full = this.info.get(game.groupKey); if (full) return full;
     const cached = this.quick.get(game.groupKey);
     if (cached && cached.name === game.name) return cached.info;
-    const entry = matchAas(game.name, this.entries);
+    const entry = matchAas(game.name, this.entries) ?? matchAas(game.name, this.launchBox);
     const info = entry ? indexInfo(entry, this.lastIndex ? new Date(this.lastIndex).toISOString() : AAS_SNAPSHOT_DATE) : null;
     this.quick.set(game.groupKey, { name: game.name, info });
     if (info && isGenre(info.genre)) this.library.classes.setCurated(game.groupKey, info.genre, info.title);
@@ -125,22 +156,27 @@ export class NgageCatalog {
   }
   enrich(game: GameMeta): GameMeta { const info = this.lookup(game); return info ? { ...game, ngageInfo: info } : game; }
   cover(group: string): string | null { const file = path.join(this.dir, `${group}.img`); return /^[a-f0-9]{12}$/.test(group) && existsSync(file) ? file : null; }
-  private async request(url: string, limit: number) {
-    // a redirect is followed by hand, and every address on the way has to be a fixed AAS page or image again
+  private async request(url: string, limit: number, job: AbortSignal) {
+    const signal = AbortSignal.any([job, AbortSignal.timeout(9000)]);
     let target = url, response: Response | undefined;
     for (let hop = 0; hop < 4; hop++) {
       const allowed = new URL(target, AAS_ORIGIN);
-      if (!AAS_HOSTS.has(allowed.origin) || allowed.username || allowed.password || !/^\/(n-gage-games\/original\/(?:item\/[a-z0-9-]+\.php)?|images\/ngage\/[\w/.-]+)$/.test(allowed.pathname)) throw new Error('Unsupported catalog URL');
-      const endpoint = this.proxy ? this.proxy.replace(/\/$/, '') + (allowed.origin === AAS_ORIGIN ? '' : '/mgo-aas-www') + allowed.pathname : allowed.href;
-      try { response = await this.fetcher(endpoint, { signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(15000)]), redirect: 'manual', headers: { 'user-agent': 'MGO metadata/1.0' } }); }
-      catch (e) { throw new CatalogUnreachable(this.proxy ? `the metadata gateway ${this.proxy} does not answer` : 'allaboutsymbian.com cannot be reached from this server (no internet access?)', (e as Error).message); }
+      const aas = AAS_HOSTS.has(allowed.origin) && /^\/(n-gage-games\/original\/(?:item\/[a-z0-9-]+\.php)?|images\/ngage\/[\w/.-]+)$/.test(allowed.pathname);
+      const boxPage = allowed.origin === LAUNCHBOX_ORIGIN && (allowed.pathname === LAUNCHBOX_INDEX || LAUNCHBOX_GAME_IMAGES.test(allowed.pathname));
+      const boxImage = allowed.origin === LAUNCHBOX_IMAGES && IMAGE_PATH.test(allowed.pathname);
+      if ((!aas && !boxPage && !boxImage) || allowed.username || allowed.password || allowed.search) throw new Error('Unsupported catalog URL');
+      const prefix = boxPage ? '/mgo-launchbox' : boxImage ? '/mgo-launchbox-images' : allowed.origin === AAS_ORIGIN ? '' : '/mgo-aas-www';
+      const endpoint = this.proxy ? this.proxy.replace(/\/$/, '') + prefix + allowed.pathname : allowed.href;
+      try { response = await this.fetcher(endpoint, { signal, redirect: 'manual', headers: { 'user-agent': 'MGO metadata/1.5', ...(boxImage ? { referer: LAUNCHBOX_ORIGIN + '/' } : {}) } }); }
+      catch (e) { throw new CatalogUnreachable(`${allowed.host} cannot be reached`, (e as Error).message); }
       const next = response.status >= 300 && response.status < 400 ? response.headers.get('location') : null;
       if (!next) break;
-      target = new URL(next, allowed).href; response = undefined;
+      target = new URL(next, allowed).href;
+      response = undefined;
     }
-    if (!response) throw new Error('All About Symbian: too many redirects');
-    if (response.status >= 500) throw new CatalogUnreachable('All About Symbian is temporarily unavailable', `HTTP ${response.status}`);
-    if (!response.ok) throw new Error(`All About Symbian: HTTP ${response.status}`);
+    if (!response) throw new Error('Too many catalog redirects');
+    if (response.status >= 500 || response.status === 429) throw new CatalogUnreachable('Catalog source is temporarily unavailable', `HTTP ${response.status}`);
+    if (!response.ok || !response.body) throw new Error(`Catalog source: HTTP ${response.status}`);
     const reader = response.body!.getReader(); let size = 0; const chunks: Uint8Array[] = [];
     try { for (;;) { const r = await reader.read(); if (r.done) break; size += r.value.length; if (size > limit) throw new Error('Catalog response is too large'); chunks.push(r.value); } }
     finally { await reader.cancel().catch(() => undefined); }
@@ -156,40 +192,107 @@ export class NgageCatalog {
     if (this.running) return this.running;
     this.running = this.update(force).catch(e => { this.error = e.message; }).finally(() => { this.running = null; if (this.pending && this.active) { this.pending = false; this.schedule(); } }); return this.running;
   }
+  private async saveCover(group: string, url: string, signal: AbortSignal): Promise<boolean> {
+    try {
+      const { bytes } = await this.request(url, 4 * 1024 * 1024, signal);
+      const valid = bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255]))
+        || bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+        || (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP');
+      if (!valid) return false;
+      const dest = path.join(this.dir, `${group}.img`);
+      writeFileSync(dest + '.tmp', bytes);
+      renameSync(dest + '.tmp', dest);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async update(force: boolean) {
     this.error = null;
-    this.quick.clear(); this.recognise();
-    try {
-      if (force || Date.now() - this.lastIndex > TTL || !this.live) { this.entries = parseAasIndex((await this.request(AAS_ORIGIN + AAS_INDEX, 2 * 1024 * 1024)).bytes.toString('utf8')); this.live = true; this.lastIndex = Date.now(); this.quick.clear(); }
-      let failures = 0;
-      for (const game of this.ngageGames()) {
-        const old = this.info.get(game.groupKey);
-        if (!force && old && Date.now() - Date.parse(old.fetchedAt) < TTL) continue;
-        const match = matchAas(game.name, this.entries); if (!match) continue;
-        try {
-          const detail = (await this.request(match.url, 2 * 1024 * 1024)).bytes.toString('utf8');
-          const info = parseAasDetails(detail, match);
-          const full = /"image"\s*:\s*"(https:\/\/allaboutsymbian\.com\/images\/ngage\/[^"]+)"/.exec(detail)?.[1] ?? match.cover;
-          if (full) try {
-            const image = await this.request(full, 4 * 1024 * 1024);
-            const b = image.bytes;
-            if (!((b[0] === 255 && b[1] === 216 && b[2] === 255) || b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])) || (b.toString('ascii',0,4) === 'RIFF' && b.toString('ascii',8,12) === 'WEBP'))) throw new Error('Invalid cover image');
-            const dest = path.join(this.dir, `${game.groupKey}.img`); writeFileSync(dest + '.tmp', b); renameSync(dest + '.tmp', dest); info.hasCover = true;
-          } catch (e) { if (e instanceof CatalogUnreachable) throw e; info.hasCover = !!this.cover(game.groupKey); }
-          this.info.set(game.groupKey, info); failures = 0;
-          if (isGenre(info.genre)) this.library.classes.setCurated(game.groupKey, info.genre, info.title);
-        } catch (e) {
-          if (e instanceof CatalogUnreachable) throw e;
-          this.error = `${game.name}: ${(e as Error).message}`; if (++failures >= 3) break; // a page that fails does not stop the others
-        }
+    this.progress = null;
+    const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(75000)]);
+    const all = new Map(this.ngageGames().map(game => [game.groupKey, game]));
+    if (!all.size && !force) return;
+
+    let aasOnline = true;
+    const changed = force || Date.now() - this.lastIndex > TTL || !this.live;
+    if (changed) {
+      const [aas, box] = await Promise.allSettled([
+        this.request(AAS_ORIGIN + AAS_INDEX, 2 * 1024 * 1024, signal).then(r => parseAasIndex(r.bytes.toString('utf8'))),
+        this.request(LAUNCHBOX_ORIGIN + LAUNCHBOX_INDEX, 2 * 1024 * 1024, signal).then(r => parseLaunchBoxIndex(r.bytes.toString('utf8'))),
+      ]);
+      if (aas.status === 'fulfilled') { this.entries = aas.value; this.live = true; }
+      else aasOnline = false;
+      if (box.status === 'fulfilled') this.launchBox = box.value;
+      if (aas.status === 'fulfilled' || box.status === 'fulfilled') this.lastIndex = Date.now();
+      else {
+        const reason = aas.reason as Error;
+        this.error = reason instanceof CatalogUnreachable
+          ? `${reason.message} (${reason.detail}). Games are still recognised from the local catalog.`
+          : reason.message;
       }
-    } catch (e) {
-      this.error = e instanceof CatalogUnreachable
-        ? `${e.message}. Games are still recognised from the list that ships with MGO (genre, publisher, year); covers and details need access to allaboutsymbian.com. In Docker the metadata gateway (MGO_METADATA_GATEWAY) provides it. (${e.detail})`
-        : (e as Error).message;
     }
+    this.quick.clear();
+    this.recognise();
+    const queue = [...all.values()].flatMap(game => {
+      const old = this.info.get(game.groupKey);
+      if (!force && old?.hasCover && Date.now() - Date.parse(old.fetchedAt) < TTL) return [];
+      const aas = matchAas(game.name, this.entries);
+      const box = matchAas(aas?.title ?? game.name, this.launchBox);
+      return aas || box ? [{ game, aas, box, old }] : [];
+    });
+    if (this.error && !this.launchBox.length) return;
+    const progress = this.progress = { done: 0, total: queue.length };
+    let failures = 0;
+    const run = async () => {
+      while (!signal.aborted) {
+        const item = queue.shift();
+        if (!item) return;
+        const { game, aas, box, old } = item;
+        const fallback = aas ?? box!;
+        let info = old ?? indexInfo(fallback, new Date().toISOString());
+        let aasCover = aas?.cover;
+        let ok = false;
+
+        if (aas && aasOnline) {
+          try {
+            const html = (await this.request(aas.url, 2 * 1024 * 1024, signal)).bytes.toString('utf8');
+            info = { ...parseAasDetails(html, aas), ...(old?.coverSourceUrl ? { coverSourceUrl: old.coverSourceUrl } : {}) };
+            aasCover = /"image"\s*:\s*"(https:\/\/allaboutsymbian\.com\/images\/ngage\/[^"]+)"/.exec(html)?.[1] ?? aasCover;
+            ok = true;
+          } catch (error) {
+            if (error instanceof CatalogUnreachable) aasOnline = false;
+          }
+        }
+        info = { ...info, hasCover: !!this.cover(game.groupKey) };
+        if (!info.hasCover && aasOnline && aasCover) {
+          info.hasCover = await this.saveCover(game.groupKey, aasCover, signal);
+          ok ||= info.hasCover;
+        }
+        if (!info.hasCover && box && !signal.aborted) {
+          try {
+            const images = box.url.replace('/games/details/', '/games/images/');
+            const page = await this.request(images, 2 * 1024 * 1024, signal);
+            const cover = parseLaunchBoxCover(page.bytes.toString('utf8'));
+            if (cover && await this.saveCover(game.groupKey, cover, signal)) {
+              info.hasCover = true;
+              if (box.url !== info.sourceUrl) info.coverSourceUrl = box.url;
+              ok = true;
+            }
+          } catch { /* continue with saved or offline metadata */ }
+        }
+        if (!info.hasCover && (aasCover || box)) failures++;
+        // Missing covers stay eligible for a later run, even when the index is fresh.
+        if (ok || info.hasCover) this.info.set(game.groupKey, { ...info, fetchedAt: ok ? new Date().toISOString() : info.fetchedAt });
+        progress.done++;
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(queue.length, 6) }, run));
+    if (signal.aborted || failures) this.error ??= 'Some covers could not be refreshed. Saved metadata and covers are still available.';
     const dest = path.join(this.dir, 'catalog.json');
-    writeFileSync(dest + '.tmp', JSON.stringify({ entries: this.live ? this.entries : [], updatedAt: this.lastIndex, info: [...this.info] })); renameSync(dest + '.tmp', dest);
+    writeFileSync(dest + '.tmp', JSON.stringify({ entries: this.live ? this.entries : [], launchBox: this.launchBox, updatedAt: this.lastIndex, info: [...this.info] }));
+    renameSync(dest + '.tmp', dest);
   }
 }
 

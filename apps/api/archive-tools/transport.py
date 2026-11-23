@@ -21,13 +21,9 @@ def route(url):
             or re.search(r"%(?:00|2f|5c|25)", parts.path, re.I)
             or any(c in pathname for c in "\\?\x00\r\n") or ".." in pathname.split("/")):
         raise ValueError("Archive URL is outside the allowed origins")
-    if parts.query and host != "release-assets.githubusercontent.com":
+    if parts.query:
         raise ValueError("Archive URL has an unsupported query")
-    if host == "github.com" and re.fullmatch(PROJECT + r"releases/download/index-v\d+/[\w.-]+", pathname):
-        return "/github"
-    if host == "release-assets.githubusercontent.com" and re.fullmatch(r"/github-production-release-asset(?:/1448855381|-1448855381)/[a-f0-9-]+", pathname):
-        return "/assets"
-    if host == "raw.githubusercontent.com" and re.fullmatch(PROJECT + r"[a-f0-9]{40}/data/(?:manifest\.json|records/\d{4}\.json\.gz)", pathname):
+    if host == "raw.githubusercontent.com" and re.fullmatch(PROJECT + r"[a-f0-9]{40}/data/(?:manifest\.json|mini/cli\.json\.gz|records/\d{4}\.json\.gz)", pathname):
         return "/raw"
     if host == "toca-1.github.io" and re.fullmatch(PAGES + r"(?:retrieval/v1/(?:manifest\.json|sha(?:1|256)/[0-9a-f]{1,2}\.json\.gz)|data/mini/cli\.json\.gz)", pathname):
         return "/pages"

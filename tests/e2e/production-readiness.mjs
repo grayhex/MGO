@@ -40,8 +40,9 @@ try{
   browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||undefined,headless:true});
   const p=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];p.on('pageerror',e=>errors.push(e.message));
   await p.goto(base+'/play/'+game.id);
-  await wait(async()=>await p.getByTestId('native-readiness').getAttribute('data-ready')==='1','N95 readiness');
-  assert.ok((await p.getByTestId('native-readiness').innerText()).includes('N95 8GB'));
+  // The automatic skin selection may refresh readiness immediately after the first ready response.
+  const n95Ready = p.locator('[data-testid="native-readiness"][data-ready="1"] [data-testid="resolved-firmware"][data-code="RM-320"]').filter({ hasText: 'N95 8GB' });
+  await n95Ready.waitFor({ state: 'visible' });
   await p.getByTestId('change-phone').click();
   assert.equal(await p.locator('.phone-pick').count(),15);
   assert.equal(await p.locator('.phones-intro').count(),1);
@@ -49,7 +50,7 @@ try{
   await p.screenshot({ path: 'test-results/mgo-phones.png', fullPage: true, animations: 'disabled' });
   const box=await p.locator('.phone-pick').first().boundingBox();assert.ok(box.height<330,'compact phone card');
   await p.getByRole('button',{name:'Nokia N95-1',exact:true}).click();
-  await wait(async()=>await p.getByTestId('native-readiness').getAttribute('data-ready')==='1','N95 selected');
+  await n95Ready.waitFor({ state: 'visible' });
   const saved=await(await fetch(base+'/api/games/'+game.id)).json();assert.equal(saved.settings.symbianDevice,'RM-320');assert.equal(saved.settings.emulatedDeviceId,'eka2l1-n95-8gb');
   await p.getByRole('button',{name:'Start',exact:true}).first().click();
   await wait(async()=>await p.getByTestId('frame-size').innerText()==='176×208','native frame');

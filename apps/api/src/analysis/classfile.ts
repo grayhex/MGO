@@ -1,10 +1,13 @@
 /**
- * Minimal class-file reader: only the constant pool is parsed. That is all the compatibility
+ * Minimal class-file reader: the constant pool and class header are parsed. That is all the compatibility
  * analysis needs (which classes/strings a MIDlet refers to) and it keeps the code small and safe
  * (no bytecode interpretation, hard bounds on every read).
  */
 export interface ConstantPoolInfo {
   major: number;
+  name: string | undefined;
+  superName: string | undefined;
+  abstract: boolean;
   /** Names from CONSTANT_Class entries, internal form (a/b/C). */
   classRefs: string[];
   /** All CONSTANT_Utf8 values (names, descriptors, signatures, string literals). */
@@ -36,7 +39,7 @@ export function readConstantPool(b: Uint8Array): ConstantPoolInfo {
   const major = dv.getUint16(6);
   const count = dv.getUint16(8);
   const utf8: (string | undefined)[] = new Array(count);
-  const classIdx: number[] = [];
+  const classIdx = new Map<number, number>();
   const stringIdx: number[] = [];
   let p = 10;
   const need = (n: number) => {
@@ -60,7 +63,7 @@ export function readConstantPool(b: Uint8Array): ConstantPoolInfo {
       case 5: case 6:
         need(8); p += 8; i++; break; // long/double take two slots
       case 7:
-        need(2); classIdx.push(dv.getUint16(p)); p += 2; break;
+        need(2); classIdx.set(i, dv.getUint16(p)); p += 2; break;
       case 8:
         need(2); stringIdx.push(dv.getUint16(p)); p += 2; break;
       case 15: need(3); p += 3; break;
@@ -69,9 +72,14 @@ export function readConstantPool(b: Uint8Array): ConstantPoolInfo {
         throw new ClassFormatError(`unknown constant pool tag ${tag}`);
     }
   }
+  const nameAt = (off: number) => utf8[classIdx.get(dv.getUint16(off)) ?? 0];
+  // Older analyses accept a pool without a full class header.
   return {
     major,
-    classRefs: classIdx.map((i) => utf8[i]).filter((s): s is string => !!s),
+    name: p + 6 <= b.length ? nameAt(p + 2) : undefined,
+    superName: p + 6 <= b.length ? nameAt(p + 4) : undefined,
+    abstract: p + 6 <= b.length && !!(dv.getUint16(p) & 0x0600),
+    classRefs: [...classIdx.values()].map((i) => utf8[i]).filter((s): s is string => !!s),
     utf8: utf8.filter((s): s is string => s !== undefined),
     strings: stringIdx.map((i) => utf8[i]).filter((s): s is string => !!s),
   };

@@ -64,11 +64,9 @@
 @media (max-width: 860px) { .show-mobile { display: grid; } .hide-mobile { display: none; } }
 .seg.on-shell button[aria-checked='true'], .seg.on-shell button[aria-pressed='true'] { background: var(--primary); color: var(--on-primary); }
 
-/* language switch in the sidebar */
-.sidebar-foot .seg.lang { align-self: stretch; }
-.sidebar-foot .seg.lang button { flex: 1; justify-content: center; }
-.shell-collapsed .sidebar-foot .seg.lang { flex-direction: column; align-self: center; width: 40px; }
-@media (max-width: 860px) { .shell-collapsed .sidebar-foot .seg.lang { flex-direction: row; width: auto; align-self: stretch; } }
+.header-language { margin-left: auto; flex: none; }
+.workspace-language { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+@media (max-width: 860px) { .workspace-language { display: none; } }
 
 .current-game { margin: 6px 0 12px; min-height: 72px; align-items: center; }
 .current-game img { width: 36px; height: 48px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }

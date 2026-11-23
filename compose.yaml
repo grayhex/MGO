@@ -2,7 +2,7 @@ name: mgo
 
 services:
   app:
-    image: ghcr.io/grayhex/mgo:${MGO_VERSION:-1.5.0}
+    image: ghcr.io/grayhex/mgo:${MGO_VERSION:-latest}
     restart: unless-stopped
     init: true
     environment:
@@ -19,6 +19,7 @@ services:
       - ${MGO_LIBRARY:-./games}:/mnt/mgo-library:ro
     networks: [internal, symbian]
     user: "${PUID:-10001}:${PGID:-10001}"
+    group_add: ["10"]
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
@@ -30,7 +31,7 @@ services:
       - /tmp:size=128m,mode=1777,exec
 
   gateway:
-    image: ghcr.io/grayhex/mgo-gateway:${MGO_VERSION:-1.5.0}
+    image: ghcr.io/grayhex/mgo-gateway:${MGO_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       app:

@@ -23,6 +23,19 @@ describe('manifest parsing', () => {
 });
 
 describe('parseJar', () => {
+  it('uses the manifest entry when a mismatched JAD names an absent MIDlet', () => {
+    const input = jar({ 'a/Game.class': classOf(47) }, 'MIDlet-1: Game,,a.Game\n');
+    const info = parseJar(input, { 'MIDlet-1': 'Game,,Missing' });
+    assert.equal(info.repairedMidlet, 'Missing');
+    assert.equal(info.midlets[0]?.className, 'a.Game');
+    assert.equal(info.classVersion, 47);
+  });
+
+  it('reports a missing entry point when a replacement cannot be verified', () => {
+    const input = jar({ 'a.class': classOf(47) }, 'MIDlet-1: Game,,Missing\n');
+    assert.equal(parseJar(input).missingMidlet, 'Missing');
+  });
+
   it('extracts name, vendor, version, midlets, icon and class version', () => {
     const j = jar({ 'a/Game.class': classOf(47), 'icon.png': png }, 'MIDlet-Name: Foo\nMIDlet-Vendor: Bar\nMIDlet-Version: 1.2\nMIDlet-1: Foo, /icon.png, a.Game\n');
     const i = parseJar(j);

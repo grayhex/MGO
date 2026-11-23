@@ -1,7 +1,7 @@
 name: Edge image
 
 # Publishes ghcr.io/<owner>/mgo:edge and mgo-gateway:edge after the CI of a push to main has PASSED.
-#  - edge moves with every successful merge to main (a NAS that follows :edge can update after each PR);
+#  - edge moves after successful CI on main; README, screenshot, and curated list changes alone skip CI;
 #  - latest is moved only by Release (an official, non-prerelease version);
 #  - version tags (x.y.z) are never touched here; the immutable sha-<commit> tag is added for rollbacks.
 # A failed CI never reaches this workflow's build: the job only runs when the CI run succeeded.

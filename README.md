@@ -51,7 +51,7 @@ Use the setup wizard to choose existing Java ME, N-Gage and Symbian folders.
 For a starting collection, choose **Curated Java ME library** in the wizard,
 install the J2ME Archive index and review the proposed builds before confirming.
 Downloads go to the managed archive import folder. **Settings → Game metadata**
-groups J2ME Archive and MobyGames under Java ME and All About Symbian under N-Gage.
+groups J2ME Archive and MobyGames under Java ME and All About Symbian and LaunchBox Games Database under N-Gage.
 [Library guide](docs/LIBRARY.md)
 
 ## Quick start
@@ -73,7 +73,7 @@ docker compose up -d
 
 HTTPS certificate setup: [HTTPS.md](docs/HTTPS.md). Tabs, platform folders, N-Gage metadata and monitoring: [production guide](docs/PRODUCTION_READINESS.md).
 
-Open `https://<NAS address>:8443` on your home network. The first-run wizard opens without a sign-in screen. The same file also starts `mgo-symbian` (Symbian / N-Gage through EKA2L1, experimental): it needs your own firmware in *Settings → Symbian*; delete that block if you only play Java ME games. To update: `docker compose pull && docker compose up -d`. The configuration is also attached to [GitHub releases](https://github.com/grayhex/MGO/releases); the Compose file pins app and gateway to `1.5.0`. Set `MGO_VERSION` to move both images to a newer release. `MGO_VERSION=edge` follows the newest `main` build that passed CI (for testers); `latest` moves only for an official release.
+Open `https://<NAS address>:8443` on your home network. The first-run wizard opens without a sign-in screen. The same file also starts `mgo-symbian` (Symbian / N-Gage through EKA2L1, experimental): it needs your own firmware in *Settings → Symbian*; delete that block if you only play Java ME games. To update: `docker compose pull && docker compose up -d`. The configuration is also attached to [GitHub releases](https://github.com/grayhex/MGO/releases); the app and gateway follow the latest stable release by default. Set `MGO_VERSION` to pin both images to a specific release. The app runs with supplementary group `10` for shared folders on UGREEN NAS. `MGO_VERSION=edge` follows the newest `main` build that passed CI (for testers); `latest` moves only for an official release.
 
 Step-by-step guides for Synology and UGREEN, folder permissions, backups, HTTPS and troubleshooting: [docs/DOCKER.md](docs/DOCKER.md) (Russian).
 
