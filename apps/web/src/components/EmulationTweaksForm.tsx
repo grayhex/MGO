@@ -23,31 +23,39 @@ export function EmulationTweaksForm({ value, onChange, disabled }: { value: Emul
   const empty = Object.keys(value).length === 0;
   return (
     <fieldset className="tweaks" disabled={disabled}>
+      <div className="field-row">
       <label className="field">
-        <span className="label-caps">{translateUI('Frame limit (fps)')}</span>
+        <span className="label-caps">{translateUI('FPS limit')}</span>
         <input className="input" type="number" min={EMULATION_LIMITS.frameRate[0]} max={EMULATION_LIMITS.frameRate[1]} placeholder={String(EMULATION_DEFAULTS.frameRate)} value={value.frameRate ?? ''}
           onChange={(e) => set({ frameRate: e.target.value === '' ? undefined : Math.min(EMULATION_LIMITS.frameRate[1], Math.max(EMULATION_LIMITS.frameRate[0], Math.round(Number(e.target.value)))) })} aria-label={translateUI('Frame limit (fps)')} />
       </label>
       <label className="field">
-        <span className="label-caps">{translateUI('Language of the phone')} <Hint text="What the game reads as microedition.locale, for example en-US or ru-RU. Some games pick their language from it." /></span>
+        <span className="label-caps">{translateUI('Locale')} <Hint text="What the game reads as microedition.locale, for example en-US or ru-RU. Some games pick their language from it." /></span>
         <input className="input" type="text" maxLength={8} placeholder={EMULATION_DEFAULTS.locale} value={value.locale ?? ''}
           onChange={(e) => set({ locale: e.target.value === '' ? undefined : e.target.value })} aria-label={translateUI('Language of the phone')} />
       </label>
+      </div>
       <div className="field">
-        <span className="label-caps">{translateUI('Font sizes (small / medium / large, pixels)')} <Hint text="Raise them if the text of a game looks tiny or lowers into the next line." /></span>
+        <span className="label-caps">{translateUI('Font sizes (px)')} <Hint text="Raise them if the text of a game looks tiny or lowers into the next line." /></span>
         <div className="field-row three">
           {(['small', 'medium', 'large'] as Size[]).map((k) => (
             <input key={k} className="input" type="number" min={EMULATION_LIMITS.fontSize[0]} max={EMULATION_LIMITS.fontSize[1]} value={fonts[k]} onChange={(e) => setFont(k, e.target.value)} aria-label={translateUI(`Font size ${k}`)} />
           ))}
         </div>
       </div>
-      <Switch checked={value.pointerEvents ?? EMULATION_DEFAULTS.pointerEvents} onChange={(v) => set({ pointerEvents: v === EMULATION_DEFAULTS.pointerEvents ? undefined : v })}>{translateUI('Tell the game the phone has a touch screen')}</Switch>
-      <Switch checked={value.startAppOnResume ?? EMULATION_DEFAULTS.startAppOnResume} onChange={(v) => set({ startAppOnResume: v === EMULATION_DEFAULTS.startAppOnResume ? undefined : v })}>{translateUI('Call pauseApp and startApp when the game is paused and resumed')}</Switch>
-      <div className="field">
-        <Switch checked={value.preloadResources ?? false} onChange={on => set({ preloadResources: on || undefined })}>{translateUI('Preload resources')}</Switch>
-        <p className="muted small">{translateUI('KEmulator v2.22.1 and later. Uses more memory to load game resources at startup.')}</p>
+      <div className="control-line">
+        <Switch checked={value.pointerEvents ?? EMULATION_DEFAULTS.pointerEvents} onChange={(v) => set({ pointerEvents: v === EMULATION_DEFAULTS.pointerEvents ? undefined : v })}>{translateUI('Touch events')}</Switch>
+        <Hint text="Tell the game the phone has a touch screen" />
       </div>
-      <div className="btn-row"><button className="btn ghost sm" disabled={empty} onClick={() => onChange({})}>{translateUI('Back to the emulator defaults')}</button><Hint text="Applied when the game is started the next time." /></div>
+      <div className="control-line">
+        <Switch checked={value.startAppOnResume ?? EMULATION_DEFAULTS.startAppOnResume} onChange={(v) => set({ startAppOnResume: v === EMULATION_DEFAULTS.startAppOnResume ? undefined : v })}>{translateUI('Pause callbacks')}</Switch>
+        <Hint text="Call pauseApp and startApp when the game is paused and resumed" />
+      </div>
+      <div className="control-line">
+        <Switch checked={value.preloadResources ?? false} onChange={on => set({ preloadResources: on || undefined })}>{translateUI('Preload resources')}</Switch>
+        <Hint text="KEmulator v2.22.1 and later. Uses more memory to load game resources at startup." />
+      </div>
+      <div className="btn-row"><button className="btn ghost sm" disabled={empty} onClick={() => onChange({})}>{translateUI('Reset options')}</button><Hint text="Applied when the game is started the next time." /></div>
     </fieldset>
   );
 }

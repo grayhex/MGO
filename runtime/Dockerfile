@@ -57,7 +57,7 @@ FROM ${BASE_REGISTRY}/ubuntu:24.04 AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
       openjdk-21-jdk-headless \
       xvfb libgl1 libglx-mesa0 libgl1-mesa-dri libegl1 libxext6 libxrender1 libxtst6 libxi6 libxrandr2 libxcursor1 libxinerama1 \
-      fontconfig fonts-dejavu-core ca-certificates libharfbuzz0b libfreetype6 libfontconfig1 liblcms2-2 \
+      fontconfig fonts-dejavu-core ca-certificates curl python3 libharfbuzz0b libfreetype6 libfontconfig1 liblcms2-2 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=app-build /usr/local/bin/node /usr/local/bin/node
 # The token volume can be written by NAS-selected UID:GID (e.g. 1000:10 or 10001:10001).

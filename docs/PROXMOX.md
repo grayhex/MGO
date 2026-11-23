@@ -182,3 +182,18 @@ packaging/devscripts/export.sh      # dist-devscripts/{ct,install,json}/ + PR.md
 ```
 
 Осознанные отступления от правил DevScripts и причины — в [`packaging/devscripts/DEVIATIONS.md`](../packaging/devscripts/DEVIATIONS.md).
+
+### J2ME Archive
+
+Свежая установка включает Python 3. Для существующих контейнеров, в которых
+его нет, установите `python3` и `curl` из пакетов Debian. Для сборки из
+исходников нужны Linux, Python 3.9+ со стандартными модулями SQLite/FTS5 и LZMA,
+curl и доступ к указанным в [SECURITY.md](SECURITY.md#j2me-archive) источникам.
+
+Управляемая папка загрузок — `/var/lib/mgo/import/`. Если нужен отдельный
+записываемый bind mount LXC, задайте его путь в `ARCHIVE_WRITABLE_ROOT` в
+`/etc/mgo/mgo.env`, выдайте uid службы права на запись и добавьте путь в
+`ReadWritePaths` через `systemctl edit mgo`. Перезапустите службу после
+настройки. Обычные каталоги сканирования остаются источниками для чтения.
+`mgo backup` и `mgo restore` сохраняют подтверждённые совпадения в SQLite.
+После восстановления на новом сервере индекс можно установить заново.

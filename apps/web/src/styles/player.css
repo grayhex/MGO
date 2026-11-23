@@ -26,7 +26,20 @@
 .skin-opt img { height: 64px; width: auto; max-width: 100%; object-fit: contain; pointer-events: none; }
 .skin-opt strong { font-size: 0.8125rem; line-height: 1rem; }
 .skin-opt span { font-size: 0.6875rem; line-height: 0.875rem; color: var(--muted); }
-.ctrl-col { display: grid; gap: var(--s-lg); min-width: 0; }
+.ctrl-col { display: grid; gap: 8px; min-width: 0; }
+.ctrl-col .panel > summary { min-height: 40px; padding: 8px 12px; }
+.ctrl-col .panel-body { padding: 2px 12px 12px; gap: 8px; }
+.ctrl-col .panel-body fieldset { gap: 8px; }
+.ctrl-col .input, .ctrl-col .select { height: 30px; min-width: 0; }
+.ctrl-col .field-row { gap: 8px; }
+.ctrl-col .switch { gap: 6px; font-size: 0.8125rem; }
+.ctrl-col .note { padding: 8px 10px; margin: 0; }
+.ctrl-col .control-line { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.ctrl-col .control-line .label-caps { margin: 0; }
+.ctrl-col .player-seg button { height: 26px; padding: 0 8px; font-size: 0.75rem; }
+.ctrl-col .audio-controls .field { flex: 1; min-width: 90px; }
+.ctrl-col .hint { margin: 0; }
+.ctrl-col .native-platform { margin: 0; }
 .session-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .statline { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .hint { font-size: 0.75rem; line-height: 1rem; color: var(--muted); }

@@ -22,6 +22,7 @@ import './styles/player.css';
 import './styles/keypad.css';
 import './styles/phones.css';
 import './styles/settings.css';
+import './styles/archive.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

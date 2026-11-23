@@ -12,14 +12,14 @@ export function Switch({ checked, onChange, children, disabled }: { checked: boo
   );
 }
 
-export interface SegOption<T extends string> { value: T; label: ReactNode; title?: string }
+export interface SegOption<T extends string> { value: T; label: ReactNode; title?: string; ariaLabel?: string }
 
 /** Radio-group style segmented control. */
 export function Seg<T extends string>({ value, options, onChange, label, block, className = '' }: { value: T; options: SegOption<T>[]; onChange: (v: T) => void; label: string; block?: boolean; className?: string }) {
   return (
     <div className={`seg ${block ? 'block' : ''} ${className}`} role="radiogroup" aria-label={translateUI(label)}>
       {options.map((o) => (
-        <button key={o.value} type="button" role="radio" aria-checked={value === o.value} title={translateUI(o.title)} onClick={() => onChange(o.value)}>{translateUI(o.label)}</button>
+        <button key={o.value} type="button" role="radio" aria-checked={value === o.value} aria-label={o.ariaLabel ? translateUI(o.ariaLabel) : undefined} title={translateUI(o.title)} onClick={() => onChange(o.value)}>{translateUI(o.label)}</button>
       ))}
     </div>
   );

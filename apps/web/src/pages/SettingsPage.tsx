@@ -11,6 +11,7 @@ import { SymbianPanel } from '../components/SymbianPanel';
 import { MyPhones } from '../components/MyPhones';
 import { PhoneDefaultsForm, ServerForm, SoundControlsForm } from '../components/SettingsForms';
 import { SystemDashboard } from '../components/SystemDashboard';
+import { ArchiveSettings } from '../components/ArchiveSettings';
 import { NgageCatalogPanel } from '../components/NgageCatalogPanel';
 
 type Toaster = (kind: 'info' | 'error', text: string) => void;
@@ -71,7 +72,7 @@ export function SettingsPage({ toast, onRunWizard, onLibraryChanged }: { toast: 
           <CatalogPanel toast={toast} onChanged={onLibraryChanged} />
         </details>
       </Section></div>
-      <div role="tabpanel" id="panel-mobygames" aria-labelledby="tab-mobygames" hidden={tab !== 'mobygames'}><Section id="mobygames" icon="info" title={translateUI("Game metadata")} hint={translateUI("Covers, descriptions, genres, publishers, years, ratings and screenshots (optional).")}><NgageCatalogPanel toast={toast} onChanged={onLibraryChanged} /><MobyPanel toast={toast} /></Section></div>
+      <div role="tabpanel" id="panel-mobygames" aria-labelledby="tab-mobygames" hidden={tab !== 'mobygames'}><Section id="mobygames" icon="info" title={translateUI("Game metadata")} hint={translateUI("Covers, descriptions, genres, publishers, years, ratings and screenshots (optional).")}>{tab === 'mobygames' && <ArchiveSettings onChanged={onLibraryChanged} />}<NgageCatalogPanel toast={toast} onChanged={onLibraryChanged} /><MobyPanel toast={toast} /></Section></div>
       <div role="tabpanel" id="panel-phone" aria-labelledby="tab-phone" hidden={tab !== 'phone'}><Section id="phone" icon="phone" title={translateUI("My phones")} hint={translateUI("The phones you play on, and which one starts each kind of games.")}><MyPhones toast={toast} /><details className="more lib-more"><summary>{translateUI("Screen size, key layout and look of the Java ME phone")}</summary><PhoneDefaultsForm toast={toast} /></details></Section></div>
       <div role="tabpanel" id="panel-sound" aria-labelledby="tab-sound" hidden={tab !== 'sound'}><Section id="sound" icon="gamepad" title={translateUI("Sound & controls")}><SoundControlsForm toast={toast} /></Section></div>
       <div role="tabpanel" id="panel-symbian" aria-labelledby="tab-symbian" hidden={tab !== 'symbian'}><Section id="symbian" icon="cpu" title={translateUI("Symbian and N-Gage firmware")} hint={translateUI("Symbian S60 and N-Gage games run in a second emulator (EKA2L1). You bring your own firmware.")}><SymbianPanel toast={toast} /></Section></div>

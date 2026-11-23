@@ -1,5 +1,6 @@
 import { readSymbianStatus } from './eka2l1/status.js';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isPhoneId, platformOfFile, selectPhone, profilesForSkin, type SymbianStatus, type GameSettings, type PublicSettings, type ScanReport } from '@mgo/protocol';
@@ -10,6 +11,7 @@ import { resolveInsideRoots, walkLibrary, type WalkEntry, type WalkStats } from 
 import { newId } from './library.js';
 
 const MAX_REPORTED_ERRORS = 200;
+const prefixFor = (root: string, kind: string) => `${kind}/${createHash('sha256').update(root).digest('hex').slice(0, 8)}/`;
 const tick = () => new Promise<void>((r) => setImmediate(r));
 
 /** The "default phone" of the settings, as the settings a freshly added game starts with. */
@@ -63,12 +65,17 @@ export class ScanManager {
     const add = (dir: string, kind: string | null) => {
       const hit = resolveInsideRoots(this.cfg, dir);
       if (!hit) { unavailable.push(dir); return; }
-      roots.push({ real: hit.real, kind, prefix: kind ? `${kind}/${createHash('sha256').update(hit.real).digest('hex').slice(0, 8)}/` : '' });
+      roots.push({ real: hit.real, kind, prefix: kind ? prefixFor(hit.real, kind) : '' });
     };
     const wanted = (kind: 'j2me' | 'ngage' | 'symbian') => !kinds || kinds.includes(kind);
     // the older single folder takes everything it holds; it is part of a scan of "all" and of Java ME
     if (settings.libraryPath && wanted('j2me') && (!kinds || kinds.length === 3 || !settings.libraryPaths?.j2me)) add(settings.libraryPath, null);
     for (const kind of ['j2me', 'ngage', 'symbian'] as const) if (wanted(kind) && settings.libraryPaths?.[kind]) add(settings.libraryPaths[kind]!, kind);
+    if (wanted('j2me')) {
+      const managed = path.join(this.cfg.dataDir, 'import');
+      if (existsSync(managed) && !roots.some(root => root.real === managed)) add(managed, 'j2me');
+      if (this.cfg.archiveWritableRoot && !roots.some(root => root.real === this.cfg.archiveWritableRoot)) add(this.cfg.archiveWritableRoot, 'j2me');
+    }
     if (!roots.length && unavailable.length) throw new UploadError('library_unavailable', 'The configured library directories are missing or outside the allowed locations', 400);
     if (!roots.length) throw new UploadError('no_library', kinds && kinds.length < 3 ? 'No folder is chosen for this kind of games (Settings > Game library)' : 'No library directory is configured (Settings > Game library)', 400);
     const r: ScanReport = {
@@ -213,6 +220,19 @@ export class ScanManager {
     this.library.upsertSource({ rel_path: pkg.rel, jad_rel_path: null, game_id: gameId, size: pkg.size, mtime_ms: pkg.mtimeMs, jad_size: 0, jad_mtime_ms: 0, sha256: sha });
   }
 
+  /** A completed single-JAR transfer, indexed with the same importer and source metadata as a folder scan. */
+  importArchiveJar(root: string, relative: string, bytes: Buffer, sha: string, mtimeMs: number) {
+    const rel = prefixFor(root, 'j2me') + relative;
+    const defaults = gameDefaults(this.hooks.settings().phone, this.hooks.explicitPhone?.());
+    return this.addJarSource({ rel, size: bytes.length, mtimeMs }, null, bytes, null, sha, defaults);
+  }
+
+  private addJarSource(jar: Pick<WalkEntry, 'rel' | 'size' | 'mtimeMs'>, jad: WalkEntry | null, bytes: Buffer, jadBytes: Buffer | null, sha: string, defaults: Partial<GameSettings>) {
+    const result = this.library.add(bytes, jadBytes, this.cfg.libraryQuotaBytes, { origin: 'import', fileName: path.basename(jar.rel), defaults });
+    this.library.upsertSource({ rel_path: jar.rel, jad_rel_path: jad?.rel ?? null, game_id: result.game.id, size: jar.size, mtime_ms: jar.mtimeMs, jad_size: jad?.size ?? 0, jad_mtime_ms: jad?.mtimeMs ?? 0, sha256: sha });
+    return result;
+  }
+
   private async importOne(r: ScanReport, jar: WalkEntry, jad: WalkEntry | null, defaults: Partial<GameSettings>): Promise<void> {
     const prev = this.library.getSource(jar.rel);
     if (r.mode === 'update' && prev && prev.size === jar.size && prev.mtime_ms === jar.mtimeMs && prev.jad_size === (jad?.size ?? 0) && prev.jad_mtime_ms === (jad?.mtimeMs ?? 0) && this.library.get(prev.game_id)) {
@@ -234,13 +254,13 @@ export class ScanManager {
       else if (this.library.sourcesOf(existing.id).some((s) => !s.missing && s.rel_path !== jar.rel)) r.unchanged++; // counted as a duplicate when the groups are collected
       else r.unchanged++;
     } else {
-      const { game } = this.library.add(bytes, jadBytes, this.cfg.libraryQuotaBytes, { origin: 'import', fileName: path.basename(jar.rel), defaults });
+      const { game } = this.addJarSource(jar, jad, bytes, jadBytes, sha, defaults);
       gameId = game.id;
       if (prev) r.updated++;
       else r.added++;
       if (this.library.gamesInGroup(game.groupKey).length > 1) r.newVersions++;
     }
-    this.library.upsertSource({ rel_path: jar.rel, jad_rel_path: jad?.rel ?? null, game_id: gameId, size: jar.size, mtime_ms: jar.mtimeMs, jad_size: jad?.size ?? 0, jad_mtime_ms: jad?.mtimeMs ?? 0, sha256: sha });
+    if (existing) this.library.upsertSource({ rel_path: jar.rel, jad_rel_path: jad?.rel ?? null, game_id: gameId, size: jar.size, mtime_ms: jar.mtimeMs, jad_size: jad?.size ?? 0, jad_mtime_ms: jad?.mtimeMs ?? 0, sha256: sha });
   }
 
   /** Duplicate files (same SHA-256 at several paths) and games that exist in several versions (same vendor + name, different bytes). */

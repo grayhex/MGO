@@ -10,6 +10,8 @@ import { GenreDialog } from './GenreDialog';
 import { splitPlayTime } from '../playTime';
 import { compareGroups, matchesStatus, SORT_KEYS, STATUS_FILTERS, totalPlaySeconds, type SortKey, type StatusFilter } from '../libraryView';
 import { GameSettingsDialog } from './GameSettingsDialog';
+import { ArchiveBrowser } from './ArchiveBrowser';
+import { archiveMatchLabel } from './ArchiveSettings';
 import { Icon } from './Icon';
 import { PlatformTag } from './PlatformTag';
 import { Seg } from './ui';
@@ -68,6 +70,8 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(0);
   const [editing, setEditing] = useState<GameMeta | null>(null);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiveFilter, setArchiveFilter] = useState<'all' | 'exact' | 'review' | 'unknown'>('all');
   const [infoFor, setInfoFor] = useState<GameMeta | null>(null);
   const [genreFor, setGenreFor] = useState<GameMeta | null>(null);
   const [sort, setSortState] = useState<SortKey>(loadSort);
@@ -187,8 +191,13 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
       .filter((vs) => genre === 'all' || (genre === 'unclassified' ? !vs[0]!.classification : vs[0]!.classification?.primaryGenre === genre || !!vs[0]!.classification?.genres.includes(genre)))
       .filter((vs) => (filter === 'favorites' ? vs.some((g) => g.favorite) : filter === 'recent' ? vs.some((g) => g.lastPlayedAt) : true))
       .filter((vs) => matchesStatus(vs, status))
+      .filter((vs) => archiveFilter === 'all' || vs.some(g => {
+        if ((g.platform ?? 'j2me') !== 'j2me') return false;
+        const state = g.archiveMatch?.state ?? 'unknown';
+        return state === archiveFilter || (archiveFilter === 'exact' && state === 'manual');
+      }))
       .sort((a, b) => compareGroups(a, b, filter === 'recent' && sort === 'name' ? 'played' : sort)); // "Recent" keeps its order unless another one is chosen
-  }, [games, query, filter, genre, status, sort, platform]);
+  }, [games, query, filter, genre, status, sort, platform, archiveFilter]);
 
   // games per genre (one per group, so the versions of a game count once), from what is already loaded
   const genreCounts = useMemo(() => {
@@ -213,6 +222,7 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
           <p>{games === null ? translateUI('Loading…') : (() => { const n = new Set((games ?? []).map((g) => g.groupKey)).size; return translateUI('{games} · {fav} favorites · stored on this server only', { games: translateUI(n === 1 ? '{n} game' : '{n} games', { n }), fav: favCount }); })()}</p>
         </div>
         <span className="spacer" />
+        <button className="btn sm" onClick={() => setArchiveOpen(true)}><Icon name="search" /> {translateUI("Find games in J2ME Archive")}</button>
         {libraryPath && <button className="btn sm" disabled={scanning} onClick={() => void api.scanStart('update').then((r) => setScan(r.report), (e) => toast('error', (e as Error).message))} title={translateUI("Look for new and changed files in the library folder")}><Icon name="restart" /> {translateUI(scanning ? 'Importing…' : 'Scan folder')}</button>}
         <button className="btn sm primary" onClick={() => fileInput.current?.click()}><Icon name="upload" /> {translateUI("Add games")}</button>
         <input ref={fileInput} type="file" accept=".jar,.jad,.sis,.sisx,.n-gage,.zip" multiple hidden onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ''; }} />
@@ -224,6 +234,10 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
           <button type="button" className={platform === 'all' ? 'on' : ''} aria-pressed={platform === 'all'} onClick={() => choosePlatform('all')}>{translateUI('All')}</button>
           {GAME_PLATFORMS.map(p => <button type="button" key={p} className={platform === p ? 'on' : ''} aria-pressed={platform === p} onClick={() => choosePlatform(platform === p ? 'all' : p)} data-platform={p} title={GAME_PLATFORM_LABELS[p]}><PlatformTag platform={p} size="sm" className="bare" /></button>)}
         </div>
+        {(games ?? []).some(game => game.archiveMatch) && <select className="select compact" aria-label={translateUI("Filter archive matches")} value={archiveFilter} onChange={event => setArchiveFilter(event.target.value as typeof archiveFilter)}>
+          <option value="all">{translateUI("Any archive status")}</option>
+          {(['exact', 'review', 'unknown'] as const).map(state => <option key={state} value={state}>{translateUI(archiveMatchLabel[state])}</option>)}
+        </select>}
         <select className="select compact" value={genre} onChange={(e) => setGenre(e.target.value as GenreFilter)} aria-label={translateUI('Filter by genre')} data-testid="genre-filter">
           <option value="all">{translateUI('All genres')} ({genreCounts.total})</option>
           {GENRES.filter((x) => (genreCounts.n.get(x) ?? 0) > 0 || genre === x).map((x) => <option key={x} value={x}>{translateUI(x)} ({genreCounts.n.get(x) ?? 0})</option>)}
@@ -282,12 +296,14 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
           ) : (
             <span className="badge plain">{translateUI(sel.version ? `v${sel.version}` : 'no version')}</span>
           );
+          const archiveMark = sel.archiveMatch && sel.archiveMatch.state !== 'unknown' && <span className={`archive-mark ${sel.archiveMatch.state}`} title={`J2ME Archive · ${translateUI(archiveMatchLabel[sel.archiveMatch.state])}`} aria-label={translateUI(archiveMatchLabel[sel.archiveMatch.state])}><Icon name={sel.archiveMatch.state === 'exact' ? 'check' : 'info'} /></span>;
           const flags = (
             <>
               <span className="platform-badge" data-testid="platform-badge" data-platform={sel.platform ?? 'j2me'}><PlatformTag platform={sel.platform ?? 'j2me'} size="sm" /></span>
               {sel.platform === 'symbian' && sel.packageFormat && sel.packageFormat !== 'unknown' && <span className="badge plain" data-testid="package-generation" title={translateUI(PACKAGE_FORMAT_LABEL[sel.packageFormat])}>{sel.packageFormat === 'sis-legacy' ? 'S60 ≤2nd' : 'S60 3rd+'}</span>}
               {sel.warnings.length > 0 && <span className="badge mock" title={translateUI(sel.warnings.join('\n'))}>!</span>}
               {sel.sourceMissing && <span className="badge plain" title={translateUI("The file is no longer in the library folder; the game stays here with its saves")}>{translateUI("file gone")}</span>}
+              {archiveMark}
               {sel.info?.status === 'ambiguous' && <span className="badge mock" title={translateUI("Several MobyGames matches: open the info to choose")}>{translateUI("review")}</span>}
             </>
           );
@@ -321,7 +337,7 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
               <button className="card-main" onClick={() => onPlay(sel.id)} disabled={blocked} title={translateUI(bad ? 'Java 5+ class files are not supported by KEmulator' : `Play ${sel.name}`)}>
                 <Cover g={sel} />
                 <div className="meta">
-                  <h3>{sel.name}</h3>
+                  <h3>{sel.name} {archiveMark}</h3>
                   <p className="muted">{translateUI(sel.info?.year ? `${sel.vendor} · ${sel.info.year}` : sel.vendor)}</p>
                   {sel.ngageInfo && <p className="ngage-card-facts">{sel.ngageInfo.publisher} · {sel.ngageInfo.year}{sel.ngageInfo.rating !== null ? ` · ${sel.ngageInfo.rating}%` : ''}</p>}
                   <p className="card-resolution"><ResolutionTag resolution={sel.nativeResolution} />{time}</p>
@@ -343,6 +359,7 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
       {uploading > 0 && <div className="uploading">{translateUI("Uploading")} {uploading}…</div>}
       {dragging && <div className="dropzone"><div><strong>{translateUI("Drop to add")}</strong><br />{translateUI(".jar, .jad, .sis, .sisx, .n-gage files")}</div></div>}
       {genreFor && <GenreDialog game={genreFor} toast={toast} onClose={() => setGenreFor(null)} onChanged={() => { setGenreFor(null); void reload(); }} />}
+      {archiveOpen && <ArchiveBrowser onClose={() => setArchiveOpen(false)} onImported={reload} onPlay={id => { setArchiveOpen(false); onPlay(id); }} />}
       {infoFor && <GameInfoDialog game={infoFor} toast={toast} onClose={() => setInfoFor(null)} onChanged={() => void reload()} />}
       {editing && <GameSettingsDialog game={editing} toast={toast} onClose={() => setEditing(null)} onChanged={() => { setEditing(null); void reload(); }} />}
     </div>

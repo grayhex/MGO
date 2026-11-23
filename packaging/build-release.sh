@@ -30,6 +30,7 @@ cp packages/protocol/package.json "$root/app/packages/protocol/"
 cp -r packages/protocol/dist "$root/app/packages/protocol/dist"
 cp apps/api/package.json "$root/app/apps/api/"
 cp -r apps/api/dist "$root/app/apps/api/dist"
+cp -r apps/api/archive-tools "$root/app/apps/api/archive-tools"
 cp apps/web/package.json "$root/app/apps/web/"
 cp -r apps/web/dist "$root/app/apps/web/dist"
 find "$root/app" \( -name '*.test.js' -o -name '*.map' \) -delete

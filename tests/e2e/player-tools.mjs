@@ -89,6 +89,9 @@ try {
   await p.getByText(/belongs to another game/).waitFor();
 
   // ---- the game's file area ----
+  assert.equal(await p.getByText('Game files', { exact: true }).count(), 0);
+  await p.locator('.sidebar').getByRole('link', { name: 'Library' }).click();
+  await p.getByRole('button', { name: 'Game settings', exact: true }).first().click();
   await p.getByText('Game files', { exact: true }).click();
   const panel = p.locator('details.panel', { hasText: 'Game files' });
   await panel.getByText(/Empty\./).waitFor();

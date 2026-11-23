@@ -5,6 +5,7 @@ export * from './phoneSkins.js';
 export * from './platforms.js';
 export * from './emulatedDevices.js';
 export * from './packageFormat.js';
+export * from './j2meArchive.js';
 import type { Platform, EmulatorBackend } from './platforms.js';
 /**
  * Wire protocol shared by the API and the web client. It is provider-neutral:
@@ -103,6 +104,7 @@ export interface GameMeta {
   /** Short MobyGames summary, when the game has been matched. */
   info?: GameInfoSummary;
   ngageInfo?: NgageInfo;
+  archiveMatch?: import('./j2meArchive.js').ArchiveMatch;
   /** Genre of the game (shared by all versions of the group), when it has been classified. */
   classification?: GameClassification;
 }

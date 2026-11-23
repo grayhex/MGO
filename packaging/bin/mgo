@@ -183,7 +183,7 @@ do_backup() { # do_backup <out> <label> <games 0|1> <stop 0|1>; prints the archi
   fi
   [[ -d $MGO_DATA ]] || die "no data directory at $MGO_DATA"
   local need have_kb
-  need=$(du -sk "$MGO_DATA" | cut -f1)
+  need=$(du -sk --exclude="$MGO_DATA/j2me-archive" "$MGO_DATA" | cut -f1)
   have_kb=$(df -Pk "$(dirname "$file")" | awk 'NR==2{print $4}')
   ((have_kb > need + 20480)) || die "not enough free space in $(dirname "$file") for the backup (need ~$((need / 1024 + 20)) MB)"
 
