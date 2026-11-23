@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { SystemResources } from '@mgo/protocol';
 import { api } from '../api';
 import { t } from '../i18n';
+import { ThemeSelect } from './ThemeSelect';
 import { LanguageSwitch } from './LanguageSwitch';
 
 const resourceBytes = (n: number) => n >= 1073741824 ? `${(n / 1073741824).toFixed(2)} GB` : `${Math.round(n / 1048576)} MB`;
@@ -40,6 +41,6 @@ export function PlayerResources() {
         <progress aria-label={t('Memory')} max={usage?.memoryLimitBytes || 1} value={usage?.memoryBytes ?? 0} />
       </div>
     </div>
-    <LanguageSwitch />
+    <div className="player-preferences"><ThemeSelect /><LanguageSwitch /></div>
   </section>;
 }

@@ -1,5 +1,6 @@
 import { t as translateUI } from '../i18n';
-import type { ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './Icon';
 
 export function Switch({ checked, onChange, children, disabled }: { checked: boolean; onChange: (v: boolean) => void; children: ReactNode; disabled?: boolean }) {
@@ -49,8 +50,43 @@ export function Spark({ values, max, label }: { values: number[]; max?: number; 
   return <div className="spark" role="img" aria-label={translateUI(label)}>{values.map((v, i) => <span key={i} style={{ height: `${Math.max(4, (v / top) * 100)}%` }} />)}</div>;
 }
 
-/** A help text that stays out of the way: an (i) mark with the text as its tooltip (hover, long press or keyboard focus). */
+/** A keyboard-accessible help bubble that can extend outside a panel. */
 export function Hint({ text }: { text: string }) {
+  const id = useId();
+  const trigger = useRef<HTMLSpanElement>(null);
+  const delay = useRef<number>();
+  const [anchor, setAnchor] = useState<{ left: number; edge: number; below: boolean } | null>(null);
+  const hide = () => { window.clearTimeout(delay.current); setAnchor(null); };
+  const show = () => {
+    window.clearTimeout(delay.current);
+    delay.current = window.setTimeout(() => {
+      const rect = trigger.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.min(240, window.innerWidth - 16);
+      const below = rect.top < 128;
+      setAnchor({
+        left: Math.max(8, Math.min(window.innerWidth - width - 8, rect.left + (rect.width - width) / 2)),
+        edge: below ? rect.bottom + 8 : window.innerHeight - rect.top + 8,
+        below,
+      });
+    }, 150);
+  };
+  useEffect(() => {
+    window.addEventListener('resize', hide);
+    window.addEventListener('scroll', hide, true);
+    return () => {
+      window.clearTimeout(delay.current);
+      window.removeEventListener('resize', hide);
+      window.removeEventListener('scroll', hide, true);
+    };
+  }, []);
   const shown = translateUI(text);
-  return <span className="hint-mark" tabIndex={0} role="img" aria-label={shown} title={shown}>i</span>;
+  return <>
+    <span className="hint-mark" ref={trigger} tabIndex={0} role="img" aria-label={shown} aria-describedby={anchor ? id : undefined}
+      onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide} onKeyDown={event => { if (event.key === 'Escape') hide(); }}>i</span>
+    {anchor && createPortal(
+      <span className="hint-popover" id={id} role="tooltip" style={{ left: anchor.left, ...(anchor.below ? { top: anchor.edge } : { bottom: anchor.edge }) }}>{shown}</span>,
+      document.body
+    )}
+  </>;
 }

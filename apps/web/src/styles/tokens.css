@@ -1,56 +1,126 @@
-/* Design tokens: WattVision (DESIGN.md). One dark theme: #121212 workspace, #1E1E1E cards, cyan for data and actions,
-   red for alerts, lime green for "live". No white backgrounds, no pastel colours. Spacing in multiples of 8px. */
+/* Verdana Health palette and type scale, adapted to MGO's compact player. */
 :root {
-  --bg: #121212;
-  --fg: #ffffff;
-  --surface: #1e1e1e;
-  --surface-soft: #252525;
-  --surface-elevated: #1e1e1e;
-  --muted: #98989d;
-  --outline: #2c2c2e;
-  --outline-strong: #3a3a3c;
+  color-scheme: light;
+  --bg: #f8fafc;
+  --fg: #0f172a;
+  --surface: #fff;
+  --surface-soft: #f1f5f9;
+  --surface-elevated: #fff;
+  --muted: #475569;
+  --subtle: #64748b;
+  --outline: #e2e8f0;
+  --outline-strong: #cbd5e1;
 
-  --primary: #00e5ff;
-  --primary-strong: #00b8cc;
-  --primary-warm: #5cf0ff;
-  --primary-focus: #00e5ff;
-  --on-primary: #00262b;
-  --primary-tint: rgba(0, 229, 255, 0.1);
-  --primary-tint-strong: rgba(0, 229, 255, 0.22);
+  --primary: #0f172a;
+  --primary-strong: #020617;
+  --primary-warm: #334155;
+  --primary-focus: #0f172a;
+  --on-primary: #fff;
+  --primary-tint: #0f172a0a;
+  --primary-tint-strong: #0f172a18;
+  --accent: #059669;
+  --link: #047857;
+  --accent-tint: #eaf7f1;
+  --on-accent-tint: #065f46;
 
-  --shell-base: 18 18 18;
-  --shell-bg: #161616;
-  --shell-border: #2c2c2e;
-  --on-shell: #ffffff;
-  --on-shell-muted: #98989d;
-  --shell-blur: 0px;
+  --shell-bg: #fff;
+  --shell-border: #e2e8f0;
+  --on-shell: #0f172a;
+  --on-shell-muted: #475569;
+  --scrim: #0f172a66;
 
-  --success: #32d74b;
-  --warning: #ffd60a;
-  --danger: #ff453a;
-  --info: #64d2ff;
-  --alert-bg: #3a1c1c;
-  --badge-mock-bg: rgba(255, 214, 10, 0.16); --badge-mock-fg: #ffd60a;
-  --badge-planned-bg: #2c2c2e; --badge-planned-fg: #c7c7cc;
-  --badge-dev-bg: rgba(0, 229, 255, 0.14); --badge-dev-fg: #5cf0ff;
-  --badge-integrated-bg: rgba(191, 90, 242, 0.2); --badge-integrated-fg: #dda7f8;
-  --badge-prod-bg: rgba(50, 215, 75, 0.16); --badge-prod-fg: #32d74b;
-  --badge-danger-bg: #3a1c1c; --badge-danger-fg: #ff453a;
+  --success: #22c55e;
+  --ok: #15803d;
+  --warning: #eab308;
+  --danger: #b91c1c;
+  --danger-fill: #dc2626;
+  --danger-hover: #b91c1c;
+  --info: #0ea5e9;
+  --alert-bg: #fef2f2;
+  --badge-mock-bg: #fef9e7; --badge-mock-fg: #854d0e;
+  --badge-planned-bg: #f1f5f9; --badge-planned-fg: #475569;
+  --badge-dev-bg: #edf7fd; --badge-dev-fg: #075985;
+  --badge-integrated-bg: #eef2ff; --badge-integrated-fg: #4338ca;
+  --badge-prod-bg: #eaf8ef; --badge-prod-fg: #166534;
+  --badge-danger-bg: #fef2f2; --badge-danger-fg: #b91c1c;
+  --resolution-blue: #1e40af; --resolution-blue-bg: #e8f0fc;
+  --resolution-green: #166534; --resolution-green-bg: #e8f5ed;
+  --resolution-red: #9f1239; --resolution-red-bg: #fcecf0;
+  --resolution-neutral: #fff; --resolution-neutral-bg: #475569;
+  --platform-java: #9a3412; --platform-symbian: #1d4ed8;
+  --platform-ngage: #3f6212; --platform-ngage2: #9d174d;
 
   --lcd: #0b100e;
-  --stage-bg: radial-gradient(ellipse at 50% 30%, #262626 0%, #151515 75%);
+  --stage-bg: radial-gradient(ellipse at 50% 26%, #f7f9fc, #e2e8f0);
+  --phone-shadow: drop-shadow(0 14px 22px #0f172a2e);
   --glow: none;
 
-  --font: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font: 'DM Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --heading: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --mono: 'Fira Code', ui-monospace, Menlo, Consolas, monospace;
 
-  --r-xs: 4px; --r-sm: 8px; --r-md: 8px; --r-lg: 16px; --r-pill: 9999px;
-  --s-xs: 4px; --s-sm: 8px; --s-md: 16px; --s-lg: 16px; --s-xl: 24px; --s-2xl: 32px; --s-3xl: 40px; --s-4xl: 64px;
-  --container: 1400px; --header-h: 0px; /* the top bar exists only on a phone-sized screen, as a menu button */ --sidebar-w: 256px; --sidebar-w-collapsed: 64px;
+  --r-xs: 4px; --r-sm: 8px; --r-md: 8px; --r-lg: 16px; --r-modal: 12px; --r-pill: 9999px;
+  --s-xs: 4px; --s-sm: 8px; --s-md: 16px; --s-lg: 24px; --s-xl: 32px; --s-2xl: 48px; --s-3xl: 64px; --s-4xl: 64px;
+  --container: 1400px; --header-h: 0px; --sidebar-w: 256px; --sidebar-w-collapsed: 64px;
   --t-fast: 150ms; --t-normal: 200ms; --t-slow: 300ms; --t-panel: 500ms; --ease: cubic-bezier(0.4, 0, 0.2, 1);
 
-  --shadow-subtle: none;
-  --shadow-raised: 0 4px 16px rgba(0, 0, 0, 0.5);
-  --shadow-dialog: 0 24px 48px rgba(0, 0, 0, 0.6);
+  --shadow-subtle: 0 1px 3px #0f172a08;
+  --shadow-raised: 0 4px 16px #0f172a12;
+  --shadow-dialog: 0 8px 32px #0f172a1a;
+}
+
+:root[data-theme='dark'] {
   color-scheme: dark;
+  --bg: #0f172a;
+  --fg: #f1f5f9;
+  --surface: #172134;
+  --surface-soft: #202d42;
+  --surface-elevated: #172134;
+  --muted: #bac7d8;
+  --subtle: #a2b1c5;
+  --outline: #2e3d53;
+  --outline-strong: #4f617a;
+
+  --primary: #e2e8f0;
+  --primary-strong: #f8fafc;
+  --primary-warm: #cbd5e1;
+  --primary-focus: #cbd5e1;
+  --on-primary: #0f172a;
+  --primary-tint: #e2e8f014;
+  --primary-tint-strong: #e2e8f026;
+  --accent: #5dc9a1;
+  --link: #78d8b6;
+  --accent-tint: #12362f;
+  --on-accent-tint: #a0e4c9;
+
+  --shell-bg: #141e30;
+  --shell-border: #2e3d53;
+  --on-shell: #f1f5f9;
+  --on-shell-muted: #bac7d8;
+  --scrim: #020617a8;
+
+  --ok: #86dca8;
+  --warning: #facc59;
+  --danger: #fda4af;
+  --danger-fill: #b91c1c;
+  --danger-hover: #991b1b;
+  --alert-bg: #41232f;
+  --badge-mock-bg: #382e1d; --badge-mock-fg: #fde68a;
+  --badge-planned-bg: #27364c; --badge-planned-fg: #cbd5e1;
+  --badge-dev-bg: #1d364c; --badge-dev-fg: #b2dfff;
+  --badge-integrated-bg: #303357; --badge-integrated-fg: #d7d8ff;
+  --badge-prod-bg: #17392f; --badge-prod-fg: #a1dfb6;
+  --badge-danger-bg: #41232f; --badge-danger-fg: #fda4af;
+  --resolution-blue: #bedbff; --resolution-blue-bg: #1d3b63;
+  --resolution-green: #bbf7d0; --resolution-green-bg: #1b4232;
+  --resolution-red: #fecdd3; --resolution-red-bg: #50303a;
+  --resolution-neutral-bg: #394a60;
+  --platform-java: #fdba74; --platform-symbian: #93c5fd;
+  --platform-ngage: #bef264; --platform-ngage2: #f9a8d4;
+
+  --stage-bg: radial-gradient(ellipse at 50% 26%, #273750, #111a2a);
+  --phone-shadow: drop-shadow(0 14px 22px #02061770);
+  --shadow-subtle: 0 1px 3px #02061726;
+  --shadow-raised: 0 4px 16px #02061740;
+  --shadow-dialog: 0 8px 32px #02061770;
 }

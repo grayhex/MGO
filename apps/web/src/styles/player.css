@@ -28,17 +28,20 @@
 .skin-opt span { font-size: 0.6875rem; line-height: 0.875rem; color: var(--muted); }
 .ctrl-col { display: grid; gap: 6px; min-width: 0; }
 .player-resources { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--surface-elevated); border: 1px solid var(--outline); border-radius: var(--r-md); font-size: .75rem; }
-.player-resources .seg button { height: 22px; padding: 0 7px; font-size: .7rem; }
+.player-preferences { display: flex; align-items: center; gap: 6px; flex: none; }
+.player-preferences .theme-select select { width: 31px; height: 30px; padding: 0; appearance: none; color: transparent; }
+.player-preferences .theme-select option { color: var(--fg); }
+.player-preferences .seg button { height: 22px; padding: 0 7px; font-size: .7rem; }
 .resource-meters { display: grid; flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; color: var(--muted); }
 .resource-meters > div { display: grid; grid-template-columns: 1fr auto; gap: 3px 6px; }
 .resource-meters b { color: var(--fg); font-variant-numeric: tabular-nums; }
 .resource-meters progress { grid-column: 1 / -1; width: 100%; height: 5px; accent-color: var(--primary); }
-.resource-meters > div + div progress { accent-color: #9a85ed; }
-@media (max-width: 860px) { .player-resources .lang { display: none; } }
+.resource-meters > div + div progress { accent-color: var(--accent); }
+@media (max-width: 860px) { .player-preferences { display: none; } }
 .ctrl-col .panel > summary { min-height: 34px; padding: 6px 12px; }
-.ctrl-col .panel-body { padding: 2px 12px 8px; gap: 6px; }
+.ctrl-col .panel-body { padding: 2px 12px 8px; gap: 6px; font-size: .875rem; }
 .ctrl-col .panel-body fieldset { gap: 8px; }
-.ctrl-col .input, .ctrl-col .select { height: 30px; min-width: 0; }
+.ctrl-col .input, .ctrl-col .select { min-height: 32px; min-width: 0; }
 .ctrl-col .field-row { gap: 8px; }
 .ctrl-col .switch { gap: 6px; font-size: 0.8125rem; }
 .ctrl-col .note { padding: 8px 10px; margin: 0; }
@@ -153,3 +156,8 @@ button.chip-link:hover { border-color: var(--primary-warm); }
 .native-platform { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .phone-tip { display: grid; gap: 8px; }
 .phone-tip p { margin: 0; }
+
+.player-grid { min-width: 0; }
+.stage-bar .title strong, .stage-bar .title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lights-menu { color: #f1f5f9; }
+.lights-menu .btn { color: #f1f5f9; }

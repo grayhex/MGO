@@ -44,7 +44,7 @@ try {
   await wizard.getByRole('button', { name: 'Skip setup' }).click();
   await page.locator('.runtime-list').getByText('v1.5.0', { exact: true }).waitFor();
   assert.match(await page.locator('.runtime-list').innerText(), /Frontend web app[\s\S]*Java ME emulator[\s\S]*Symbian \/ N-Gage emulator/);
-  assert.match(await page.locator('.brand-logo').getAttribute('src'), /logo-horizontal\.svg$/);
+  assert.match(await page.locator('.brand-logo').getAttribute('src'), /logo-(?:horizontal|light)\.svg$/);
   for (let i = 0; i < 26; i++) app.library.add(makeJar(`Another title ${i}`), null, 1024 ** 2);
   const last = app.library.add(makeJar('ZZZ last played'), null, 1024 ** 2).game;
   await page.reload();

@@ -4,6 +4,8 @@ import type { GameMeta, HealthStatus, SymbianStatus } from '@mgo/protocol';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
 import { PlatformTag } from './PlatformTag';
+import { useTheme } from '../theme';
+import { ThemeSelect } from './ThemeSelect';
 import { LanguageSwitch } from './LanguageSwitch';
 import { useLastGame } from '../lastGame';
 
@@ -39,6 +41,7 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
   symbian?: SymbianStatus | null;
   title: string; subtitle?: string; children: ReactNode;
 }) {
+  const theme = useTheme();
   const lastGame = useLastGame();
   const [loadedGame, setLoadedGame] = useState<GameMeta | null>(null);
   useEffect(() => { let dead = false; if (!lastGame) { setLoadedGame(null); return; } void api.games().then(games => { if (!dead) setLoadedGame(games.find(g => g.id === lastGame.id) ?? null); }, () => undefined); return () => { dead = true; }; }, [lastGame?.id, lastGame?.name]);
@@ -65,12 +68,11 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
     <div className={`app ${collapsed ? 'shell-collapsed' : ''} ${drawer ? 'shell-drawer' : ''}`}>
       <aside className="sidebar glass" aria-label={translateUI("Main navigation")}>
         <Link to="/" onNavigate={go} className="brand" aria-label={translateUI("MGO home")}>
-          <img className="brand-logo" src="/graphics/brand/logo-horizontal.svg" alt="" />
+          <img className="brand-logo" src={theme === 'dark' ? '/graphics/brand/logo-horizontal.svg' : '/graphics/brand/logo-light.svg'} alt="" />
           <img className="brand-mark-img" src="/graphics/brand/mark.svg" alt="" width={32} height={32} />
           <span className="brand-text sr-only">{translateUI("MGO")}</span>
         </Link>
         <nav className="nav">
-          <div className="nav-title">{translateUI("Workspace")}</div>
           {item('/', 'library', 'Library', path === '/')}
           {lastGame && <Link to={`/play/${lastGame.id}`} onNavigate={go} data-testid="current-game" className={`nav-item current-game ${inPlayer ? 'active' : ''}`} title={lastGame.name} aria-label={translateUI('Current game: {name}', { name: lastGame.name })}>
             <Icon name="play" />
@@ -104,10 +106,10 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
           <div className="header-title">{translateUI(title)}</div>
           {subtitle && <div className="header-sub">{translateUI(subtitle)}</div>}
         </div>
-        <div className="header-language"><LanguageSwitch onShell /></div>
+        <div className="header-language"><ThemeSelect /><LanguageSwitch onShell /></div>
       </header>
       <main className="content" id="main">
-        <div className={`container${inPlayer ? ' wide' : path === '/' ? ' library-container' : ''}`}>{!inPlayer && <div className="workspace-language"><LanguageSwitch /></div>}{children}</div>
+        <div className={`container${inPlayer ? ' wide' : path === '/' ? ' library-container' : ''}`}>{!inPlayer && <div className="workspace-language"><ThemeSelect /><LanguageSwitch /></div>}{children}</div>
       </main>
     </div>
   );

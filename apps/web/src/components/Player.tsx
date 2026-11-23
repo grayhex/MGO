@@ -524,7 +524,7 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
       {game && <h2>{game.name}</h2>}
       {state === 'failed' && <p className="error">{translateUI("The emulator stopped unexpectedly. See the log.")}</p>}
       {game && game.classVersion >= 49 ? <p className="error">{translateUI("Java 5+ class files are not supported.")}</p> : (
-        <button className="btn primary" disabled={!canStart} onClick={start}><img className="act-icon" src="/graphics/actions/play-icon-on-cyan.svg" alt="" width={20} height={20} /> {translateUI(busy ? 'Starting…' : state === 'idle' ? 'Start' : 'Start again')}</button>
+        <button className="btn primary" disabled={!canStart} onClick={start}><Icon name="play" /> {translateUI(busy ? 'Starting…' : state === 'idle' ? 'Start' : 'Start again')}</button>
       )}
       {j2me && health?.ok === false && <p className="error">{translateUI("Emulator runtime is not ready.")}</p>}
     </>
@@ -600,9 +600,9 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
         <Panel icon="play" title={translateUI("Session")} right={<span className={`badge ${STATE_BADGE[state] ?? ''}`}>{translateUI(state === 'idle' ? 'stopped' : state)}</span>}>
           <div className="btn-row">
             {!running
-              ? <button className="btn sm primary grow" disabled={!canStart} onClick={start}><img className="act-icon" src="/graphics/actions/play-icon-on-cyan.svg" alt="" width={20} height={20} /> {translateUI("Start")}</button>
-              : <button className="btn sm danger grow" onClick={stop} disabled={(busy && j2me) || state === 'stopping'} title={translateUI("Stop requests a safe MIDlet shutdown. An unresponsive game may be forcibly closed after 8 seconds; unsaved in-game progress can be lost. Save inside the game first.")}><img className="act-icon" src="/graphics/actions/stop-icon.svg" alt="" width={20} height={20} /> {translateUI("Stop")}</button>}
-            {running && <button className="btn sm" disabled={busy || state === 'stopping' || (!j2me && !native.data?.plan.ready && native.data?.plan.code !== 'symbian_busy')} onClick={async () => { if (await stop()) setTimeout(start, 400); }}><img className="act-icon" src="/graphics/actions/restart-icon.svg" alt="" width={20} height={20} /> {translateUI("Restart")}</button>}
+              ? <button className="btn sm primary grow" disabled={!canStart} onClick={start}><Icon name="play" /> {translateUI("Start")}</button>
+              : <button className="btn sm danger grow" onClick={stop} disabled={(busy && j2me) || state === 'stopping'} title={translateUI("Stop requests a safe MIDlet shutdown. An unresponsive game may be forcibly closed after 8 seconds; unsaved in-game progress can be lost. Save inside the game first.")}><Icon name="stop" /> {translateUI("Stop")}</button>}
+            {running && <button className="btn sm" disabled={busy || state === 'stopping' || (!j2me && !native.data?.plan.ready && native.data?.plan.code !== 'symbian_busy')} onClick={async () => { if (await stop()) setTimeout(start, 400); }}><Icon name="restart" /> {translateUI("Restart")}</button>}
           {session && <button className="btn ghost sm icon" onClick={() => api.diagnostics(session.id).then((b) => downloadBlob(b, `mgo-diagnostics-${fileSafe(game?.name ?? 'game')}.txt`), (e) => toast('error', (e as Error).message))} title={translateUI("A text report with the settings, the emulator log and the JVM state: attach it to a bug report")} aria-label={translateUI("Download diagnostics")} data-testid="diagnostics"><Icon name="log" /></button>}
           </div>
           {game && j2me && health?.ok !== false && <div className="control-line">

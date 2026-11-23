@@ -1,4 +1,4 @@
-import { useLocale, setLocale } from './i18n';
+import { useLocale } from './i18n';
 import { t as translateUI } from './i18n';
 import { lazy, Suspense } from 'react';
 import { useDeveloperMode } from './developer';
@@ -10,7 +10,10 @@ import { SetupWizard } from './components/SetupWizard';
 import { Library } from './components/Library';
 import { Player } from './components/Player';
 import { Shell } from './components/Shell';
-import { Seg } from './components/ui';
+import { LanguageSwitch } from './components/LanguageSwitch';
+import { ThemeSelect } from './components/ThemeSelect';
+import { Icon } from './components/Icon';
+import { useTheme } from './theme';
 import { PhonesPage } from './pages/PhonesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { loadServerSettings } from './serverSettings';
@@ -19,20 +22,17 @@ import { usePath } from './router';
 export type Toast = { id: number; kind: 'info' | 'error'; text: string };
 
 function Login({ onDone }: { onDone: () => void }) {
-  const locale=useLocale();
+  const theme = useTheme();
   const [token, setToken] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   return (
     <div className="login">
-      <div className="login-hero"><Seg<'en' | 'ru'> label="Language / Язык" value={locale} onChange={setLocale} options={[{ value: 'en', label: 'EN', title: 'English' }, { value: 'ru', label: 'RU', title: 'Русский' }]} />
-        <picture>
-          <source media="(prefers-color-scheme: light)" srcSet="/graphics/brand/logo-light.svg" />
-          <img className="login-logo" src="/graphics/brand/logo-horizontal.svg" alt="" />
-        </picture>
+      <div className="login-hero">
+        <div className="login-preferences"><ThemeSelect /><LanguageSwitch /></div>
+        <img className="login-logo" src={theme === 'dark' ? '/graphics/brand/logo-horizontal.svg' : '/graphics/brand/logo-light.svg'} alt="" />
         <h1 className="sr-only">{translateUI("MGO")}</h1>
         <p>{translateUI("Your Java ME, Symbian and N-Gage games, played in real emulators on this server and streamed to any browser.")}</p>
-        <img className="login-art" src="/graphics/auth/login-hero.svg" alt="" />
       </div>
       <div className="login-side">
         <form
@@ -43,7 +43,7 @@ function Login({ onDone }: { onDone: () => void }) {
             try { await api.login(token); onDone(); } catch (x) { setErr((x as Error).message); } finally { setBusy(false); }
           }}
         >
-          <img className="login-shield" src="/graphics/auth/token-shield.svg" alt="" width={56} height={56} />
+          <div className="login-shield"><Icon name="shield" /></div>
           <h2>{translateUI("Sign in")}</h2>
           <p className="muted">{translateUI("This server requires an access token. On a Proxmox install run")} <code>{translateUI("mgo token")}</code> {translateUI("in the container.")}</p>
           <input className="input" type="password" autoFocus placeholder={translateUI("Access token")} value={token} onChange={(e) => setToken(e.target.value)} aria-label={translateUI("Access token")} />
