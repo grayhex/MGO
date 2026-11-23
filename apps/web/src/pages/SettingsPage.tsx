@@ -66,7 +66,7 @@ export function SettingsPage({ toast, onRunWizard, onLibraryChanged }: { toast: 
       <div role="tabpanel" id="panel-system" aria-labelledby="tab-system" hidden={tab !== 'system'}><Section id="system" icon="cpu" title={translateUI("System")} hint={translateUI("Is everything MGO needs installed and working?")}>{tab === 'system' && <SystemDashboard toast={toast} />}</Section></div>
       <div role="tabpanel" id="panel-library" aria-labelledby="tab-library" hidden={tab !== 'library'}><Section id="library" icon="library" title={translateUI("Game library")} hint={translateUI("One folder for each kind of games. MGO only reads them; you can also add games from the browser.")}>
         <LibraryFolders toast={toast} onChanged={onLibraryChanged} />
-        <details className="more lib-more"><summary>{translateUI('Curated Java ME library')}</summary>{tab === 'library' && <CuratedSetup />}</details>
+        <details className="more lib-more" open><summary>{translateUI('Curated Java ME library')}</summary>{tab === 'library' && <CuratedSetup />}</details>
         <details className="more lib-more"><summary>{translateUI("More: missing files, empty everything, genres")}</summary>
           <h3>{translateUI("Clean up")}</h3>
           <CleanupPanel toast={toast} onChanged={() => { onLibraryChanged(); }} />

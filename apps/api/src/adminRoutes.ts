@@ -11,6 +11,7 @@ import { MobyClient, MobyError } from './mobygames.js';
 import type { ScanManager } from './scanner.js';
 import type { SettingsStore } from './settingsStore.js';
 import { SOUNDFONT_MAX_BYTES, type SoundfontStore } from './soundfont.js';
+import { resourceUsage } from './monitoring.js';
 import { systemStatus } from './systemStatus.js';
 
 export interface AdminContext {
@@ -118,6 +119,8 @@ export function registerAdminRoutes(app: FastifyInstance, c: AdminContext): void
       throw e;
     }
   });
+
+  app.get('/api/system/resources', async () => resourceUsage());
 
   app.get('/api/system/status', async () => {
     const status = await systemStatus(cfg, library, store, c.java, c.version);

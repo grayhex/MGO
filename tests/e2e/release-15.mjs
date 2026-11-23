@@ -28,6 +28,7 @@ try {
   await page.goto(base);
   const wizard = page.getByRole('dialog', { name: 'Set up MGO' });
   await wizard.getByTestId('wizard-next').click();
+  assert.match(await wizard.getByRole('link', { name: 'View the game list' }).getAttribute('href'), /java_curated_top\.txt$/);
   const curated = wizard.getByRole('region', { name: 'Curated Java ME library' });
   await curated.getByRole('button', { name: 'Install index' }).click();
   await curated.getByRole('button', { name: 'Find curated builds' }).click();
@@ -56,7 +57,7 @@ try {
   await page.waitForFunction(() => document.activeElement?.textContent?.includes('ZZZ last played') && scrollY > 0);
   await page.goto(base + '/settings#mobygames');
   await page.getByRole('heading', { name: 'Java ME' }).waitFor();
-  await page.getByRole('heading', { name: 'N-Gage · All About Symbian' }).waitFor();
+  await page.getByRole('heading', { name: 'N-Gage', exact: true }).waitFor();
   await page.goto(base + '/phones');
   const thumb = page.locator('.phone-pick-skin').first();
   await thumb.waitFor();

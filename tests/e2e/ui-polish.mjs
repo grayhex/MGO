@@ -1,4 +1,4 @@
-// UI polish: no top bar on a desktop screen (language switch in the sidebar, search in the library toolbar), a bigger phone in the
+// UI polish: no top bar on a desktop screen (language switch on the right, search in the library toolbar), a bigger phone in the
 // player, the list view as an even table, renaming a game. Real API + Chromium. Run with `node --import tsx`.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -31,25 +31,25 @@ try {
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
 
-  // ---- no top bar; language in the sidebar; search in the toolbar ----
+  // ---- no top bar; language on the right; search in the toolbar ----
   await p.goto(base + '/');
   await p.locator('.game-card').first().waitFor();
   assert.equal(await p.locator('header.header').isVisible(), false, 'no top bar on a desktop screen');
   assert.equal(await p.locator('.content').evaluate((e) => getComputedStyle(e).paddingTop), '0px');
-  assert.equal(await p.locator('.sidebar .seg.lang').count(), 1, 'the language switch lives in the sidebar');
+  assert.equal(await p.locator('.workspace-language .seg.lang').count(), 1, 'one desktop language switch on the right');
   await p.getByTestId('search').fill('gamma');
   assert.deepEqual(await p.locator('.game-card h3').allInnerTexts(), ['Gamma']);
   await p.getByTestId('search').fill('');
-  await p.locator('.sidebar .seg.lang').getByRole('radio', { name: 'RU' }).click();
+  await p.locator('.workspace-language .seg.lang').getByRole('radio', { name: 'RU' }).click();
   await p.getByRole('heading', { name: 'Библиотека' }).waitFor();
-  await p.locator('.sidebar .seg.lang').getByRole('radio', { name: 'EN' }).click();
+  await p.locator('.workspace-language .seg.lang').getByRole('radio', { name: 'EN' }).click();
   await p.getByRole('heading', { name: 'Library' }).waitFor();
   for (const route of ['/settings', '/phones']) {
     await p.goto(base + route);
     await p.locator('h1').waitFor();
     assert.equal(await p.locator('header.header').isVisible(), false, `no top bar on ${route}`);
   }
-  console.log('✔ no top bar; language switch in the sidebar; search in the library toolbar');
+  console.log('✔ no top bar; language switch on the right; search in the library toolbar');
 
   // ---- the list is a table: every row has the same columns ----
   await p.goto(base + '/');
@@ -102,7 +102,7 @@ try {
   await mob.getByText('240×320', { exact: true }).waitFor();
   assert.equal(await mob.locator('header.header').isVisible(), true);
   await mob.getByRole('button', { name: 'Open menu' }).click();
-  await mob.locator('.sidebar .seg.lang').waitFor({ state: 'visible' });
+  await mob.locator('.header .seg.lang').waitFor({ state: 'visible' });
   assert.ok(await mob.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no horizontal scroll');
   console.log('✔ on a phone screen the slim bar with the menu stays');
 

@@ -86,8 +86,8 @@ export const api = {
     fd.append('file', file, file.name);
     return req<{ game: GameMeta; duplicate: boolean }>('/api/games', { method: 'POST', body: fd });
   },
-  ngageCatalog: () => req<{ running: boolean; entries: number; matched: number; unmatched: string[]; updatedAt: string | null; error: string | null; source: 'live' | 'snapshot'; snapshotDate: string; covers: number }>('/api/catalog/ngage'),
-  ngageCatalogRefresh: () => req<{ running: boolean; entries: number; matched: number; unmatched: string[]; updatedAt: string | null; error: string | null; source: 'live' | 'snapshot'; snapshotDate: string; covers: number }>('/api/catalog/ngage/refresh', { method: 'POST' }),
+  ngageCatalog: () => req<{ running: boolean; progress: { done: number; total: number } | null; entries: number; matched: number; unmatched: string[]; updatedAt: string | null; error: string | null; source: 'live' | 'snapshot'; snapshotDate: string; covers: number }>('/api/catalog/ngage'),
+  ngageCatalogRefresh: () => req<{ running: boolean; progress: { done: number; total: number } | null; entries: number; matched: number; unmatched: string[]; updatedAt: string | null; error: string | null; source: 'live' | 'snapshot'; snapshotDate: string; covers: number }>('/api/catalog/ngage/refresh', { method: 'POST' }),
   symbianStatus: () => req<SymbianStatus>('/api/symbian/status'),
   /** One firmware file; the answer names it for symbianInstall. */
   symbianUpload: (slot: 'rom' | 'rpkg' | 'archive' | 'vpl' | 'fpsx', file: File, options?: { progress: (percent: number) => void; signal: AbortSignal; bundle?: string }) => {
@@ -160,6 +160,7 @@ export const api = {
   },
   deleteSoundfont: () => req<SettingsResponse>('/api/settings/soundfont', { method: 'DELETE' }),
   testMoby: () => req<{ ok: true; platformId: number }>('/api/mobygames/test', { method: 'POST' }),
+  systemResources: () => req<import('@mgo/protocol').SystemResources>('/api/system/resources'),
   systemStatus: () => req<SystemStatus>('/api/system/status'),
 
   // library directory and import

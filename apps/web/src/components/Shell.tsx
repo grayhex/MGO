@@ -1,11 +1,10 @@
 import { api } from '../api';
-import { useLocale, setLocale } from '../i18n';
 import { t as translateUI } from '../i18n';
 import type { GameMeta, HealthStatus, SymbianStatus } from '@mgo/protocol';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
 import { PlatformTag } from './PlatformTag';
-import { Seg } from './ui';
+import { LanguageSwitch } from './LanguageSwitch';
 import { useLastGame } from '../lastGame';
 
 export function Link({ to, children, className, onNavigate, ...rest }: { to: string; children: ReactNode; className?: string; onNavigate: (to: string) => void } & Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href' | 'onClick'>) {
@@ -40,7 +39,6 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
   symbian?: SymbianStatus | null;
   title: string; subtitle?: string; children: ReactNode;
 }) {
-  const locale=useLocale();
   const lastGame = useLastGame();
   const [loadedGame, setLoadedGame] = useState<GameMeta | null>(null);
   useEffect(() => { let dead = false; if (!lastGame) { setLoadedGame(null); return; } void api.games().then(games => { if (!dead) setLoadedGame(games.find(g => g.id === lastGame.id) ?? null); }, () => undefined); return () => { dead = true; }; }, [lastGame?.id, lastGame?.name]);
@@ -82,7 +80,6 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
           {item('/settings', 'sliders', 'Settings', path === '/settings')}
         </nav>
         <div className="sidebar-foot">
-          <Seg<'en' | 'ru'> className="on-shell lang" label="Language / Язык" value={locale} onChange={setLocale} options={[{ value: 'en', label: 'EN', title: 'English' }, { value: 'ru', label: 'RU', title: 'Русский' }]} />
           <div className="runtime-list" aria-label={translateUI('Application and emulators')}>
             <div className="runtime" title={`MGO ${health?.version ?? '—'}`}><span className={`dot ${health ? '' : 'bad'}`} aria-hidden /><span className="runtime-text"><b>MGO <em>{translateUI(health ? 'Online' : 'Connecting…')}</em></b><small>{translateUI('Frontend web app')} · <span title={health?.version}>{appVersion(health?.version)}</span></small></span></div>
             <div className="runtime" title={`KEmulator ${health?.kemulator.commit ?? '—'}`}><span className={`dot ${health?.ok ? '' : 'bad'}`} aria-hidden /><span className="runtime-text"><b>KEmulator <em>{translateUI(health?.ok ? 'Ready' : 'Unavailable')}</em></b><small title={health?.kemulator.commit ?? undefined}>{translateUI('Java ME emulator')} · {health?.kemulator.version ? `v${health.kemulator.version}` : '—'}</small></span></div>
@@ -107,9 +104,10 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
           <div className="header-title">{translateUI(title)}</div>
           {subtitle && <div className="header-sub">{translateUI(subtitle)}</div>}
         </div>
+        <div className="header-language"><LanguageSwitch onShell /></div>
       </header>
       <main className="content" id="main">
-        <div className={`container${inPlayer ? ' wide' : path === '/' ? ' library-container' : ''}`}>{children}</div>
+        <div className={`container${inPlayer ? ' wide' : path === '/' ? ' library-container' : ''}`}>{!inPlayer && <div className="workspace-language"><LanguageSwitch /></div>}{children}</div>
       </main>
     </div>
   );

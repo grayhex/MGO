@@ -7,7 +7,6 @@ import { archiveSize } from './ArchiveBrowser';
 
 export function CuratedSetup() {
   const [status, setStatus] = useState<ArchiveStatus | null>(null);
-  const [count, setCount] = useState(0);
   const [job, setJob] = useState<CuratedImport | null>(null);
   const [titles, setTitles] = useState<CuratedTitle[] | null>(null);
   const [selected, setSelected] = useState<Record<string, string>>({});
@@ -16,7 +15,7 @@ export function CuratedSetup() {
   const [error, setError] = useState('');
   async function refresh() {
     const [archive, curated] = await Promise.all([api.archiveStatus(), api.curatedStatus()]);
-    setStatus(archive); setCount(curated.count); setJob(curated.job);
+    setStatus(archive); setJob(curated.job);
   }
   const installing = status?.indexJob?.state === 'running';
   const running = job?.state === 'running';
@@ -54,7 +53,7 @@ export function CuratedSetup() {
   return <section className="archive-settings" aria-label={t('Curated Java ME library')}>
     <div className="archive-settings-head"><div>
       <h3><Icon name="library" /> {t('Curated Java ME library')}</h3>
-      <p className="muted small">{t('Choose builds from {n} hand-picked titles to create a library.', { n: count })}</p>
+      <p className="muted small">{t('Choose builds from the curated list to create your library.')} <a href="https://github.com/grayhex/MGO/blob/main/apps/api/archive-tools/java_curated_top.txt" target="_blank" rel="noreferrer">{t('View the game list')} ↗</a></p>
     </div></div>
     {status && !status.index && <div className="btn-row">
       <button className="btn sm primary" type="button" disabled={busy || installing} onClick={() => void act(async () => { await api.archiveIndex(); await refresh(); })}>{t(installing ? 'Installing archive index…' : 'Install index')}</button>

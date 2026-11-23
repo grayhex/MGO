@@ -43,7 +43,7 @@ function ResolutionTag({ resolution }: { resolution: GameMeta['nativeResolution'
   if (!resolution) return <span className="resolution-tag muted" title={translateUI('Native resolution unknown')} aria-label={translateUI('Native resolution unknown')}>—</span>;
   const label = `${resolution.width}×${resolution.height}`;
   const tone = { '240×320': 'blue', '176×208': 'green', '176×220': 'green', '128×128': 'red', '128×160': 'red' }[label] ?? 'neutral';
-  const source = resolution.source.startsWith('attribute ') ? resolution.source.slice(10) : translateUI(resolution.source);
+  const source = resolution.source === 'frame' ? translateUI('Estimated from game frames') : resolution.source.startsWith('attribute ') ? resolution.source.slice(10) : translateUI(resolution.source);
   return <span className={`resolution-tag ${tone}`} title={translateUI('Native resolution: {source}', { source })}>{label}</span>;
 }
 
@@ -361,11 +361,11 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
                 <div className="meta">
                   <h3>{sel.name} {archiveMark}</h3>
                   <p className="muted">{translateUI(sel.info?.year ? `${sel.vendor} · ${sel.info.year}` : sel.vendor)}</p>
-                  {sel.ngageInfo && <p className="ngage-card-facts">{sel.ngageInfo.publisher} · {sel.ngageInfo.year}{sel.ngageInfo.rating !== null ? ` · ${sel.ngageInfo.rating}%` : ''}</p>}
+                  {sel.ngageInfo && <p className="ngage-card-facts">{[sel.ngageInfo.publisher, sel.ngageInfo.year, sel.ngageInfo.rating !== null ? `${sel.ngageInfo.rating}%` : null].filter(Boolean).join(' · ')}</p>}
                   <p className="card-resolution"><ResolutionTag resolution={sel.nativeResolution} />{time}</p>
                 </div>
               </button>
-              {sel.ngageInfo && <div className="ngage-attribution"><span>{sel.ngageInfo.multiplayer ?? sel.ngageInfo.developer}</span><a href={sel.ngageInfo.sourceUrl} target="_blank" rel="noreferrer">All About Symbian ↗</a></div>}
+              {sel.ngageInfo && <div className="ngage-attribution"><span>{sel.ngageInfo.multiplayer ?? sel.ngageInfo.developer}</span><a href={sel.ngageInfo.sourceUrl} target="_blank" rel="noreferrer">{sel.ngageInfo.attribution} ↗</a>{sel.ngageInfo.coverSourceUrl && <a href={sel.ngageInfo.coverSourceUrl} target="_blank" rel="noreferrer">LaunchBox ↗</a>}</div>}
               <div className="card-foot">
                 {versionControl}
                 {flags}

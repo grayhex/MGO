@@ -57,6 +57,8 @@
 .steps li.on { color: var(--fg); border-color: var(--primary-warm); background: var(--primary-tint); }
 .steps li.on span { background: var(--primary); color: var(--on-primary); }
 .steps li.past span { background: var(--badge-prod-bg); color: var(--badge-prod-fg); }
+.wizard-body[data-step="welcome"] { min-height: 0; max-height: none; }
+.wizard-checks > .stack { margin-top: 8px; }
 .wizard-body { min-height: 280px; max-height: 58vh; overflow: auto; padding: 4px 2px; }
 .info-grid { display: grid; grid-template-columns: minmax(0, 180px) 1fr; gap: 16px; align-items: start; }
 .info-cover { width: 100%; border-radius: var(--r-md); border: 1px solid var(--outline); background: var(--surface-soft); }

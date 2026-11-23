@@ -35,7 +35,7 @@ it('caches catalog facts and covers, leaves manual genres intact, and never enri
     assert.equal(library.get(game.id)!.classification?.primaryGenre, 'Action');
     assert.equal(catalog.enrich({ ...game, platform: 'ngage2' }).ngageInfo, undefined);
     assert.ok(calls.every(url => url.startsWith('http://gateway:9090/')));
-    await catalog.refresh(); assert.equal(calls.length, 3, 'fresh cache does not contact the source again');
+    await catalog.refresh(); assert.equal(calls.length, 4, 'fresh cache does not contact the source again');
     const offline = new NgageCatalog(library, dir, async () => { throw new Error('offline'); });
     assert.equal(offline.enrich(game).ngageInfo?.year, 2004);
     await offline.refresh(true); assert.match(offline.status().error ?? '', /cannot be reached.*\(offline\)/s); assert.equal(offline.enrich(game).ngageInfo?.hasCover, true);
@@ -86,7 +86,35 @@ it('follows only redirects that stay on the fixed catalog pages', async () => {
     const client: typeof fetch = async input => { const url = String(input); urls.push(url); if (url.endsWith('/original/')) return new Response(null, { status: 302, headers: { location: 'https://evil.example/n-gage-games/original/' } }); return new Response('x'); };
     const catalog = new NgageCatalog(library, dir, client);
     await catalog.refresh(true);
-    assert.deepEqual(urls, ['https://allaboutsymbian.com/n-gage-games/original/']);
+    assert.deepEqual(urls, ['https://allaboutsymbian.com/n-gage-games/original/', 'https://gamesdb.launchbox-app.com/platforms/games/213-nokia-n-gage']);
     assert.match(catalog.status().error ?? '', /Unsupported catalog URL/);
+  } finally { library.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('uses LaunchBox for additional releases and covers during an All About Symbian outage', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mgo-launchbox-'));
+  const library = new Library(dir);
+  try {
+    const game = library.addPackage(Buffer.from('PK\x03\x04 original'), 'Pathway to Glory.zip', 'ngage', 100000).game;
+    const extra = library.addPackage(Buffer.from('PK\x03\x04 different'), 'Extra Release.zip', 'ngage', 100000).game;
+    const image = '12345678-1234-1234-1234-123456789abc.jpg';
+    const card = (title: string, status: string) => `<a href="/games/details/12-${title.toLowerCase().replaceAll(' ', '-')}"><img src="https://images.launchbox-app.com/${image}"><h3>${title}</h3><div class="releaseDate"><span>${status}</span><h5>June 2, 2004</h5></div></a>`;
+    const fetcher: typeof fetch = async input => {
+      const url = String(input);
+      if (url.endsWith('213-nokia-n-gage')) return new Response(card('Pathway to Glory', 'Released') + card('Extra Release', 'Released') + card('Prototype', 'Unreleased'));
+      if (url.endsWith(image)) return new Response(new Uint8Array([255, 216, 255, 217]));
+      return new Response(null, { status: 502 });
+    };
+    const catalog = new NgageCatalog(library, dir, fetcher, 'http://gateway:9090');
+    await catalog.refresh();
+    assert.deepEqual(catalog.status().progress, { done: 2, total: 2 });
+    assert.equal(catalog.status().error, null);
+    const enriched = catalog.enrich(game).ngageInfo;
+    assert.equal(enriched?.genre, 'Strategy');
+    assert.equal(enriched?.hasCover, true);
+    assert.match(enriched?.coverSourceUrl ?? '', /launchbox-app/);
+    const extraInfo = catalog.enrich(extra).ngageInfo;
+    assert.equal(extraInfo?.attribution, 'LaunchBox Games Database');
+    assert.equal(extraInfo?.year, 2004);
   } finally { library.close(); rmSync(dir, { recursive: true, force: true }); }
 });

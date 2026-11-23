@@ -63,7 +63,7 @@ export function ArchiveSettings({ onChanged }: { onChanged: () => void }) {
         </>}
       </div>
     </div>
-    {status && <small className="muted">{t('Available snapshot {version} · download about 157 MB · index quota {quota}', { version: status.availableVersion, quota: archiveSize(status.maxIndexBytes) })}</small>}
+    {status && <small className="muted">{t('Available snapshot {version} · download about 85 MiB · index quota {quota}', { version: status.availableVersion, quota: archiveSize(status.maxIndexBytes) })}</small>}
     {install?.state === 'running' && <progress aria-label={t('Index progress')} max={install.total ?? 1} value={install.processed || undefined} />}
     {install?.state === 'failed' && <p className="note err" role="alert">{t(install.message ?? 'Archive source is unavailable')}</p>}
     <div className="archive-setting-row">

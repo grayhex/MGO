@@ -6,9 +6,9 @@ name: LXC (real container)
 on:
   push:
     branches: [main]
-    paths: ['ct/**', 'install/**', 'packaging/**', 'tests/lxc/**', 'tools/proxmox/**', 'runtime/**', 'bridge/**', 'apps/api/**', 'package.json', 'package-lock.json', '.github/workflows/lxc.yml']
+    paths: ['ct/**', 'install/**', 'packaging/**', 'tests/lxc/**', 'tools/proxmox/**', 'runtime/**', 'bridge/**', 'apps/api/**', '!apps/api/**/README*.md', '!apps/api/archive-tools/java_curated_top.txt', 'package.json', 'package-lock.json', '.github/workflows/lxc.yml']
   pull_request:
-    paths: ['ct/**', 'install/**', 'packaging/**', 'tests/lxc/**', 'tools/proxmox/**', 'runtime/**', 'bridge/**', 'apps/api/**', 'package.json', 'package-lock.json', '.github/workflows/lxc.yml']
+    paths: ['ct/**', 'install/**', 'packaging/**', 'tests/lxc/**', 'tools/proxmox/**', 'runtime/**', 'bridge/**', 'apps/api/**', '!apps/api/**/README*.md', '!apps/api/archive-tools/java_curated_top.txt', 'package.json', 'package-lock.json', '.github/workflows/lxc.yml']
   workflow_dispatch:
 
 concurrency:

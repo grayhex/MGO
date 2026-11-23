@@ -1,4 +1,5 @@
 import { unzipSync } from 'fflate';
+import { readConstantPool } from './analysis/classfile.js';
 
 export class UploadError extends Error {
   constructor(
@@ -19,6 +20,9 @@ export interface JarInfo {
   icon: { bytes: Uint8Array; path: string } | null;
   warnings: string[];
   attributes: Record<string, string>;
+  missingMidlet?: string;
+  repairedMidlet?: string;
+  fileHasClass: (name: string) => boolean;
 }
 
 const MAX_ENTRIES = 20_000;
@@ -56,6 +60,59 @@ export function parseJad(buf: Uint8Array): Record<string, string> {
   return parseAttributes(decoder.decode(buf));
 }
 
+const MIDLET = 'javax/microedition/midlet/MIDlet';
+const classPath = (name: string) => name.replace(/\./g, '/');
+const validClassName = /^[A-Za-z0-9_.$/]{1,200}$/;
+
+function entrypoint(descriptor: string | undefined): JarInfo['midlets'][number] | null {
+  const parts = descriptor?.split(',').map(value => value.trim());
+  return parts?.[2] ? { name: parts[0] ?? '', icon: parts[1] || null, className: parts[2].replaceAll('/', '.') } : null;
+}
+
+function discoverMidlet(jar: Uint8Array): string | undefined {
+  try {
+    let classBytes = 0;
+    const files = unzipSync(jar, {
+      filter: (entry) => {
+        if (!entry.name.endsWith('.class')) return false;
+        classBytes += entry.originalSize;
+        if (classBytes > 16 * 1024 * 1024) throw new Error('MIDlet discovery size limit');
+        return true;
+      },
+    });
+    const classes = new Map<string, ReturnType<typeof readConstantPool>>();
+    for (const [file, bytes] of Object.entries(files)) {
+      const cls = readConstantPool(bytes);
+      if (cls.name && cls.superName && file === cls.name + '.class') classes.set(cls.name, cls);
+    }
+    const candidates: string[] = [];
+    for (const [name, cls] of classes) {
+      if (cls.abstract || !validClassName.test(name) || name === MIDLET) continue;
+      const seen = new Set<string>();
+      let parent = cls.superName;
+      while (parent && parent !== MIDLET && !seen.has(parent)) {
+        seen.add(parent);
+        parent = classes.get(parent)?.superName;
+      }
+      if (parent === MIDLET) {
+        candidates.push(name.replaceAll('/', '.'));
+        if (candidates.length > 1) return undefined;
+      }
+    }
+    return candidates[0];
+  } catch {
+    // Incomplete or unreadable bytecode is insufficient evidence for a replacement.
+    return undefined;
+  }
+}
+
+export function repairedJad(info: JarInfo): string {
+  const attributes = Object.entries(info.attributes).filter(([name]) => !/^MIDlet-\d+$/.test(name));
+  const midlet = info.midlets[0]!;
+  attributes.push(['MIDlet-1', [midlet.name, midlet.icon ?? '', midlet.className].join(', ')]);
+  return attributes.map(([name, value]) => `${name}: ${value.replaceAll('\\', '\\\\')}`).join('\n') + '\n';
+}
+
 export function parseJar(buf: Uint8Array, jad?: Record<string, string>): JarInfo {
   if (buf.length < 22 || buf[0] !== 0x50 || buf[1] !== 0x4b) throw new UploadError('not_a_jar', 'File is not a JAR/ZIP archive');
 
@@ -81,6 +138,7 @@ export function parseJar(buf: Uint8Array, jad?: Record<string, string>): JarInfo
   }
 
   const nameSet = new Set(names);
+  const fileHasClass = (name: string) => nameSet.has(classPath(name) + '.class');
   const manifestName = names.find((n) => n.toUpperCase() === 'META-INF/MANIFEST.MF');
   if (!manifestName) throw new UploadError('no_manifest', 'JAR has no META-INF/MANIFEST.MF');
 
@@ -97,22 +155,37 @@ export function parseJar(buf: Uint8Array, jad?: Record<string, string>): JarInfo
   };
   const m = read([manifestName], MAX_MANIFEST)[manifestName];
   if (!m) throw new UploadError('no_manifest', 'Cannot read MANIFEST.MF');
-  const attrs = { ...parseAttributes(decoder.decode(m)), ...(jad ?? {}) };
+  const manifest = parseAttributes(decoder.decode(m));
+  const attrs = { ...manifest, ...(jad ?? {}) };
 
   const midlets: JarInfo['midlets'] = [];
   for (let i = 1; i < 50; i++) {
-    const v = attrs[`MIDlet-${i}`];
-    if (!v) break;
-    const parts = v.split(',').map((s) => s.trim());
-    if (parts.length >= 3 && parts[2]) midlets.push({ name: parts[0] ?? '', icon: parts[1] || null, className: parts[2] });
+    if (!attrs[`MIDlet-${i}`]) break;
+    const midlet = entrypoint(attrs[`MIDlet-${i}`]);
+    if (midlet) midlets.push(midlet);
   }
   const warnings: string[] = [];
   if (!midlets.length) warnings.push('No MIDlet-n entry found; the emulator may not be able to pick a MIDlet class.');
+  let missingMidlet: string | undefined;
+  let repairedMidlet: string | undefined;
+  const declared = midlets[0];
+  if (declared && !fileHasClass(declared.className)) {
+    const original = entrypoint(manifest['MIDlet-1']);
+    const replacement = original && fileHasClass(original.className) ? original.className : discoverMidlet(buf);
+    if (replacement) {
+      repairedMidlet = declared.className;
+      midlets.splice(0, midlets.length, { ...declared, className: replacement });
+      warnings.push(`The declared MIDlet class "${repairedMidlet}" is missing. MGO will launch "${replacement}".`);
+    } else {
+      missingMidlet = declared.className;
+      warnings.push(`The declared MIDlet class "${missingMidlet}" is missing and no unique replacement was found.`);
+    }
+  }
 
   // Class file version of the first MIDlet (KEmulator refuses >= 49).
   let classVersion = 0;
   const first = midlets[0];
-  const classEntry = first ? `${first.className.replace(/\./g, '/')}.class` : names.find((n) => n.endsWith('.class'));
+  const classEntry = first ? `${classPath(first.className)}.class` : names.find((n) => n.endsWith('.class'));
   if (classEntry && nameSet.has(classEntry)) {
     const c = read([classEntry], 8 * 1024 * 1024)[classEntry];
     if (c && c.length > 8 && c[0] === 0xca && c[1] === 0xfe && c[2] === 0xba && c[3] === 0xbe) classVersion = (c[6]! << 8) | c[7]!;
@@ -145,6 +218,9 @@ export function parseJar(buf: Uint8Array, jad?: Record<string, string>): JarInfo
     icon,
     warnings,
     attributes: attrs,
+    fileHasClass,
+    ...(missingMidlet ? { missingMidlet } : {}),
+    ...(repairedMidlet ? { repairedMidlet } : {}),
   };
 }
 

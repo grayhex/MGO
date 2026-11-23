@@ -1,3 +1,4 @@
+import { PlayerResources } from './PlayerResources';
 import { useNativePhone } from '../nativePhone';
 import { NativeTestingPanel } from './NativeTestingPanel';
 import { StartFailureCard } from './StartFailureCard';
@@ -189,6 +190,7 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
           if (ev.state === 'failed') toast('error', translateUI('Emulator stopped: {detail}', {detail:ev.detail ?? translateUI('unknown error')}));
         }
         break;
+      case 'game-resolution': setGame(current => current ? { ...current, nativeResolution: ev.resolution } : current); break;
       case 'softkeys': setSoftkeys({ left: ev.left, right: ev.right }); break;
       case 'title': setTitle(ev.title); break;
       case 'log': setLog((l) => [...l.slice(-199), ev.line]); break;
@@ -344,7 +346,7 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
     } catch (e) {
       if (version !== launchVersion.current) return;
       const err = e as ApiError;
-      toast('error', err.message);
+      toast('error', translateUI(err.message));
       setLog(err.message.split('\n'));
       if (err.details?.failure) setFailure({ failure: err.details.failure, sessionId: err.details.sessionId ?? null });
       if (!j2me) { setState('failed'); native.refresh(); }
@@ -480,31 +482,32 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
   const [phoneCatalog, setPhoneCatalog] = useState<PhoneCatalog | null>(null);
   useEffect(() => { if (game && !j2me) api.phones().then(setPhoneCatalog, () => undefined); }, [game?.id, j2me, native.data?.plan.firmwareCode]);
   const [tipHidden, setTipHidden] = useState<string | null>(null);
+  const actualGameSize = game?.nativeResolution ?? analysis?.analysis.screenHints[0];
+  const displayProfile = live && session ? { width: session.width, height: session.height } : res;
+  const mismatch = j2me && actualGameSize && displayProfile &&
+    (actualGameSize.width !== displayProfile.width || actualGameSize.height !== displayProfile.height);
   const suggestion = useMemo(() => {
     if (!game || !skins) return null;
     const mine = getServerSettings()?.settings.myPhones;
     const options: PhoneOption[] = skins.map((k) => ({ id: k.config.id, label: `${k.config.manufacturer} ${k.config.model}`, width: k.config.screen.width, height: k.config.screen.height, preferred: mine?.includes(k.config.id as never) }));
-    const hint = analysis?.analysis.screenHints[0];
-    const rec = analysis?.recommendedDevice ? devices.find((d) => d.id === analysis.recommendedDevice) : undefined;
-    const wanted = game.nativeResolution ?? (hint ? { width: hint.width, height: hint.height } : j2me
-      ? (rec ? { width: rec.width, height: rec.height } : null)
-      : session?.framesReceived ? { width: frameSize.w, height: frameSize.h } : null);
+    const wanted = actualGameSize ?? (!j2me && session?.framesReceived ? { width: frameSize.w, height: frameSize.h } : null);
     const hasFirmware = (id: string) => EMULATED_DEVICES.some((d) => d.engine === 'eka2l1' && PHONE_COMPATIBILITY[id as keyof typeof PHONE_COMPATIBILITY]?.includes(d.id) && d.platforms.includes(game.platform ?? 'j2me') && phoneCatalog?.availability.find((a) => a.deviceId === d.id)?.available);
     return betterPhone({ platform: game.platform ?? 'j2me', packageFormat: game.packageFormat, current: prefs.skinId, options, wanted, hasFirmware });
-  }, [game, skins, prefs.skinId, analysis, devices, phoneCatalog, j2me, session?.framesReceived ? frameSize.w : 0, session?.framesReceived ? frameSize.h : 0]);
+  }, [game, skins, prefs.skinId, actualGameSize, phoneCatalog, j2me, session?.framesReceived ? frameSize.w : 0, session?.framesReceived ? frameSize.h : 0]);
   const switchPhone = async (id: string) => {
     if (!game || !isSkinId(id)) return;
     setPrefs({ skinId: id });
-    if (!j2me) { try { setGame(await api.patchGame(game.id, { settings: { skinId: id } })); native.refresh(); } catch (e) { toast('error', (e as Error).message); } }
+    if (j2me) setAdvanced(false);
+    else { try { setGame(await api.patchGame(game.id, { settings: { skinId: id } })); native.refresh(); } catch (e) { toast('error', (e as Error).message); } }
   };
   const running = state === 'running' || state === 'starting' || state === 'stopping';
   // A game that names the screen it was made for (manifest or JAD) is set up for it once, without asking.
   const hintApplied = useRef<string | null>(null);
   useEffect(() => {
-    if (!loaded || !j2me || running || advanced || !sizeHint || hintApplied.current === gameId) return;
+    if (!loaded || !j2me || running || advanced || game?.nativeResolution?.source === 'frame' || !sizeHint || hintApplied.current === gameId) return;
     hintApplied.current = gameId;
     setAdvanced(true); setDevice(''); setRes({ width: sizeHint.width, height: sizeHint.height });
-  }, [loaded, j2me, running, advanced, sizeHint?.width, sizeHint?.height, gameId]);
+  }, [loaded, j2me, running, advanced, sizeHint?.width, sizeHint?.height, gameId, game?.nativeResolution?.source]);
   const canStart = !!game && loaded && !running && !busy && (j2me ? health?.ok !== false && (advanced || !!matched) : native.data?.plan.ready === true);
   const resKey = res ? `${res.width}x${res.height}` : '';
   const needRestart = running && res && session && (res.width !== session.width || res.height !== session.height || device !== (session.device ?? '') || layout !== session.layout || heapMb !== session.heapMb);
@@ -593,6 +596,7 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
       </section>
 
       <aside className="ctrl-col" aria-label={translateUI("Emulator controls")}>
+        <PlayerResources />
         <Panel icon="play" title={translateUI("Session")} right={<span className={`badge ${STATE_BADGE[state] ?? ''}`}>{translateUI(state === 'idle' ? 'stopped' : state)}</span>}>
           <div className="btn-row">
             {!running
@@ -626,10 +630,15 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
           {state === 'failed' && <div className="note err">{translateUI("The emulator stopped unexpectedly. The log below has the details.")}</div>}
           {j2me && health?.ok === false && <div className="note warn">{translateUI("The emulator runtime is not ready on this server.")}</div>}
         </Panel>
-        {suggestion && tipHidden !== `${game?.id}:${suggestion.id}` && (
+        {(mismatch || suggestion) && tipHidden !== `${game?.id}:${suggestion?.id ?? prefs.skinId}` && (
           <div className="note info phone-tip" role="status" data-testid="phone-suggestion">
-            <p>{translateUI('Better screen fit: {phone} ({w}×{h}).', { phone: suggestion.label, w: suggestion.width, h: suggestion.height })}</p>
-            <div className="btn-row"><button className="btn sm primary" type="button" onClick={() => void switchPhone(suggestion.id)} data-testid="phone-suggestion-switch">{translateUI('Switch to {phone}', { phone: suggestion.label })}</button><button className="btn sm ghost" type="button" onClick={() => setTipHidden(`${game?.id}:${suggestion.id}`)}>{translateUI('Not now')}</button></div>
+            {mismatch && <p>{translateUI('Game {game} · Emulator {emulator}', { game: `${actualGameSize.width}×${actualGameSize.height}`, emulator: `${displayProfile.width}×${displayProfile.height}` })}</p>}
+            {suggestion && <p>{translateUI('Better screen fit: {phone} ({w}×{h}).', { phone: suggestion.label, w: suggestion.width, h: suggestion.height })}</p>}
+            <div className="btn-row">
+              {suggestion && <button className="btn sm primary" type="button" onClick={() => void switchPhone(suggestion.id)} data-testid="phone-suggestion-switch">{translateUI('Switch to {phone}', { phone: suggestion.label })}</button>}
+              {mismatch && !suggestion && (actualGameSize.width !== res?.width || actualGameSize.height !== res?.height) && <button className="btn sm primary" type="button" onClick={() => { setAdvanced(true); setDevice(''); setRes({ width: actualGameSize.width, height: actualGameSize.height }); }}>{translateUI('Use game resolution')}</button>}
+              <button className="btn sm ghost" type="button" onClick={() => setTipHidden(`${game?.id}:${suggestion?.id ?? prefs.skinId}`)}>{translateUI('Not now')}</button>
+            </div>
           </div>
         )}
         <Panel icon="volume" title={translateUI("Audio")}>
@@ -648,7 +657,7 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
         {j2me && (
         <Panel icon="device" title={translateUI("Emulation profile")}>
           <div className="chips" data-testid="phone-profile-match">
-            {res && <span className="chip" title={translateUI("Screen the game renders")}><Icon name="device" /> {res.width}×{res.height}</span>}
+            {displayProfile && <span className="chip" title={translateUI("Emulator screen")}><Icon name="device" /> {displayProfile.width}×{displayProfile.height}</span>}
             <span className="chip" title={translateUI("Key layout")}><Icon name="keypad" /> {translateUI(KEY_LAYOUTS[layout]?.label.split(' / ')[0] ?? layout)}</span>
             {dev?.platform && <span className="chip" title={translateUI("Platform reported to the game")}><Icon name="cpu" /> {dev.platform}</span>}
             {matched && <span className={`chip ${matched.exact ? 'ok' : ''}`} title={`${matched.preset.name}. ${translateUI(matched.reason)}`}><Icon name={matched.exact ? 'check' : 'info'} /> {translateUI(matched.exact ? 'exact' : 'generic')}</span>}
@@ -689,6 +698,7 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
 
         <Panel icon="layers" title={translateUI("Display")}>
           <div className="chips">
+            <span className="chip" data-testid="game-resolution" title={translateUI(game?.nativeResolution?.source === 'frame' ? 'Estimated from game frames' : 'Game resolution')}><Icon name="gamepad" /> {translateUI('Game')} {actualGameSize ? `${actualGameSize.width}×${actualGameSize.height}` : '—'}</span>
             <button type="button" className="chip chip-link" onClick={() => navigate('/phones')} title={translateUI("Change the phone")} data-testid="change-phone"><Icon name="phone" /> {skin ? `${skin.config.manufacturer} ${skin.config.model}` : '…'}</button>
             <span className="chip" title={translateUI("Emulated picture")}><Icon name="zoom" /> <span data-testid="frame-size">{frameSize.w}×{frameSize.h}</span></span>
             {skinScreen && res && (res.width !== skinScreen.width || res.height !== skinScreen.height) && (

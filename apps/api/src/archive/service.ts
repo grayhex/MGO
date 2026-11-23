@@ -124,14 +124,14 @@ export class ArchiveService {
   installIndex(): ArchiveTransfer {
     this.ensureIdle();
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
-    assertSpace(this.dir, this.maxIndex + 160 * MIB);
+    assertSpace(this.dir, this.maxIndex + 64 * MIB);
     const report: ArchiveTransfer = { state: 'running', phase: 'fetching', processed: 0, total: SOURCE.builds, message: null };
     this.indexJob = report;
     this.start(report, async signal => {
       mkdirSync(this.stage, { mode: 0o700 });
       const staged = path.join(this.stage, 'index.sqlite');
       try {
-        await this.worker(['index', staged, SOURCE.csv, SOURCE.checksum, SOURCE.records, SOURCE.version, String(SOURCE.rows), String(SOURCE.builds), String(this.maxIndex)], this.stage, this.proxy(), signal, line => {
+        await this.worker(['index', staged, SOURCE.records, SOURCE.version, String(SOURCE.rows), String(SOURCE.builds), String(this.maxIndex)], this.stage, this.proxy(), signal, line => {
           const match = /^index (\d+) (\d+)$/.exec(line);
           if (match) { report.processed = Number(match[1]); report.phase = 'verifying'; }
         });

@@ -64,8 +64,11 @@ export function SetupWizard({ toast, onClose, onFinished }: { toast: Toaster; on
         {step.id === 'welcome' && (
           <div className="stack">
             <h3>{translateUI("Welcome to MGO")}</h3>
-            <p>{translateUI("A few quick choices and you are ready to play. Every step is optional — skip what you do not need; everything can be changed later in")} <strong>{translateUI("Settings")}</strong>{translateUI(", and your games and saves are never touched.")}</p>
-            <SystemChecks status={status} onReload={loadStatus} />
+            <p>{translateUI('Set up your library, phones and emulators. You can change these options later in Settings.')}</p>
+            <details className="more wizard-checks">
+              <summary>{translateUI('System checks')}{status && ` · ${translateUI(status.checks.some(check => check.state !== 'ok') ? 'Review required' : status.checks.length ? 'OK' : 'Unavailable')}`}</summary>
+              <SystemChecks status={status} onReload={loadStatus} />
+            </details>
           </div>
         )}
         {step.id === 'library' && (

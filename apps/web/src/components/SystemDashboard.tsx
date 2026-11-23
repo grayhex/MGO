@@ -34,7 +34,10 @@ export function SystemDashboard({ toast }: { toast: (kind: 'info' | 'error', tex
     {error && <p className="note err" role="alert">{error}</p>}
     <div className="system-metrics">
       <article className="metric"><span>CPU</span><strong>{m?.cpuPercent == null ? '—' : `${m.cpuPercent.toFixed(1)}%`}</strong><small>{m?.cpuCores ?? '—'} {t('CPU cores')}</small><svg viewBox="0 0 290 70" preserveAspectRatio="none" aria-label="CPU history"><path d={history.map((v,i) => `${i ? 'L' : 'M'}${i * 10},${68 - v * .65}`).join(' ')} fill="none" stroke="currentColor" strokeWidth="2" /></svg></article>
-      <article className="metric"><span>{t('Memory')}</span><strong>{m ? bytes(m.memoryBytes) : '—'}</strong><small>{m ? `${t('of')} ${bytes(m.memoryLimitBytes)}` : ''}</small><progress max={m?.memoryLimitBytes || 1} value={m?.memoryBytes ?? 0} /></article>
+      <article className="metric"><span>{t(m?.memoryScope === 'process' ? 'MGO process memory' : 'Memory working set')}</span><strong>{m ? bytes(m.memoryBytes) : '—'}</strong><small>{m ? `${t('of')} ${bytes(m.memoryLimitBytes)}` : ''}</small><progress max={m?.memoryLimitBytes || 1} value={m?.memoryBytes ?? 0} />
+        {m?.memoryCacheBytes != null && <small>{t('Accounted: {total} · inactive file cache: {cache}', { total: bytes(m.memoryUsageBytes), cache: bytes(m.memoryCacheBytes) })}</small>}
+        {m?.oomKills != null && m.oomKills > 0 && <small>{t('Processes killed for exceeding memory: {n}', { n: m.oomKills })}</small>}
+      </article>
       <article className="metric"><span>{t('Data storage')}</span><strong>{system ? bytes(system.storage.freeBytes) : '—'}</strong><small>{t('free')} · {system ? bytes(system.storage.totalBytes) : ''}</small><progress max={system?.storage.totalBytes || 1} value={used} /></article>
       <article className="metric"><span>{t('Active sessions')}</span><strong>{sessions.length}</strong><small>{m ? `${t('Uptime')} ${Math.floor(m.uptimeSeconds / 3600)}h ${Math.floor(m.uptimeSeconds / 60) % 60}m` : ''}</small><small>{m ? `${m.frames} ${t('frames')} · ${bytes(m.audioBytes)} PCM` : ''}</small></article>
     </div>

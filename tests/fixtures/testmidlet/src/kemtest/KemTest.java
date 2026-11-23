@@ -21,6 +21,10 @@ public class KemTest extends MIDlet {
 	protected void startApp() {
 		if (canvas == null) {
 			canvas = new TestCanvas();
+			if ("true".equals(getAppProperty("MGO-Padded-Test"))) {
+				canvas.setFullScreenMode(true);
+				canvas.padded = true;
+			}
 			canvas.launches = bumpLaunchCounter();
 			System.out.println("LAUNCHES " + canvas.launches);
 			System.out.println("PLATFORM " + System.getProperty("microedition.platform"));
@@ -57,6 +61,7 @@ public class KemTest extends MIDlet {
 
 	static final class TestCanvas extends Canvas implements Runnable {
 		int launches;
+		boolean padded;
 		int frame;
 		int x = 40, y = 60, dx = 3, dy = 2;
 		int lastKey = 0, lastAction = 0;
@@ -89,6 +94,13 @@ public class KemTest extends MIDlet {
 
 		protected void paint(Graphics g) {
 			int w = getWidth(), h = getHeight();
+			if (padded) {
+				g.setColor(0xFFFFFF);
+				g.fillRect(0, 0, w, h);
+				g.setColor(0x000066 + frame % 80);
+				g.fillRect(0, 0, 176, 220);
+				return;
+			}
 			g.setColor(0x202020);
 			g.fillRect(0, 0, w, h);
 			// reference blocks: pure R, G, B, white in the corners

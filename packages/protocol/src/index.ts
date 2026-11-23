@@ -267,10 +267,22 @@ export interface SystemCheck {
   hint?: string;
 }
 
+export interface SystemResources {
+  cpuPercent: number | null;
+  cpuCores: number;
+  /** Working set, with inactive file cache excluded when reported by cgroup. */
+  memoryBytes: number;
+  memoryUsageBytes: number;
+  memoryCacheBytes: number | null;
+  memoryLimitBytes: number;
+  memoryScope: 'cgroup' | 'process';
+  oomKills: number | null;
+}
+
 export interface SystemStatus {
   version: string;
   sampledAt?: string;
-  monitoring?: { uptimeSeconds: number; cpuPercent: number | null; cpuCores: number; memoryBytes: number; memoryLimitBytes: number; sessions: number; frames: number; audioBytes: number; nodeVersion: string; platform: string };
+  monitoring?: SystemResources & { uptimeSeconds: number; sessions: number; frames: number; audioBytes: number; nodeVersion: string; platform: string };
   checks: SystemCheck[];
   storage: { totalBytes: number; freeBytes: number; libraryBytes: number; quotaBytes: number };
 }
@@ -492,6 +504,7 @@ export const TEXT_INPUT_MAX = 4096;
 export type ServerEvent =
   | { t: 'hello'; sessionId: string; width: number; height: number; state: SessionState }
   | { t: 'state'; state: SessionState; exitCode?: number | null; detail?: string | null }
+  | { t: 'game-resolution'; resolution: NonNullable<GameMeta['nativeResolution']> }
   | { t: 'softkeys'; left: string; right: string }
   | { t: 'title'; title: string }
   | { t: 'displayable'; kind: 'canvas' | 'textbox' | 'list' }
@@ -672,7 +685,7 @@ export interface FirmwareInstallRequest {
   source?: 'inbox';
 }
 
-export interface NgageInfo { title: string; sourceUrl: string; attribution: string; genre: string; publisher: string; developer: string | null; year: number | null; released: string | null; multiplayer: string | null; productCode: string | null; rating: number | null; hasCover: boolean; fetchedAt: string }
+export interface NgageInfo { title: string; sourceUrl: string; attribution: string; coverSourceUrl?: string; genre: string; publisher: string; developer: string | null; year: number | null; released: string | null; multiplayer: string | null; productCode: string | null; rating: number | null; hasCover: boolean; fetchedAt: string }
 
 export interface KemulatorRelease { version: string; tag: string; asset: string; sha256: string; bytes: number }
 export interface KemulatorUpdateStatus { supported: boolean; version: string | null; bundledVersion: string | null; updated: boolean; busy: boolean }

@@ -68,6 +68,8 @@ try {
   // ---- wizard
   await dialog.waitFor();
   ok('the first-run wizard opens after signing in', true);
+  ok('welcome dialog fits without scrolling', await dialog.evaluate(el => el.scrollHeight <= el.clientHeight + 1));
+  await dialog.getByText('System checks', { exact: false }).click();
   await dialog.locator('[data-testid=system-checks] [data-check=java]').waitFor();
   const checks = await dialog.locator('[data-testid=system-checks] .check').evaluateAll((els) => els.map((e) => e.getAttribute('data-check')));
   ok('the welcome step shows Java, KEmulator, Bridge, Mesa, storage and the library', ['java', 'kemulator', 'bridge', 'mesa', 'storage', 'library'].every((c) => checks.includes(c)), checks.join(','));

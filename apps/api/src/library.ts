@@ -308,6 +308,12 @@ export class Library {
     this.db.close();
   }
 
+  recordGameResolution(id: string, resolution: NonNullable<GameMeta['nativeResolution']>): void {
+    this.db.prepare(`UPDATE games SET native_resolution_json = ?
+      WHERE id = ? AND platform = 'j2me' AND (native_resolution_json IS NULL OR native_resolution_json = 'null')`)
+      .run(JSON.stringify(resolution), id);
+  }
+
   /** Cache the result for games already on disk, including games with no usable hint. */
   private fillNativeResolutions(): void {
     const rows = this.db.prepare(`
