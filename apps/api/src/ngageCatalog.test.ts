@@ -3,7 +3,7 @@ import { it } from 'node:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { NgageCatalog, parseAasIndex, parseAasDetails, matchAas } from './ngageCatalog.js';
+import { NgageCatalog, parseAasIndex, parseAasDetails, matchAas, parseLaunchBoxCover } from './ngageCatalog.js';
 import { Library } from './library.js';
 const index = `<h3>Strategy (2)</h3><a href="item/pathway-to-glory.php" class="game-card"><img src="/images/ngage/box_art/pathway-to-glory_thumb.jpg"><div class="title">Pathway to Glory</div><div class="meta">Nokia / Studio &middot; 2004 &middot; 90%</div></a><a href="item/pathway-to-glory-ikusa-islands.php" class="game-card"><div class="title">Pathway to Glory: Ikusa Islands</div><div class="meta">Nokia · 2005</div></a><h2 id="unreleased">Unreleased</h2><a href="item/prototype.php" class="game-card"><div class="title">Prototype</div></a>`;
 const detail = `<script type="application/ld+json">{"@type":"VideoGame","aggregateRating":{"ratingValue":90,"bestRating":100}}</script><table><tr><td>Developer</td><td>Studio</td></tr><tr><td>Multiplayer</td><td>Bluetooth (2 players)</td></tr><tr><td>Product code</td><td>6R72</td></tr></table>`;
@@ -91,6 +91,12 @@ it('follows only redirects that stay on the fixed catalog pages', async () => {
   } finally { library.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
+it('does not use a screenshot or fan art as the LaunchBox box front', () => {
+  const image = 'https://images.launchbox-app.com/12345678-1234-1234-1234-123456789abc.jpg';
+  assert.equal(parseLaunchBoxCover(`<img src="${image}" alt="Game - Screenshot - Gameplay"><img src="${image}" alt="Game - Fanart - Box - Front Image">`), null);
+  assert.equal(parseLaunchBoxCover(`<img src="${image}" alt="Game - Box - Front Image">`), image);
+});
+
 it('uses LaunchBox for additional releases and covers during an All About Symbian outage', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'mgo-launchbox-'));
   const library = new Library(dir);
@@ -102,6 +108,10 @@ it('uses LaunchBox for additional releases and covers during an All About Symbia
     const fetcher: typeof fetch = async input => {
       const url = String(input);
       if (url.endsWith('213-nokia-n-gage')) return new Response(card('Pathway to Glory', 'Released') + card('Extra Release', 'Released') + card('Prototype', 'Unreleased'));
+      if (url.includes('/games/images/')) return new Response(
+        '<img src="https://images.launchbox-app.com/11111111-1111-1111-1111-111111111111.png" alt="Pathway to Glory - Screenshot - Gameplay">' +
+        `<img src="https://images.launchbox-app.com/${image}" alt="Pathway to Glory - Box - Front Image">`
+      );
       if (url.endsWith(image)) return new Response(new Uint8Array([255, 216, 255, 217]));
       return new Response(null, { status: 502 });
     };

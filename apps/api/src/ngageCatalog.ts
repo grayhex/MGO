@@ -10,6 +10,7 @@ export const AAS_INDEX = '/n-gage-games/original/';
 export const LAUNCHBOX_ORIGIN = 'https://gamesdb.launchbox-app.com';
 export const LAUNCHBOX_INDEX = '/platforms/games/213-nokia-n-gage';
 const LAUNCHBOX_IMAGES = 'https://images.launchbox-app.com';
+const LAUNCHBOX_GAME_IMAGES = /^\/games\/images\/\d+-[a-z0-9-]+$/;
 const IMAGE_PATH = /^\/[a-f0-9-]{36}\.(?:png|jpe?g|webp)$/i;
 const TTL = 30 * 86400_000;
 const text = (s: string) => s.replace(/<[^>]*>/g, '').replace(/&#(?:x([\da-f]+)|(\d+));/gi, (_, h, d) => (parseInt(h || d, h ? 16 : 10) <= 0x10ffff ? String.fromCodePoint(parseInt(h || d, h ? 16 : 10)) : '�')).replace(/&(amp|quot|apos|lt|gt|nbsp|middot);/g, (_, n) => ({amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',nbsp:' ',middot:'·'})[n as string] ?? '').trim();
@@ -35,11 +36,20 @@ export function parseLaunchBoxIndex(html: string): CatalogEntry[] {
     const released = text(/class="releaseDate"[^>]*>\s*<span[^>]*>Released<\/span>\s*<h5[^>]*>([\s\S]*?)<\/h5>/i.exec(card!)?.[1] ?? '');
     const year = Number(/\b(19\d\d|20\d\d)\b/.exec(released)?.[1]);
     if (!title || !year) continue;
-    const image = /<img\b[^>]*src="https:\/\/images\.launchbox-app\.com(\/[^"]+)"/i.exec(card!)?.[1];
-    entries.push({ title, url: LAUNCHBOX_ORIGIN + url, genre: '', publisher: '', year, released, cover: image && IMAGE_PATH.test(image) ? LAUNCHBOX_IMAGES + image : null });
+    entries.push({ title, url: LAUNCHBOX_ORIGIN + url, genre: '', publisher: '', year, released, cover: null });
   }
   if (!entries.length) throw new Error('LaunchBox returned an unrecognized game directory');
   return entries;
+}
+
+export function parseLaunchBoxCover(html: string): string | null {
+  for (const [tag] of html.matchAll(/<img\b[^>]*>/gi)) {
+    const alt = /\balt="([^"]+)"/i.exec(tag)?.[1] ?? '';
+    if (!alt.endsWith(' - Box - Front Image') || alt.includes(' - Fanart - ')) continue;
+    const image = /\bsrc="https:\/\/images\.launchbox-app\.com(\/[^"]+)"/i.exec(tag)?.[1];
+    if (image && IMAGE_PATH.test(image)) return LAUNCHBOX_IMAGES + image;
+  }
+  return null;
 }
 
 /**
@@ -152,12 +162,12 @@ export class NgageCatalog {
     for (let hop = 0; hop < 4; hop++) {
       const allowed = new URL(target, AAS_ORIGIN);
       const aas = AAS_HOSTS.has(allowed.origin) && /^\/(n-gage-games\/original\/(?:item\/[a-z0-9-]+\.php)?|images\/ngage\/[\w/.-]+)$/.test(allowed.pathname);
-      const boxIndex = allowed.origin === LAUNCHBOX_ORIGIN && allowed.pathname === LAUNCHBOX_INDEX;
+      const boxPage = allowed.origin === LAUNCHBOX_ORIGIN && (allowed.pathname === LAUNCHBOX_INDEX || LAUNCHBOX_GAME_IMAGES.test(allowed.pathname));
       const boxImage = allowed.origin === LAUNCHBOX_IMAGES && IMAGE_PATH.test(allowed.pathname);
-      if ((!aas && !boxIndex && !boxImage) || allowed.username || allowed.password || allowed.search) throw new Error('Unsupported catalog URL');
-      const prefix = boxIndex ? '/mgo-launchbox' : boxImage ? '/mgo-launchbox-images' : allowed.origin === AAS_ORIGIN ? '' : '/mgo-aas-www';
+      if ((!aas && !boxPage && !boxImage) || allowed.username || allowed.password || allowed.search) throw new Error('Unsupported catalog URL');
+      const prefix = boxPage ? '/mgo-launchbox' : boxImage ? '/mgo-launchbox-images' : allowed.origin === AAS_ORIGIN ? '' : '/mgo-aas-www';
       const endpoint = this.proxy ? this.proxy.replace(/\/$/, '') + prefix + allowed.pathname : allowed.href;
-      try { response = await this.fetcher(endpoint, { signal, redirect: 'manual', headers: { 'user-agent': 'MGO metadata/1.5' } }); }
+      try { response = await this.fetcher(endpoint, { signal, redirect: 'manual', headers: { 'user-agent': 'MGO metadata/1.5', ...(boxImage ? { referer: LAUNCHBOX_ORIGIN + '/' } : {}) } }); }
       catch (e) { throw new CatalogUnreachable(`${allowed.host} cannot be reached`, (e as Error).message); }
       const next = response.status >= 300 && response.status < 400 ? response.headers.get('location') : null;
       if (!next) break;
@@ -182,6 +192,22 @@ export class NgageCatalog {
     if (this.running) return this.running;
     this.running = this.update(force).catch(e => { this.error = e.message; }).finally(() => { this.running = null; if (this.pending && this.active) { this.pending = false; this.schedule(); } }); return this.running;
   }
+  private async saveCover(group: string, url: string, signal: AbortSignal): Promise<boolean> {
+    try {
+      const { bytes } = await this.request(url, 4 * 1024 * 1024, signal);
+      const valid = bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255]))
+        || bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+        || (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP');
+      if (!valid) return false;
+      const dest = path.join(this.dir, `${group}.img`);
+      writeFileSync(dest + '.tmp', bytes);
+      renameSync(dest + '.tmp', dest);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async update(force: boolean) {
     this.error = null;
     this.progress = null;
@@ -240,26 +266,23 @@ export class NgageCatalog {
           }
         }
         info = { ...info, hasCover: !!this.cover(game.groupKey) };
-        if (!info.hasCover) {
-          for (const cover of [box?.cover ? { url: box.cover, source: box.url } : null, aasOnline && aasCover && aas ? { url: aasCover, source: aas.url } : null]) {
-            if (!cover || signal.aborted) continue;
-            try {
-              const { bytes } = await this.request(cover.url, 4 * 1024 * 1024, signal);
-              const valid = bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255]))
-                || bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-                || (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP');
-              if (!valid) continue;
-              const dest = path.join(this.dir, `${game.groupKey}.img`);
-              writeFileSync(dest + '.tmp', bytes);
-              renameSync(dest + '.tmp', dest);
-              info.hasCover = true;
-              if (cover.source !== info.sourceUrl) info.coverSourceUrl = cover.source;
-              ok = true;
-              break;
-            } catch { /* the next source or the local catalog is still available */ }
-          }
+        if (!info.hasCover && aasOnline && aasCover) {
+          info.hasCover = await this.saveCover(game.groupKey, aasCover, signal);
+          ok ||= info.hasCover;
         }
-        if (!info.hasCover && (aasCover || box?.cover)) failures++;
+        if (!info.hasCover && box && !signal.aborted) {
+          try {
+            const images = box.url.replace('/games/details/', '/games/images/');
+            const page = await this.request(images, 2 * 1024 * 1024, signal);
+            const cover = parseLaunchBoxCover(page.bytes.toString('utf8'));
+            if (cover && await this.saveCover(game.groupKey, cover, signal)) {
+              info.hasCover = true;
+              if (box.url !== info.sourceUrl) info.coverSourceUrl = box.url;
+              ok = true;
+            }
+          } catch { /* continue with saved or offline metadata */ }
+        }
+        if (!info.hasCover && (aasCover || box)) failures++;
         // Missing covers stay eligible for a later run, even when the index is fresh.
         if (ok || info.hasCover) this.info.set(game.groupKey, { ...info, fetchedAt: ok ? new Date().toISOString() : info.fetchedAt });
         progress.done++;
