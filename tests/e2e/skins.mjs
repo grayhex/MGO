@@ -247,8 +247,11 @@ try {
   await page.getByRole('link', { name: 'Phones' }).dispatchEvent('click');
   await page.locator('.phone-pick').nth(IDS.length - 1).waitFor();
   ok('/phones offers fifteen models', (await page.locator('.phone-pick').count()) === IDS.length);
-  await page.getByRole('button', { name: /K750i/ }).dispatchEvent('click');
-  await page.waitForSelector('.skin-box[data-skin="sony-ericsson-k750i"]');
+  const k750 = page.locator('.phone-pick:enabled').filter({ has: page.getByTestId('phone-card-sony-ericsson-k750i') });
+  await k750.waitFor();
+  await k750.dispatchEvent('click');
+  await page.waitForURL('**/play/*');
+  await page.waitForSelector('.stage .skin-box[data-skin="sony-ericsson-k750i"]');
   await page.waitForFunction(() => { const c = document.querySelector('.skin-canvas'); if (!c) return false; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; for (let i = 0; i < d.length; i += 4) if (d[i] === 255 && d[i + 1] === 255 && d[i + 2] === 0) return false; return true; }, null, { timeout: 6000 });
   await page.mouse.up();
   ok('changing the model releases a held key', true);

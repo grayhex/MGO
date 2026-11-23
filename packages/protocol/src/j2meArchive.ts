@@ -75,3 +75,19 @@ export interface ArchiveDownload extends ArchiveTransfer {
   gameId: string | null;
   duplicate: boolean;
 }
+
+export interface CuratedTitle {
+  title: string;
+  suggested: string | null;
+  builds: ArchiveSearchItem[];
+}
+
+export interface CuratedImport {
+  state: 'running' | 'done' | 'cancelled';
+  total: number;
+  imported: number;
+  duplicates: number;
+  failed: { title: string; message: string }[];
+  current: string | null;
+  progress: string | null;
+}

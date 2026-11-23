@@ -32,6 +32,15 @@ export function registerArchiveRoutes(app: FastifyInstance, archive: ArchiveServ
     return archive.matching.confirm(req.params.id, req.body?.sha256 === null ? null : hash(req.body?.sha256));
   });
 
+  app.get(prefix + '/curated', () => ({ count: archive.curatedTitles().length, job: archive.currentCurated() }));
+  app.get(prefix + '/curated/preview', async () => ({ titles: await archive.previewCurated() }));
+  app.post<{ Body: { selection?: { title: string; sha256: string }[]; confirmed?: boolean } }>(prefix + '/curated', async (req, reply) => {
+    if (req.body?.confirmed !== true || !Array.isArray(req.body.selection)) throw new UploadError('archive_bad_selection', 'Confirm the selected builds first');
+    const selection = req.body.selection.map(row => ({ title: text(row?.title, 200), sha256: hash(row?.sha256) }));
+    return reply.code(202).send(await archive.importCurated(selection));
+  });
+  app.delete(prefix + '/curated', () => ({ cancelled: archive.cancelCurated() }));
+
   app.get(prefix + '/download', () => ({ job: archive.currentDownload() }));
   app.post<{ Body: { sha256: string; root?: string; folder?: string } }>(prefix + '/download', (req, reply) => reply.code(202).send(archive.startDownload(
     hash(req.body?.sha256), text(req.body?.root, 16, 'managed'), text(req.body?.folder, 800, 'J2ME Archive'),

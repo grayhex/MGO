@@ -61,6 +61,25 @@ export class ArchiveIndex {
     return { builds: builds.slice(0, PAGE_SIZE), more: page < 49 && builds.length > PAGE_SIZE };
   }
 
+  curatedCandidates(title: string): { builds: ArchiveBuild[]; suggested: string | null } {
+    const key = normalized(title);
+    const vendors = this.db.prepare(`SELECT vendorKey,count(*) AS count FROM builds WHERE titleKey=?
+      GROUP BY vendorKey ORDER BY count DESC,vendorKey LIMIT 2`).all(key) as unknown as { vendorKey: string; count: number }[];
+    if (vendors.length) {
+      const top = vendors[0]!;
+      const builds = this.db.prepare(`SELECT ${columns} FROM builds b WHERE titleKey=?
+        ORDER BY (vendorKey=?) DESC, (filename LIKE '%240x320%') DESC, id LIMIT 5`).all(key, top.vendorKey) as unknown as ArchiveBuild[];
+      const preferred = top.vendorKey && top.vendorKey !== 'unknown' && top.count > (vendors[1]?.count ?? 0) * 2;
+      return { builds, suggested: preferred ? builds[0]?.sha256 ?? null : null };
+    }
+    const searchTitle = key === 'ewjim' ? 'Earthworm Jim' : title;
+    const compact = normalized(searchTitle).replaceAll(' ', '');
+    const builds = this.search(searchTitle, '', 0).builds
+      .sort((a, b) => Number(normalized(b.title).replaceAll(' ', '') === compact) - Number(normalized(a.title).replaceAll(' ', '') === compact))
+      .slice(0, 5);
+    return { builds, suggested: null };
+  }
+
   candidates(title: string, vendor: string, version: string, except: string): ArchiveBuild[] {
     const titleKey = normalized(title);
     const vendorKey = normalized(vendor);

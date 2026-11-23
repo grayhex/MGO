@@ -5,6 +5,7 @@ import type { Library } from './library.js';
 import { AAS_SNAPSHOT, AAS_SNAPSHOT_DATE } from './ngageSnapshot.js';
 
 export const AAS_ORIGIN = 'https://allaboutsymbian.com';
+const AAS_HOSTS = new Set([AAS_ORIGIN, 'https://www.allaboutsymbian.com']);
 export const AAS_INDEX = '/n-gage-games/original/';
 const TTL = 30 * 86400_000;
 const text = (s: string) => s.replace(/<[^>]*>/g, '').replace(/&#(?:x([\da-f]+)|(\d+));/gi, (_, h, d) => String.fromCodePoint(parseInt(h || d, h ? 16 : 10))).replace(/&(amp|quot|apos|lt|gt|nbsp|middot);/g, (_, n) => ({amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',nbsp:' ',middot:'·'})[n as string] ?? '').trim();
@@ -91,7 +92,7 @@ export class NgageCatalog {
   private abort = new AbortController();
   private error: string | null = null;
   readonly dir: string;
-  constructor(private library: Library, dataDir: string, private fetcher: typeof fetch = fetch, private proxy = process.env.AAS_PROXY_URL ?? '') {
+  constructor(private library: Library, dataDir: string, private fetcher: typeof fetch = fetch, private proxy = process.env.AAS_PROXY_URL ?? process.env.MGO_METADATA_GATEWAY ?? '') {
     this.dir = path.join(dataDir, 'aas'); mkdirSync(this.dir, { recursive: true });
     try {
       const saved = JSON.parse(readFileSync(path.join(this.dir, 'catalog.json'), 'utf8'));
@@ -129,8 +130,8 @@ export class NgageCatalog {
     let target = url, response: Response | undefined;
     for (let hop = 0; hop < 4; hop++) {
       const allowed = new URL(target, AAS_ORIGIN);
-      if (allowed.origin !== AAS_ORIGIN || !/^\/(n-gage-games\/original\/(?:item\/[a-z0-9-]+\.php)?|images\/ngage\/[\w/.-]+)$/.test(allowed.pathname)) throw new Error('Unsupported catalog URL');
-      const endpoint = this.proxy ? this.proxy.replace(/\/$/, '') + allowed.pathname : allowed.href;
+      if (!AAS_HOSTS.has(allowed.origin) || allowed.username || allowed.password || !/^\/(n-gage-games\/original\/(?:item\/[a-z0-9-]+\.php)?|images\/ngage\/[\w/.-]+)$/.test(allowed.pathname)) throw new Error('Unsupported catalog URL');
+      const endpoint = this.proxy ? this.proxy.replace(/\/$/, '') + (allowed.origin === AAS_ORIGIN ? '' : '/mgo-aas-www') + allowed.pathname : allowed.href;
       try { response = await this.fetcher(endpoint, { signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(15000)]), redirect: 'manual', headers: { 'user-agent': 'MGO metadata/1.0' } }); }
       catch (e) { throw new CatalogUnreachable(this.proxy ? `the metadata gateway ${this.proxy} does not answer` : 'allaboutsymbian.com cannot be reached from this server (no internet access?)', (e as Error).message); }
       const next = response.status >= 300 && response.status < 400 ? response.headers.get('location') : null;
@@ -138,6 +139,7 @@ export class NgageCatalog {
       target = new URL(next, allowed).href; response = undefined;
     }
     if (!response) throw new Error('All About Symbian: too many redirects');
+    if (response.status >= 500) throw new CatalogUnreachable('All About Symbian is temporarily unavailable', `HTTP ${response.status}`);
     if (!response.ok) throw new Error(`All About Symbian: HTTP ${response.status}`);
     const reader = response.body!.getReader(); let size = 0; const chunks: Uint8Array[] = [];
     try { for (;;) { const r = await reader.read(); if (r.done) break; size += r.value.length; if (size > limit) throw new Error('Catalog response is too large'); chunks.push(r.value); } }
@@ -183,7 +185,7 @@ export class NgageCatalog {
       }
     } catch (e) {
       this.error = e instanceof CatalogUnreachable
-        ? `${e.message}. Games are still recognised from the list that ships with MGO (genre, publisher, year); covers and details need access to allaboutsymbian.com. In Docker the metadata gateway (AAS_PROXY_URL) provides it. (${e.detail})`
+        ? `${e.message}. Games are still recognised from the list that ships with MGO (genre, publisher, year); covers and details need access to allaboutsymbian.com. In Docker the metadata gateway (MGO_METADATA_GATEWAY) provides it. (${e.detail})`
         : (e as Error).message;
     }
     const dest = path.join(this.dir, 'catalog.json');

@@ -39,10 +39,15 @@ try {
   await p.getByLabel('Font size small').fill('20');
   await p.getByLabel('Font size large').fill('40');
   await p.getByText('Preload resources', { exact: true }).click();
+  const touch = p.getByRole('checkbox', { name: 'Touch events' });
+  assert.equal(await touch.isChecked(), false, 'the default keypad phone does not advertise touch');
   await p.getByText('Touch events', { exact: true }).click();
-  await wait(async () => { const g = (await (await fetch(base + '/api/games')).json()).find((x) => x.id === props.id); return g.settings.emulation?.locale === 'ru-RU' && g.settings.emulation?.pointerEvents === false && g.settings.emulation?.preloadResources === true; }, 'options saved for the game');
+  await wait(async () => { const g = (await (await fetch(base + '/api/games')).json()).find((x) => x.id === props.id); return g.settings.emulation?.locale === 'ru-RU' && g.settings.emulation?.pointerEvents === true && g.settings.emulation?.preloadResources === true; }, 'options saved for the game');
   await p.locator('.ctrl-col').getByRole('button', { name: 'Start', exact: true }).click();
-  await wait(async () => { const s = await running(); return s && (await (await fetch(base + '/api/sessions/' + s.id)).json()).logTail.some((l) => /PROPS locale=ru-RU pointer=false/.test(l)); }, 'the game sees the options');
+  await wait(async () => { const s = await running(); return s && (await (await fetch(base + '/api/sessions/' + s.id)).json()).logTail.some((l) => /PROPS locale=ru-RU pointer=true/.test(l)); }, 'the game sees the options');
+  const defaults = await running();
+  assert.equal(defaults.frameRateLimit, null, 'default uses the emulator frame-rate policy');
+  assert.doesNotMatch(readFileSync(path.join(dir, 'saves', 'default', props.id, 'midlets.ini'), 'utf8'), /^FrameRate=/m);
   for (const s of await (await fetch(base + '/api/sessions')).json()) await fetch(base + '/api/sessions/' + s.id, { method: 'DELETE' });
   await wait(async () => !(await running()), 'stopped');
 

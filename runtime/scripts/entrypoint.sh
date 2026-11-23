@@ -3,7 +3,7 @@
 set -eu
 
 # NAS bind mounts preserve the host's ownership. Fail with a useful error before
-# provisioning auth or starting the API; never chmod/chown user files from here.
+# starting the API; never chmod/chown user files from here.
 data_dir="${DATA_DIR:-/data}"
 if [ ! -d "$data_dir" ] || [ ! -w "$data_dir" ]; then
   echo >&2 "[MGO] Data directory $data_dir is not writable by UID:GID $(id -u):$(id -g)."
@@ -12,11 +12,10 @@ if [ ! -d "$data_dir" ] || [ ! -w "$data_dir" ]; then
   exit 1
 fi
 
-# One-file NAS install: if no token was configured, generate a private persistent
-# credential in /data and expose it to the API. Never run publicly unauthenticated.
-if [ -z "${AUTH_TOKEN:-}" ]; then
-  AUTH_TOKEN="$(node /usr/local/bin/mgo-auth-token.cjs)" || exit 1
-  export AUTH_TOKEN
+# A pull-only upgrade of the previous Compose still sets MGO_AUTH_DIR.
+# Recognize that deployment while it migrates to the current Compose file.
+if [ -z "${MGO_LAN_MODE:-}" ] && [ -n "${MGO_AUTH_DIR:-}" ]; then
+  export MGO_LAN_MODE=1
 fi
 
 if [ "${KEM_XVFB:-1}" = "1" ]; then

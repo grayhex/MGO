@@ -27,6 +27,14 @@ export function Link({ to, children, className, onNavigate, ...rest }: { to: str
 
 const COLLAPSE = 'j2me-web.sidebar';
 
+function appVersion(version?: string): string {
+  if (!version) return '—';
+  const clean = version.replace(/^v(?=\d)/i, '');
+  const edge = /\+edge\.([a-f0-9]+)/i.exec(clean);
+  if (edge) return `Edge · ${edge[1]}`;
+  return /^\d/.test(clean) ? `v${clean}` : clean;
+}
+
 export function Shell({ path, go, health, symbian, title, subtitle, children }: {
   path: string; go: (to: string) => void; health: HealthStatus | null;
   symbian?: SymbianStatus | null;
@@ -59,7 +67,7 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
     <div className={`app ${collapsed ? 'shell-collapsed' : ''} ${drawer ? 'shell-drawer' : ''}`}>
       <aside className="sidebar glass" aria-label={translateUI("Main navigation")}>
         <Link to="/" onNavigate={go} className="brand" aria-label={translateUI("MGO home")}>
-          <img className="brand-logo" src="/graphics/brand/logo-sidebar.svg" alt="" width={210} height={48} />
+          <img className="brand-logo" src="/graphics/brand/logo-horizontal.svg" alt="" />
           <img className="brand-mark-img" src="/graphics/brand/mark.svg" alt="" width={32} height={32} />
           <span className="brand-text sr-only">{translateUI("MGO")}</span>
         </Link>
@@ -76,9 +84,9 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
         <div className="sidebar-foot">
           <Seg<'en' | 'ru'> className="on-shell lang" label="Language / Язык" value={locale} onChange={setLocale} options={[{ value: 'en', label: 'EN', title: 'English' }, { value: 'ru', label: 'RU', title: 'Русский' }]} />
           <div className="runtime-list" aria-label={translateUI('Application and emulators')}>
-            <div className="runtime" title={`MGO ${health?.version ?? '—'}`}><span className={`dot ${health ? '' : 'bad'}`} aria-hidden /><span className="runtime-text"><b>MGO <em>{translateUI(health ? 'Online' : 'Connecting…')}</em></b><small title={health?.version}>v{health?.version ?? '—'}</small></span></div>
-            <div className="runtime" title={`KEmulator ${health?.kemulator.commit ?? '—'}`}><span className={`dot ${health?.ok ? '' : 'bad'}`} aria-hidden /><span className="runtime-text"><b>KEmulator <em>{translateUI(health?.ok ? 'Ready' : 'Unavailable')}</em></b><small title={health?.kemulator.commit ?? undefined}>Java ME · {health?.kemulator.version ? `v${health.kemulator.version}` : '—'}</small></span></div>
-            <div className="runtime" data-testid="symbian-runtime" title={`EKA2L1 ${symbian?.emulator ?? '—'}`}><span className={`dot ${symbian?.reachable && symbian.firmware.installed ? '' : 'bad'}`} aria-hidden /><span className="runtime-text"><b>EKA2L1 <em>{translateUI(!symbian?.configured ? 'Not configured' : !symbian.reachable ? 'Unavailable' : symbian.busy ? 'Running' : symbian.firmware.installed ? 'Ready' : 'Needs firmware')}</em></b><small title={symbian?.emulator ?? undefined}>Symbian / N-Gage · {symbian?.emulator?.replace(/^EKA2L1\s*/, '') ?? '—'}</small></span></div>
+            <div className="runtime" title={`MGO ${health?.version ?? '—'}`}><span className={`dot ${health ? '' : 'bad'}`} aria-hidden /><span className="runtime-text"><b>MGO <em>{translateUI(health ? 'Online' : 'Connecting…')}</em></b><small>{translateUI('Frontend web app')} · <span title={health?.version}>{appVersion(health?.version)}</span></small></span></div>
+            <div className="runtime" title={`KEmulator ${health?.kemulator.commit ?? '—'}`}><span className={`dot ${health?.ok ? '' : 'bad'}`} aria-hidden /><span className="runtime-text"><b>KEmulator <em>{translateUI(health?.ok ? 'Ready' : 'Unavailable')}</em></b><small title={health?.kemulator.commit ?? undefined}>{translateUI('Java ME emulator')} · {health?.kemulator.version ? `v${health.kemulator.version}` : '—'}</small></span></div>
+            <div className="runtime" data-testid="symbian-runtime" title={`EKA2L1 ${symbian?.emulator ?? '—'}`}><span className={`dot ${symbian?.reachable && symbian.firmware.installed ? '' : 'bad'}`} aria-hidden /><span className="runtime-text"><b>EKA2L1 <em>{translateUI(!symbian?.configured ? 'Not configured' : !symbian.reachable ? 'Unavailable' : symbian.busy ? 'Running' : symbian.firmware.installed ? 'Ready' : 'Needs firmware')}</em></b><small title={symbian?.emulator ?? undefined}>{translateUI('Symbian / N-Gage emulator')} · {symbian?.emulator?.replace(/^EKA2L1\s*/, '') ?? '—'}</small></span></div>
           </div>
           {health?.auth === 'token' && (
             <button className="nav-item" onClick={() => void api.logout().finally(() => location.reload())} title={translateUI('Sign out of this browser')} data-testid="sign-out">

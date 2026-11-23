@@ -50,7 +50,6 @@ Validation checks exact zero alpha inside full and zoom active windows (PNG and 
 
 Body illustrations have not been visually signed off. Some button polygons approximate the physical curves; compare debug overlays with reference photos before final acceptance. K750i Back currently shares the clear gameplay binding; this does not assert that the two physical keys are equivalent on a real device. Empty glass layers are intentional. No game/menu image is embedded in any active display.
 
-Integration task: see `docs/PHONE_SKINS_AGENT_PROMPT.md`.
 
 ## Unified emulation catalog
 

@@ -4,7 +4,7 @@ import { lazy, Suspense } from 'react';
 import { useDeveloperMode } from './developer';
 const DevPhones = import.meta.env.VITE_DEVELOPER_BUILD === 'true' ? lazy(()=>import('./dev/PhonesPage').then(m=>({default:m.PhonesPage}))) : null;
 import type { HealthStatus, SymbianStatus } from '@mgo/protocol';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api';
 import { SetupWizard } from './components/SetupWizard';
 import { Library } from './components/Library';
@@ -26,7 +26,10 @@ function Login({ onDone }: { onDone: () => void }) {
   return (
     <div className="login">
       <div className="login-hero"><Seg<'en' | 'ru'> label="Language / Язык" value={locale} onChange={setLocale} options={[{ value: 'en', label: 'EN', title: 'English' }, { value: 'ru', label: 'RU', title: 'Русский' }]} />
-        <img className="login-logo" src="/graphics/brand/logo-horizontal.svg" alt="" />
+        <picture>
+          <source media="(prefers-color-scheme: light)" srcSet="/graphics/brand/logo-light.svg" />
+          <img className="login-logo" src="/graphics/brand/logo-horizontal.svg" alt="" />
+        </picture>
         <h1 className="sr-only">{translateUI("MGO")}</h1>
         <p>{translateUI("Your Java ME, Symbian and N-Gage games, played in real emulators on this server and streamed to any browser.")}</p>
         <img className="login-art" src="/graphics/auth/login-hero.svg" alt="" />
@@ -56,6 +59,9 @@ export function App() {
   useLocale();
   const developer=useDeveloperMode();
   const [path, go] = usePath();
+  const previousPath = useRef(path);
+  const returnGameId = path === '/' ? /^\/play\/([0-9a-f]{16})\/?$/.exec(previousPath.current)?.[1] : undefined;
+  useLayoutEffect(() => { previousPath.current = path; }, [path]);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [symbian, setSymbian] = useState<SymbianStatus | null>(null);
   const [needLogin, setNeedLogin] = useState(false);
@@ -120,7 +126,7 @@ export function App() {
       ? { title: 'Phones', subtitle: 'Phone lab', node: <Suspense fallback={null}><DevPhones /></Suspense> }
     : phones
       ? { title: 'Phones', subtitle: 'Classic phones', node: <PhonesPage toast={toast} /> }
-      : { title: 'Library', subtitle: 'Your games on this server', node: <Library toast={toast} onPlay={(id) => go(`/play/${id}`)} health={health} query={query} onQuery={setQuery} /> };
+      : { title: 'Library', subtitle: 'Your games on this server', node: <Library returnGameId={returnGameId} toast={toast} onPlay={(id) => go(`/play/${id}`)} health={health} query={query} onQuery={setQuery} /> };
 
   return (
     <>

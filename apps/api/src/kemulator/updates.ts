@@ -48,7 +48,7 @@ export class KemulatorUpdates {
   private busy = false;
   private readonly supported = process.platform === 'linux' && process.arch === 'x64';
 
-  constructor(private cfg: Config, private fetcher = fetch, private proxy = process.env.MGO_RELEASE_PROXY_URL ?? process.env.AAS_PROXY_URL ?? '') {
+  constructor(private cfg: Config, private fetcher = fetch, private proxy = process.env.MGO_RELEASE_PROXY_URL ?? process.env.MGO_METADATA_GATEWAY ?? process.env.AAS_PROXY_URL ?? '') {
     this.root = path.join(cfg.dataDir, 'kemulator-runtime');
     this.bundledDir = cfg.kemDir;
     this.bundledVersion = readKemVersion(cfg.kemDir);

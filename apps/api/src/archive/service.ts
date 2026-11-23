@@ -4,7 +4,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ArchiveBuild, ArchiveDownload, ArchiveSearchItem, ArchiveStatus, ArchiveTransfer } from '@mgo/protocol';
+import type { ArchiveBuild, ArchiveDownload, ArchiveSearchItem, ArchiveStatus, ArchiveTransfer, CuratedTitle, CuratedImport } from '@mgo/protocol';
 import type { Config } from '../config.js';
 import { javaGroupKey, type Library } from '../library.js';
 import type { ScanManager } from '../scanner.js';
@@ -16,6 +16,7 @@ import { ArchiveMatching } from './matching.js';
 export type ArchiveWorker = (args: string[], workspace: string, proxy: string, signal: AbortSignal, progress: (line: string) => void) => Promise<void>;
 type Job = { abort: AbortController; task: Promise<void> };
 const DOWNLOAD_BUDGET = 512 * MIB;
+const curatedPath = fileURLToPath(new URL('../../archive-tools/java_curated_top.txt', import.meta.url));
 const workerPath = fileURLToPath(new URL('../../archive-tools/worker.py', import.meta.url));
 
 export const runArchiveWorker: ArchiveWorker = (args, workspace, proxy, signal, progress) => new Promise((resolve, reject) => {
@@ -64,6 +65,10 @@ export class ArchiveService {
   private download: ArchiveDownload | null = null;
   private job: Job | null = null;
   private attemptedAt = 0;
+  private curated: CuratedImport | null = null;
+  private curatedTask: Promise<void> | null = null;
+  private curatedAbort: AbortController | null = null;
+  private curatedPlan: { index: ArchiveIndex; rows: Promise<CuratedTitle[]> } | null = null;
 
   constructor(private cfg: Config, private library: Library, private scanner: ScanManager, private worker: ArchiveWorker = runArchiveWorker) {
     this.matching = new ArchiveMatching(library);
@@ -95,8 +100,8 @@ export class ArchiveService {
     return this.index;
   }
 
-  private ensureIdle(): void {
-    if (this.job || this.matching.isRunning()) throw new UploadError('archive_busy', 'Another archive operation is running', 409);
+  private ensureIdle(fromCurated = false): void {
+    if (this.job || this.matching.isRunning() || (this.curatedTask && !fromCurated)) throw new UploadError('archive_busy', 'Another archive operation is running', 409);
   }
 
   private start(report: ArchiveTransfer, action: (signal: AbortSignal) => Promise<void>): void {
@@ -114,7 +119,7 @@ export class ArchiveService {
     this.job = { abort, task };
   }
 
-  private proxy(): string { return process.env.MGO_ARCHIVE_PROXY_URL ?? ''; }
+  private proxy(): string { return process.env.MGO_ARCHIVE_PROXY_URL ?? process.env.MGO_METADATA_GATEWAY ?? process.env.AAS_PROXY_URL ?? ''; }
 
   installIndex(): ArchiveTransfer {
     this.ensureIdle();
@@ -192,8 +197,8 @@ export class ArchiveService {
 
   currentDownload(): ArchiveDownload | null { return this.download; }
 
-  startDownload(sha: string, rootId: string, folder: string): ArchiveDownload {
-    this.ensureIdle();
+  startDownload(sha: string, rootId: string, folder: string, fromCurated = false): ArchiveDownload {
+    this.ensureIdle(fromCurated);
     if (!SHA256.test(sha)) throw new UploadError('archive_bad_hash', 'Select a valid SHA-256 from the archive');
     const index = this.requireIndex();
     const build = index.get(sha);
@@ -209,7 +214,7 @@ export class ArchiveService {
       return this.download;
     }
 
-    if (Date.now() - this.attemptedAt < 2000) throw new UploadError('archive_rate_limit', 'Wait two seconds before downloading another build', 429);
+    if (!fromCurated && Date.now() - this.attemptedAt < 2000) throw new UploadError('archive_rate_limit', 'Wait two seconds before downloading another build', 429);
     if (build.size > this.cfg.maxUploadBytes) throw new UploadError('too_large', 'The archive JAR exceeds the Java ME upload limit', 413);
     if (build.size + this.library.totalBytes() > this.cfg.libraryQuotaBytes) throw new UploadError('quota_exceeded', 'Library quota exceeded; delete some games first', 507);
     if (rootId === 'managed') mkdirSync(root, { mode: 0o700, recursive: true });
@@ -231,6 +236,7 @@ export class ArchiveService {
       try {
         await this.worker(['download', sha, file, path.join(staging, 'cache'), String(Math.min(64, Math.ceil(this.cfg.maxUploadBytes / MIB)))], staging, this.proxy(), signal, line => {
           report.message = line.slice(0, 300);
+          if (fromCurated && this.curated) this.curated.progress = report.message;
         });
         signal.throwIfAborted();
         report.phase = 'verifying';
@@ -256,10 +262,86 @@ export class ArchiveService {
     return report;
   }
 
+  curatedTitles(): string[] {
+    return [...new Set(readFileSync(curatedPath, 'utf8').split(/\r?\n/).map(line => line.trim()).filter(Boolean))];
+  }
+
+  async previewCurated(): Promise<CuratedTitle[]> {
+    const index = this.requireIndex();
+    if (this.curatedPlan?.index !== index) {
+      const rows = async () => {
+        const plan: CuratedTitle[] = [];
+        for (const title of this.curatedTitles()) {
+          await new Promise<void>(done => setImmediate(done));
+          if (index !== this.index) throw new UploadError('archive_index_changed', 'The archive index changed. Refresh the list.', 409);
+          const { builds, suggested } = index.curatedCandidates(title);
+          plan.push({ title, builds: builds.map(build => this.decorate(build)), suggested });
+        }
+        return plan;
+      };
+      this.curatedPlan = { index, rows: rows() };
+    }
+    // Installed status is live even after completing an earlier import.
+    return (await this.curatedPlan.rows).map(item => ({ ...item, builds: item.builds.map(build => this.decorate(build)) }));
+  }
+
+  currentCurated(): CuratedImport | null { return this.curated; }
+
+  async importCurated(selection: { title: string; sha256: string }[]): Promise<CuratedImport> {
+    this.ensureIdle();
+    const index = this.requireIndex();
+    const plan = new Map((await this.previewCurated()).map(row => [row.title, row]));
+    this.ensureIdle();
+    if (index !== this.index) throw new UploadError('archive_index_changed', 'The archive index changed. Refresh the list.', 409);
+    if (!selection.length || selection.length > plan.size || new Set(selection.map(row => row.title)).size !== selection.length ||
+        selection.some(row => !plan.get(row.title)?.builds.some(build => build.sha256 === row.sha256))) {
+      throw new UploadError('archive_bad_selection', 'Select one available build per title from the curated list');
+    }
+    const report: CuratedImport = { state: 'running', total: selection.length, imported: 0, duplicates: 0, failed: [], current: null, progress: null };
+    const abort = new AbortController();
+    this.curated = report;
+    this.curatedAbort = abort;
+    this.curatedTask = this.runCurated(selection, report, abort.signal).finally(() => {
+      report.state = abort.signal.aborted ? 'cancelled' : 'done';
+      report.current = null;
+      report.progress = null;
+      this.curatedTask = null;
+      this.curatedAbort = null;
+    });
+    return report;
+  }
+
+  private async runCurated(selection: { title: string; sha256: string }[], report: CuratedImport, signal: AbortSignal): Promise<void> {
+    await new Promise<void>(done => setImmediate(done));
+    for (const item of selection) {
+      if (signal.aborted) break;
+      report.current = item.title;
+      report.progress = null;
+      try {
+        const job = this.startDownload(item.sha256, 'managed', 'Curated Java ME', true);
+        await this.job?.task;
+        if (signal.aborted) break;
+        if (job.state !== 'done') throw new Error(job.message ?? 'Archive source is unavailable');
+        if (job.duplicate) report.duplicates++;
+        else report.imported++;
+      } catch (error) {
+        report.failed.push({ title: item.title, message: (error as Error).message });
+      }
+    }
+  }
+
+  cancelCurated(): boolean {
+    if (!this.curatedAbort) return false;
+    this.curatedAbort.abort();
+    this.cancel('download');
+    return true;
+  }
+
   async close(): Promise<void> {
+    this.cancelCurated();
     this.job?.abort.abort();
     this.matching.pause();
-    await Promise.allSettled([this.job?.task, this.matching.idle()]);
+    await Promise.allSettled([this.job?.task, this.curatedTask, this.matching.idle()]);
     this.index?.close();
   }
 }

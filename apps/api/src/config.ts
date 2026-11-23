@@ -31,6 +31,7 @@ export interface Config {
   /** Largest firmware file (ROM / RPKG) accepted when the user installs a device. */
   maxFirmwareBytes: number;
   authToken: string | null;
+  lanMode?: boolean;
   frameEncoding: 'raw' | 'deflate';
   /** Extra Origins allowed to call the API/WS besides same-origin. */
   allowedOrigins: string[];
@@ -91,6 +92,7 @@ export function loadConfig(env = process.env): Config {
     maxPackageBytes: int(env, 'MAX_SYMBIAN_PACKAGE_MB', 512) * 1024 * 1024,
     maxFirmwareBytes: int(env, 'MAX_FIRMWARE_MB', 2048) * 1024 * 1024,
     authToken: env.AUTH_TOKEN ? env.AUTH_TOKEN : null,
+    lanMode: env.MGO_LAN_MODE === '1',
     frameEncoding: env.FRAME_ENCODING === 'deflate' ? 'deflate' : 'raw',
     allowedOrigins: list(env, 'ALLOWED_ORIGINS'),
     webDir: existsSync(webDirEnv) ? path.resolve(webDirEnv) : null,
@@ -107,7 +109,7 @@ export function loadConfig(env = process.env): Config {
     launchWrapper: list(env, 'KEM_LAUNCH_WRAPPER'),
   };
   const loopback = ['127.0.0.1', '::1', 'localhost'].includes(cfg.host);
-  if (!loopback && !cfg.authToken && env.ALLOW_INSECURE_PUBLIC !== '1') {
+  if (!loopback && !cfg.authToken && !cfg.lanMode && env.ALLOW_INSECURE_PUBLIC !== '1') {
     throw new Error(
       `Refusing to listen on ${cfg.host} without AUTH_TOKEN. Set AUTH_TOKEN, bind to 127.0.0.1, ` +
         'or (inside a private network only) set ALLOW_INSECURE_PUBLIC=1.',

@@ -65,3 +65,11 @@
 .archive-mark { display: inline-flex; color: var(--muted); vertical-align: middle; }
 .archive-mark.exact { color: var(--success); }
 .archive-mark.review { color: var(--warning); }
+.curated-rows { list-style: none; margin: 0; padding: 0; max-height: 225px; overflow: auto; display: grid; gap: 6px; }
+.curated-rows .field { display: grid; grid-template-columns: minmax(100px, .65fr) minmax(0, 1fr); align-items: center; gap: 8px; }
+.curated-rows .select { min-width: 0; }
+@media (max-width: 600px) { .curated-rows .field { grid-template-columns: 1fr; } }
+.metadata-sources { display: grid; gap: 14px; }
+.metadata-sources h3 { margin: 0 0 8px; }
+.metadata-source-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.metadata-source-grid > * { align-self: start; }

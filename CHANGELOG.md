@@ -3,6 +3,17 @@
 Formatted after [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 `-beta` releases are complete enough to use but not yet proven on a variety of hardware.
 
+## 1.5.0
+
+- MGO brand logo, larger phone previews and compact runtime version information.
+- Java ME and N-Gage metadata grouped by source, with a shared Docker gateway.
+- Optional curated Java ME library import in the first-run wizard.
+- Release-pinned Compose for home networks with the login prompt disabled.
+- Library navigation restores focus to the previously opened game. Phone
+  suggestions compare the game's native resolution with the display.
+- The default frame limit follows KEmulator. Keypad phone profiles advertise
+  touch only when enabled explicitly.
+
 ## [Unreleased]
 
 ### Added

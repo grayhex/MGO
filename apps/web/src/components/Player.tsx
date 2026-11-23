@@ -13,7 +13,7 @@ import { Recorder, Replayer } from '../recording';
 import { downloadBlob, fileSafe, framePng } from '../snapshot';
 import { GamepadPoller, loadPadProfile, type PadAction, type PadState } from '../gamepad';
 import { GamepadSettings } from './GamepadSettings';
-import { EMULATION_DEFAULTS, KEY_LAYOUTS, SCREEN_PRESETS, type PhoneCatalog, type DevicePreset, type EmulationTweaks, type GameMeta, type HealthStatus, type LayoutId, type ServerEvent, type SessionState, type SessionStatus } from '@mgo/protocol';
+import { phoneHasTouch, KEY_LAYOUTS, SCREEN_PRESETS, type PhoneCatalog, type DevicePreset, type EmulationTweaks, type GameMeta, type HealthStatus, type LayoutId, type ServerEvent, type SessionState, type SessionStatus } from '@mgo/protocol';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, type JarAnalysisView } from '../api';
 import type { Toast } from '../App';
@@ -332,7 +332,7 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
   const launchVersion = useRef(0);
   const emuPatch = Object.keys(tweaks).length ? tweaks : null;
   const emuKey = JSON.stringify(tweaks);
-  const pendingFrameLimit = session?.frameRateLimit !== undefined && session.frameRateLimit !== (tweaks.frameRate ?? EMULATION_DEFAULTS.frameRate);
+  const pendingFrameLimit = session?.frameRateLimit !== undefined && session.frameRateLimit !== (tweaks.frameRate ?? null);
   const start = async () => {
     if (!game || busy || !loaded || (j2me ? !advanced && !matched : !native.data?.plan.ready && !(live && session?.backend === 'eka2l1' && native.data?.plan.code === 'symbian_busy'))) return;
     const version = ++launchVersion.current;
@@ -483,13 +483,15 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
   const suggestion = useMemo(() => {
     if (!game || !skins) return null;
     const mine = getServerSettings()?.settings.myPhones;
-    const options: PhoneOption[] = skins.filter((k) => !mine?.length || mine.includes(k.config.id as never) || k.config.id === prefs.skinId).map((k) => ({ id: k.config.id, label: `${k.config.manufacturer} ${k.config.model}`, width: k.config.screen.width, height: k.config.screen.height }));
+    const options: PhoneOption[] = skins.map((k) => ({ id: k.config.id, label: `${k.config.manufacturer} ${k.config.model}`, width: k.config.screen.width, height: k.config.screen.height, preferred: mine?.includes(k.config.id as never) }));
     const hint = analysis?.analysis.screenHints[0];
     const rec = analysis?.recommendedDevice ? devices.find((d) => d.id === analysis.recommendedDevice) : undefined;
-    const wanted = hint ? { width: hint.width, height: hint.height } : rec ? { width: rec.width, height: rec.height } : null;
+    const wanted = game.nativeResolution ?? (hint ? { width: hint.width, height: hint.height } : j2me
+      ? (rec ? { width: rec.width, height: rec.height } : null)
+      : session?.framesReceived ? { width: frameSize.w, height: frameSize.h } : null);
     const hasFirmware = (id: string) => EMULATED_DEVICES.some((d) => d.engine === 'eka2l1' && PHONE_COMPATIBILITY[id as keyof typeof PHONE_COMPATIBILITY]?.includes(d.id) && d.platforms.includes(game.platform ?? 'j2me') && phoneCatalog?.availability.find((a) => a.deviceId === d.id)?.available);
     return betterPhone({ platform: game.platform ?? 'j2me', packageFormat: game.packageFormat, current: prefs.skinId, options, wanted, hasFirmware });
-  }, [game, skins, prefs.skinId, analysis, devices, phoneCatalog]);
+  }, [game, skins, prefs.skinId, analysis, devices, phoneCatalog, j2me, session?.framesReceived ? frameSize.w : 0, session?.framesReceived ? frameSize.h : 0]);
   const switchPhone = async (id: string) => {
     if (!game || !isSkinId(id)) return;
     setPrefs({ skinId: id });
@@ -502,7 +504,6 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
     if (!loaded || !j2me || running || advanced || !sizeHint || hintApplied.current === gameId) return;
     hintApplied.current = gameId;
     setAdvanced(true); setDevice(''); setRes({ width: sizeHint.width, height: sizeHint.height });
-    if (sizeHint.width > sizeHint.height) setPrefs({ skinId: 'nokia-e71' });
   }, [loaded, j2me, running, advanced, sizeHint?.width, sizeHint?.height, gameId]);
   const canStart = !!game && loaded && !running && !busy && (j2me ? health?.ok !== false && (advanced || !!matched) : native.data?.plan.ready === true);
   const resKey = res ? `${res.width}x${res.height}` : '';
@@ -627,7 +628,7 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
         </Panel>
         {suggestion && tipHidden !== `${game?.id}:${suggestion.id}` && (
           <div className="note info phone-tip" role="status" data-testid="phone-suggestion">
-            <p>{translateUI('This game runs on your current phone. On {phone} ({w}×{h}) the picture is better.', { phone: suggestion.label, w: suggestion.width, h: suggestion.height })}</p>
+            <p>{translateUI('Better screen fit: {phone} ({w}×{h}).', { phone: suggestion.label, w: suggestion.width, h: suggestion.height })}</p>
             <div className="btn-row"><button className="btn sm primary" type="button" onClick={() => void switchPhone(suggestion.id)} data-testid="phone-suggestion-switch">{translateUI('Switch to {phone}', { phone: suggestion.label })}</button><button className="btn sm ghost" type="button" onClick={() => setTipHidden(`${game?.id}:${suggestion.id}`)}>{translateUI('Not now')}</button></div>
           </div>
         )}
@@ -682,7 +683,7 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
 
         {j2me && (
         <Panel icon="sliders" title={translateUI("Game compatibility options")} open={false}>
-          <EmulationTweaksForm value={tweaks} onChange={setTweaks} />
+          <EmulationTweaksForm pointerDefault={phoneHasTouch(prefs.skinId)} value={tweaks} onChange={setTweaks} />
         </Panel>
         )}
 

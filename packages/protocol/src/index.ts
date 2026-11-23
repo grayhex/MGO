@@ -33,7 +33,7 @@ export interface EmulationTweaks {
   fontSizes?: { small: number; medium: number; large: number };
 }
 
-export const EMULATION_DEFAULTS = { frameRate: 30, startAppOnResume: true, locale: 'en-US', pointerEvents: true, fontSizes: { small: 12, medium: 14, large: 16 } } as const;
+export const EMULATION_DEFAULTS = { frameRate: 30, startAppOnResume: true, locale: 'en-US', fontSizes: { small: 12, medium: 14, large: 16 } } as const;
 export const EMULATION_LIMITS = { frameRate: [1, 120], fontSize: [6, 64] } as const;
 
 /** One entry of a game's file area (what the MIDlet sees as `file:///`, JSR-75). */
@@ -387,7 +387,7 @@ export interface StartFailure {
 
 export interface SessionStatus {
   /** KEmulator drawing limit applied at launch. */
-  frameRateLimit?: number;
+  frameRateLimit?: number | null;
   /** Which emulator runs the game. */
   backend?: EmulatorBackend;
   /** Set when a Symbian / N-Gage start failed: the facts and the explanation. */

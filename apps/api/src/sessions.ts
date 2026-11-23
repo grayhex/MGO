@@ -8,7 +8,7 @@ import {
   type GameMeta,
   type GameSettings,
   KEY_LAYOUTS,
-  EMULATION_DEFAULTS,
+  phoneHasTouch,
   type ServerEvent,
   type SessionState,
   TEXT_INPUT_MAX,
@@ -135,7 +135,7 @@ export class Session {
       gameId: this.game.id,
       state: this.state,
       backend: this.adapter.kind,
-      ...(this.adapter.kind === 'kemulator' ? { frameRateLimit: this.settings.emulation?.frameRate ?? EMULATION_DEFAULTS.frameRate } : {}),
+      ...(this.adapter.kind === 'kemulator' ? { frameRateLimit: this.settings.emulation?.frameRate ?? null } : {}),
       width: this.picture?.width ?? this.settings.width,
       height: this.picture?.height ?? this.settings.height,
       startedAt: new Date(this.createdAt).toISOString(),
@@ -530,7 +530,9 @@ export class SessionManager {
     this.lib.pruneLogs();
     // Per-app emulator settings (device preset, key codes of the chosen layout) go to midlets.ini
     writeSoundfontProperty(userPath, this.soundfontPath());
-    writeMidletsIni(userPath, { jarPath: paths.jar, width: overrides.width, height: overrides.height, keys: KEY_LAYOUTS[overrides.layout].keys, preset, tweaks: overrides.emulation });
+    const touch = overrides.emulation?.pointerEvents ?? (overrides.skinId ? phoneHasTouch(overrides.skinId) : undefined);
+    const tweaks = touch === undefined ? overrides.emulation : { ...overrides.emulation, pointerEvents: touch };
+    writeMidletsIni(userPath, { jarPath: paths.jar, width: overrides.width, height: overrides.height, keys: KEY_LAYOUTS[overrides.layout].keys, preset, tweaks });
     const adapter = new KEmulatorAdapter({
       adapterBin: this.cfg.adapterBin,
       javaBin: this.cfg.javaBin,

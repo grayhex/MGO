@@ -247,6 +247,17 @@ export function decideMatch(query: string, games: MobyGameData[], j2mePlatform: 
 
 // ---- HTTP -----------------------------------------------------------------------------------------------
 
+/** The stock Docker app can reach the metadata gateway on its internal network. */
+export function mobyGatewayFetch(gateway: string): typeof fetch {
+  const root = gateway.replace(/\/$/, '');
+  return (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    const host = ({ 'api.mobygames.com': 'api', 'cdn.mobygames.com': 'cdn', 'www.mobygames.com': 'www', 'mobygames.com': 'www' } as Record<string, string>)[url.hostname];
+    if (!host || url.protocol !== 'https:' || url.port || url.username || url.password) throw new Error('Unsupported MobyGames gateway URL');
+    return fetch(root + '/mgo-moby/' + host + url.pathname + url.search, init);
+  };
+}
+
 export class MobyClient {
   private base: string;
   private doFetch: typeof fetch;

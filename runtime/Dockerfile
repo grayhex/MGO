@@ -60,17 +60,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       fontconfig fonts-dejavu-core ca-certificates curl python3 libharfbuzz0b libfreetype6 libfontconfig1 liblcms2-2 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=app-build /usr/local/bin/node /usr/local/bin/node
-# The token volume can be written by NAS-selected UID:GID (e.g. 1000:10 or 10001:10001).
-# It is a sticky directory, like /tmp; the token itself stays a private 0600 file.
 RUN useradd --system --uid 10001 --home-dir /nonexistent --shell /usr/sbin/nologin j2me \
-    && mkdir -p /data /opt/kemulator /mgo-auth /symbian-auth \
+    && mkdir -p /data /opt/kemulator /symbian-auth \
     && chown j2me /data \
-    && chmod 1777 /mgo-auth && chown j2me /symbian-auth
+    && chown j2me /symbian-auth
 COPY --from=kem-build /out/kemulator /opt/kemulator
 COPY --from=adapter-build /src/target/release/kem-adapter /usr/local/bin/kem-adapter
 COPY --from=app-build /app /app
 COPY runtime/scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY runtime/scripts/docker-auth-token.cjs /usr/local/bin/mgo-auth-token.cjs
 
 # jdk-headless (not only the JRE) so that the diagnostics report can ask the emulator's JVM for heap and threads (jcmd)
 ARG MGO_VERSION=dev
