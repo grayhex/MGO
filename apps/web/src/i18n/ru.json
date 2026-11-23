@@ -879,5 +879,16 @@
   "Rotate": "Повернуть",
   "Screenshot": "Снимок",
   "Copy": "Копировать",
-  "Default": "По умолчанию"
+  "Default": "По умолчанию",
+  "Preload resources": "Предзагрузка ресурсов",
+  "KEmulator v2.22.1 and later. Uses more memory to load game resources at startup.": "С KEmulator v2.22.1. Загружает ресурсы игры в память при запуске и увеличивает расход памяти.",
+  "No newer compatible KEmulator build is published.": "Более свежей совместимой сборки KEmulator пока нет.",
+  "KEmulator v{version} will run the next Java ME game you start.": "Следующая игра Java ME запустится на KEmulator v{version}.",
+  "Check for updates": "Проверить обновления",
+  "Restore bundled version": "Вернуть встроенную версию",
+  "Install KEmulator v{version}": "Установить KEmulator v{version}",
+  "Checking or installing KEmulator…": "Проверка или установка KEmulator…",
+  "Cannot reach the MGO release catalog": "Каталог релизов MGO недоступен",
+  "The available KEmulator update changed. Check again.": "Доступная версия KEmulator изменилась. Проверьте обновления снова.",
+  "KEmulator release checksum does not match": "Контрольная сумма сборки KEmulator не совпала"
 }

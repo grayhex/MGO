@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { HealthStatus, SessionStatus, SymbianStatus, SystemStatus } from '@mgo/protocol';
 import { api } from '../api';
 import { t } from '../i18n';
+import { KemulatorUpdatePanel } from './KemulatorUpdatePanel';
 import { SystemChecks } from './SettingsForms';
 
 const bytes = (n: number) => n >= 1073741824 ? `${(n / 1073741824).toFixed(1)} GB` : `${(n / 1048576).toFixed(1)} MB`;
@@ -39,7 +40,7 @@ export function SystemDashboard({ toast }: { toast: (kind: 'info' | 'error', tex
     </div>
     <div className="system-engines">
       <article><h3>MGO <span className="badge prod">{t('Online')}</span></h3><code>{system?.version ?? '—'}</code><p>{m?.platform} · Node {m?.nodeVersion}</p><p className="small">{location.protocol === 'https:' ? t('HTTPS connection') : t('HTTP connection — enable HTTPS at the gateway')}</p></article>
-      <article><h3>KEmulator <span className={`badge ${health?.ok ? 'prod' : 'danger'}`}>{t(health?.ok ? 'Ready' : 'Unavailable')}</span></h3><code>{health?.kemulator.commit?.slice(0,12) ?? '—'}</code><p>Java {health?.java.version ?? '—'}</p></article>
+      <article><h3>KEmulator <span className={`badge ${health?.ok ? 'prod' : 'danger'}`}>{t(health?.ok ? 'Ready' : 'Unavailable')}</span></h3><code title={health?.kemulator.commit ?? undefined}>{health?.kemulator.version ? `v${health.kemulator.version}` : '—'}</code><p>Java {health?.java.version ?? '—'}</p><KemulatorUpdatePanel onChanged={() => refresh.current()} /></article>
       <article><h3>EKA2L1 <span className={`badge ${symbian?.reachable ? 'prod' : 'danger'}`}>{t(symbian?.reachable ? symbian.busy ? 'Running' : 'Ready' : 'Unavailable')}</span></h3><code>{symbian?.emulator ?? '—'}</code><p>{symbian?.firmware.devices.length ?? 0} {t('Installed devices')}</p>{symbian?.metrics && <p>CPU {symbian.metrics.cpuPercent == null ? '—' : `${symbian.metrics.cpuPercent.toFixed(1)}%`} · {bytes(symbian.metrics.memoryBytes)}{symbian.metrics.memoryLimitBytes ? ` / ${bytes(symbian.metrics.memoryLimitBytes)}` : ''}</p>}{symbian?.audioDiagnostics && <p className={symbian.audioDiagnostics.ready ? 'muted' : 'note err'}>PulseAudio {symbian.audioDiagnostics.version ?? ''} · {symbian.audioDiagnostics.ready ? t('Ready') : symbian.audioDiagnostics.error} · {bytes(symbian.audioDiagnostics.bytes)} PCM</p>}<a href="/api/symbian/diagnostics" download>{t('Download Symbian diagnostics')}</a></article>
     </div>
     {sessions.map(s => <article className="system-session" key={s.id}><strong>{s.gameId}</strong><span>{s.backend} · {s.device ?? '—'} · {s.width}×{s.height}</span><span>{s.fps.toFixed(1)} FPS · {bytes(s.audioBytes)} PCM</span><a href={`/api/sessions/${s.id}/diagnostics`} download>{t('Diagnostics')}</a></article>)}

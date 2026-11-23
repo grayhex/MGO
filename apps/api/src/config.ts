@@ -119,3 +119,12 @@ export function readKemCommit(kemDir: string): string | null {
     return null;
   }
 }
+
+/** Human-readable upstream version. Older MGO packages only shipped KEM_COMMIT. */
+export function readKemVersion(kemDir: string): string | null {
+  try {
+    const version = readFileSync(path.join(kemDir, 'KEM_VERSION'), 'utf8').trim();
+    if (/^\d+\.\d+(?:\.\d+)?$/.test(version)) return version;
+  } catch { /* older build */ }
+  return readKemCommit(kemDir) === '9ec1005af5448bca63a420e1dfa884ef53842d0f' ? '2.22' : null;
+}

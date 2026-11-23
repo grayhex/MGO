@@ -38,8 +38,9 @@ try {
   await p.getByLabel('Font size medium').fill('30');
   await p.getByLabel('Font size small').fill('20');
   await p.getByLabel('Font size large').fill('40');
+  await p.getByText('Preload resources', { exact: true }).click();
   await p.getByText('Tell the game the phone has a touch screen', { exact: true }).click();
-  await wait(async () => { const g = (await (await fetch(base + '/api/games')).json()).find((x) => x.id === props.id); return g.settings.emulation?.locale === 'ru-RU' && g.settings.emulation?.pointerEvents === false; }, 'options saved for the game');
+  await wait(async () => { const g = (await (await fetch(base + '/api/games')).json()).find((x) => x.id === props.id); return g.settings.emulation?.locale === 'ru-RU' && g.settings.emulation?.pointerEvents === false && g.settings.emulation?.preloadResources === true; }, 'options saved for the game');
   await p.locator('.ctrl-col').getByRole('button', { name: 'Start', exact: true }).click();
   await wait(async () => { const s = await running(); return s && (await (await fetch(base + '/api/sessions/' + s.id)).json()).logTail.some((l) => /PROPS locale=ru-RU pointer=false/.test(l)); }, 'the game sees the options');
   for (const s of await (await fetch(base + '/api/sessions')).json()) await fetch(base + '/api/sessions/' + s.id, { method: 'DELETE' });

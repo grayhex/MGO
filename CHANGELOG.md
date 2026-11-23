@@ -6,6 +6,7 @@ Formatted after [Keep a Changelog](https://keepachangelog.com/); versions follow
 ## [Unreleased]
 
 ### Added
+- Settings → System can check, install and restore KEmulator builds with the MGO Bridge. Java ME compatibility options include resource preloading.
 - Native resolution labels in the library list and tiles, with colours for common sizes.
 - Force 30/60 FPS in the Java ME session panel. KEmulator applies the drawing limit when the game starts. The toolbar now labels the screenshot, FPS, copy, rotate and fullscreen tools.
 - **Sign out** (sidebar, when the server asks for a token) and `POST /api/auth/logout`.
@@ -13,6 +14,7 @@ Formatted after [Keep a Changelog](https://keepachangelog.com/); versions follow
 - The gateway compresses text (UI scripts and styles, JSON) with gzip; a page that fails to draw shows a recovery page instead of a blank screen; an address that is not a page goes to the library.
 
 ### Changed
+- KEmulator nnmod v2.22.1 with upstream fixes for the FPS limiter, WAV playback and 3D. Status displays the emulator release version and keeps the JVM version separate.
 - Platform tags are a small drawing and a word in the platform's colour (library, filter, phones, settings, wizard); screen size and firmware state are chips with an icon. The big and small picture badges and the thumbnail of the current game in the sidebar are gone.
 - Lights Out has one *Options* button (exit, fullscreen, on-screen keypad) anchored to the top-right corner of the screen, also in fullscreen.
 - The gamepad no longer pops up "Held: ..." in the Controls panel (the on-screen keypad shows what is held); the player is not re-drawn on every button press any more.

@@ -161,7 +161,7 @@ npm start          # http://127.0.0.1:8080
 | `runtime/` | сборка KEmulator и патчи |
 | `packaging/`, `ct/`, `install/` | релиз, команда `mgo`, установка Proxmox VE |
 
-Подробнее: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). KEmulator nnmod v2.22 (коммит `9ec1005`) собирается из исходников с небольшими патчами ([docs/BRIDGE.md](docs/BRIDGE.md)); его код в репозиторий не входит.
+Подробнее: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). KEmulator nnmod v2.22.1 (коммит `02d5822`) собирается из исходников с небольшими патчами ([docs/BRIDGE.md](docs/BRIDGE.md)); его код в репозиторий не входит.
 
 ## Безопасность
 

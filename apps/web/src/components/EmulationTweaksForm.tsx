@@ -43,6 +43,10 @@ export function EmulationTweaksForm({ value, onChange, disabled }: { value: Emul
       </div>
       <Switch checked={value.pointerEvents ?? EMULATION_DEFAULTS.pointerEvents} onChange={(v) => set({ pointerEvents: v === EMULATION_DEFAULTS.pointerEvents ? undefined : v })}>{translateUI('Tell the game the phone has a touch screen')}</Switch>
       <Switch checked={value.startAppOnResume ?? EMULATION_DEFAULTS.startAppOnResume} onChange={(v) => set({ startAppOnResume: v === EMULATION_DEFAULTS.startAppOnResume ? undefined : v })}>{translateUI('Call pauseApp and startApp when the game is paused and resumed')}</Switch>
+      <div className="field">
+        <Switch checked={value.preloadResources ?? false} onChange={on => set({ preloadResources: on || undefined })}>{translateUI('Preload resources')}</Switch>
+        <p className="muted small">{translateUI('KEmulator v2.22.1 and later. Uses more memory to load game resources at startup.')}</p>
+      </div>
       <div className="btn-row"><button className="btn ghost sm" disabled={empty} onClick={() => onChange({})}>{translateUI('Back to the emulator defaults')}</button><Hint text="Applied when the game is started the next time." /></div>
     </fieldset>
   );

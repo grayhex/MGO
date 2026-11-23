@@ -73,9 +73,10 @@ jobs:
           git -C kem-src archive --prefix="kemulator-$commit/" -o "$source_archive" HEAD
           test -s "$source_archive"
           tar -tzf "$source_archive" > /dev/null
+          node tools/release/pack-kemulator.mjs runtime/build/kemulator dist-release
           cp compose.yaml compose.egress.yaml dist-release/
           cp .env.example dist-release/env.example   # GitHub renames release assets that start with a dot
-          (cd dist-release && sha256sum mgo-kemulator-source-*.tar.gz compose.yaml compose.egress.yaml env.example >> SHA256SUMS && cat SHA256SUMS)
+          (cd dist-release && sha256sum mgo-kemulator-source-*.tar.gz mgo-kemulator-v*-bridge1-linux-amd64.zip compose.yaml compose.egress.yaml env.example >> SHA256SUMS && cat SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
           name: mgo-${{ steps.v.outputs.version }}

@@ -35,7 +35,8 @@ describe('MGO API against a real KEmulator (Bridge)', () => {
   it('health reports the pinned emulator', async () => {
     const h = await json(await api('/api/health'));
     assert.equal(h.ok, true);
-    assert.equal(h.kemulator.commit, '9ec1005af5448bca63a420e1dfa884ef53842d0f');
+    assert.equal(h.kemulator.version, '2.22.1');
+    assert.equal(h.kemulator.commit, '02d5822d2dad15759666872e76249c0f77703ca1');
     assert.match(h.java.version, /^2\d/);
   });
 

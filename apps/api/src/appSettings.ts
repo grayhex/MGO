@@ -42,6 +42,7 @@ export function renderMidletsIni(i: AppSettingsInput): string {
   kv.push(['ApplySpeedToSleep', 'true']);
   const t = i.tweaks;
   if (t?.frameRate !== undefined) kv.push(['FrameRate', String(t.frameRate)]);
+  if (t?.preloadResources !== undefined) kv.push(['PreloadResources', String(t.preloadResources)]);
   if (t?.startAppOnResume !== undefined) kv.push(['StartAppOnResume', String(t.startAppOnResume)]);
   if (t?.locale !== undefined) kv.push(['MIDPLocale', t.locale]);
   if (t?.pointerEvents !== undefined) kv.push(['HasPointerEvents', String(t.pointerEvents)]);

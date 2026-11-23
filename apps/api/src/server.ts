@@ -1,3 +1,4 @@
+import { KemulatorUpdates } from './kemulator/updates.js';
 import { NgageCatalog } from './ngageCatalog.js';
 import { isGenre, isPlatform, platformOfFile, resolvePhone } from '@mgo/protocol';
 import { emulatedDevice, javaPreset, nativePhonePlan, type DevicePreset } from '@mgo/protocol';
@@ -14,7 +15,7 @@ import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import type { ClientEvent, GameSettings, HealthStatus } from '@mgo/protocol';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
-import { type Config, loadConfig, readKemCommit } from './config.js';
+import { type Config, loadConfig, readKemCommit, readKemVersion } from './config.js';
 import { findPreset, loadDevicePresets, recommendPreset } from './devices.js';
 import { UploadError } from './jar.js';
 import { analyzeJar, emulatorClassSet, readAttributes } from './analysis/analyze.js';
@@ -73,6 +74,8 @@ export interface App {
 
 export async function buildApp(cfg: Config = loadConfig()): Promise<App> {
   const app = Fastify({ logger: { level: cfg.logLevel }, bodyLimit: 64 * 1024, trustProxy: process.env.TRUST_PROXY === '1' });
+  cfg = { ...cfg };
+  const kemulatorUpdates = new KemulatorUpdates(cfg);
   const library = new Library(cfg.dataDir);
   const ngageCatalog = new NgageCatalog(library, cfg.dataDir);
   library.enrich = game => ngageCatalog.enrich(game);
@@ -96,7 +99,7 @@ export async function buildApp(cfg: Config = loadConfig()): Promise<App> {
       }
     },
   });
-  let emuClasses: Set<string> | null = null;
+  let emuClasses: { dir: string; classes: Set<string> } | null = null;
   const devicePresets = () => {
     try {
       return loadDevicePresets(cfg.kemDir);
@@ -200,7 +203,7 @@ export async function buildApp(cfg: Config = loadConfig()): Promise<App> {
   app.get('/api/health', async (): Promise<HealthStatus> => ({
     ok: !!java && existsSync(cfg.adapterBin) && existsSync(path.join(cfg.kemDir, 'KEmulator.jar')),
     version: VERSION,
-    kemulator: { commit: readKemCommit(cfg.kemDir), jarPresent: existsSync(path.join(cfg.kemDir, 'KEmulator.jar')) },
+    kemulator: { version: readKemVersion(cfg.kemDir), commit: readKemCommit(cfg.kemDir), jarPresent: existsSync(path.join(cfg.kemDir, 'KEmulator.jar')) },
     adapter: { present: existsSync(cfg.adapterBin) },
     java: { present: !!java, version: java },
     activeSessions: sessions.active().length,
@@ -208,6 +211,14 @@ export async function buildApp(cfg: Config = loadConfig()): Promise<App> {
     auth: cfg.authToken ? 'token' : 'none',
     dataDir: cfg.authToken ? '' : cfg.dataDir,
   }));
+
+  app.get('/api/kemulator/runtime', async () => kemulatorUpdates.status());
+  app.post('/api/kemulator/check-update', async () => ({ release: await kemulatorUpdates.check() }));
+  app.post<{ Body: { version?: string; sha256?: string } }>('/api/kemulator/install-update', async req => {
+    if (typeof req.body?.version !== 'string' || typeof req.body.sha256 !== 'string') throw new UploadError('bad_request', 'Choose a KEmulator release first');
+    return kemulatorUpdates.install(req.body.version, req.body.sha256);
+  });
+  app.post('/api/kemulator/restore-bundled', async () => kemulatorUpdates.restoreBundled());
 
   app.post('/api/auth/login', async (req, reply) => {
     if (!cfg.authToken || !authCookie) return { ok: true };
@@ -347,10 +358,10 @@ export async function buildApp(cfg: Config = loadConfig()): Promise<App> {
     if (!g) throw new UploadError('not_found', 'Game not found', 404);
     if (g.platform && g.platform !== 'j2me') throw new UploadError('not_applicable', 'Java analysis applies to J2ME games only', 404);
     const p = library.paths(g.id);
-    emuClasses ??= emulatorClassSet(path.join(cfg.kemDir, 'KEmulator.jar'));
+    if (emuClasses?.dir !== cfg.kemDir) emuClasses = { dir: cfg.kemDir, classes: emulatorClassSet(path.join(cfg.kemDir, 'KEmulator.jar')) };
     const jar = readFileSync(p.jar);
     const attrs = readAttributes(jar, p.jad ? readFileSync(p.jad) : undefined);
-    const analysis = analyzeJar(jar, attrs, emuClasses, `${g.name}`);
+    const analysis = analyzeJar(jar, attrs, emuClasses.classes, `${g.name}`);
     let rec = null;
     try {
       rec = recommendPreset(devicePresets().presets, { family: analysis.platform.family, screens: analysis.screenHints });
