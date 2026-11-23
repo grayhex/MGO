@@ -41,7 +41,6 @@ jobs:
         id: v
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag || '' }}
-          IS_PRERELEASE: ${{ github.event.release.prerelease || 'false' }}
           PREVIEW_VERSION: ${{ inputs.version || '0.0.0-dev' }}
         run: |
           if [[ -n "$RELEASE_TAG" ]]; then
@@ -103,6 +102,8 @@ jobs:
         id: v
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag || '' }}
+          IS_PRERELEASE: ${{ github.event.release.prerelease || 'false' }}
+          GH_TOKEN: ${{ github.token }}
           PREVIEW_VERSION: ${{ inputs.version || '0.0.0-dev' }}
         run: |
           if [[ -n "$RELEASE_TAG" ]]; then
@@ -113,6 +114,9 @@ jobs:
             echo "publish=false" >> "$GITHUB_OUTPUT"
           fi
           [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.]+)?$ ]] || { echo "bad version: $v"; exit 1; }
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && -n "$RELEASE_TAG" ]]; then
+            IS_PRERELEASE=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq .isPrerelease)
+          fi
           owner="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           tags_app="ghcr.io/$owner/mgo:$v"; tags_gw="ghcr.io/$owner/mgo-gateway:$v"
           # official = no pre-release suffix in the version and the GitHub Release is not marked as a pre-release

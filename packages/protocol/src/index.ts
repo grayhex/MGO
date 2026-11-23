@@ -86,6 +86,8 @@ export interface GameMeta {
   lastPlayedAt: string | null;
   /** Time this version has been running, in seconds (counted while its session runs). */
   playSeconds?: number;
+  /** Known target display size, independent of the selected emulator profile. */
+  nativeResolution?: { width: number; height: number; source: string };
   /** Other uploaded versions of the same (vendor, name). */
   groupKey: string;
   settings: GameSettings;
@@ -380,6 +382,8 @@ export interface StartFailure {
 }
 
 export interface SessionStatus {
+  /** KEmulator drawing limit applied at launch. */
+  frameRateLimit?: number;
   /** Which emulator runs the game. */
   backend?: EmulatorBackend;
   /** Set when a Symbian / N-Gage start failed: the facts and the explanation. */

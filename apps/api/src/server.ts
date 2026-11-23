@@ -248,6 +248,7 @@ export async function buildApp(cfg: Config = loadConfig()): Promise<App> {
   app.post('/api/games', async (req, reply) => {
     if (!req.isMultipart()) throw new UploadError('bad_request', 'Expected multipart/form-data with a "jar" file');
     let jar: Buffer | null = null;
+    let jarName = '';
     let jad: Buffer | null = null;
     let pkg: { buf: Buffer; name: string } | null = null;
     let platformField: string | null = null;
@@ -270,7 +271,7 @@ export async function buildApp(cfg: Config = loadConfig()): Promise<App> {
       const buf = Buffer.concat(chunks);
       if (isPackage) { pkg = { buf, name: part.filename ?? name }; continue; }
       if (name.endsWith('.jad') || part.fieldname === 'jad') jad = buf;
-      else if (name.endsWith('.jar') || part.fieldname === 'jar' || part.fieldname === 'file') jar = buf;
+      else if (name.endsWith('.jar') || part.fieldname === 'jar' || part.fieldname === 'file') { jar = buf; jarName = part.filename ?? ''; }
     }
     if (pkg && !jar) {
       // a game for EKA2L1: stored only; the platform comes from the file name, a .zip (N-Gage 1.0 card) needs the user's word
@@ -287,7 +288,7 @@ export async function buildApp(cfg: Config = loadConfig()): Promise<App> {
         ? 'A .jad descriptor alone cannot be played: upload the .jar (optionally together with its .jad).'
         : 'No .jar file in the upload');
     }
-    const { game, duplicate } = library.add(jar, jad, cfg.libraryQuotaBytes, { origin: 'upload', defaults: gameDefaults(settings.get().phone, settings.explicitPhone()) });
+    const { game, duplicate } = library.add(jar, jad, cfg.libraryQuotaBytes, { origin: 'upload', fileName: jarName, defaults: gameDefaults(settings.get().phone, settings.explicitPhone()) });
     return reply.code(duplicate ? 200 : 201).send({ game, duplicate });
   });
 

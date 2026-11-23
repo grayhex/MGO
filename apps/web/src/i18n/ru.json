@@ -868,5 +868,16 @@
   "Details for a bug report": "Подробности для отчёта об ошибке",
   "on": "вкл",
   "off": "выкл",
-  "Symbian": "Symbian"
+  "Symbian": "Symbian",
+  "Native resolution unknown": "Родное разрешение неизвестно",
+  "Native resolution: {source}": "Родное разрешение · {source}",
+  "file name": "имя файла",
+  "N-Gage display": "экран N-Gage",
+  "Force 30 FPS": "Лимит 30 FPS",
+  "Force 60 FPS": "Лимит 60 FPS",
+  "Restart to apply the frame limit.": "Перезапустите игру, чтобы применить лимит кадров.",
+  "Rotate": "Повернуть",
+  "Screenshot": "Снимок",
+  "Copy": "Копировать",
+  "Default": "По умолчанию"
 }

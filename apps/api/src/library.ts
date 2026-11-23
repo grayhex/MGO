@@ -5,6 +5,8 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { emulatedDevice, PHONE_COMPATIBILITY, isPlatform, nativeGameDefaults, sisFormatOf, skinSupportsPlatform, type PackageFormat, type Platform, DEFAULT_SETTINGS, EMULATION_LIMITS, type EmulationTweaks, type GameInfoSummary, type GameMeta, type GameSettings, KEY_LAYOUTS, SCREEN_PRESETS, type LayoutId, type MetaStatus } from '@mgo/protocol';
 import { parseJad, parseJar, sanitizeText, UploadError } from './jar.js';
+import { readAttributes } from './analysis/analyze.js';
+import { readScreenHints, type ScreenHint } from './analysis/screenHints.js';
 import { Classifications } from './classification.js';
 import { cleanTitle, cleanVendor } from './title.js';
 
@@ -30,6 +32,7 @@ interface Row {
   platform?: string;
   package_ext?: string | null;
   package_format?: string | null;
+  native_resolution_json?: string | null;
 }
 
 export interface SourceRow {
@@ -47,6 +50,7 @@ export interface SourceRow {
 
 export interface AddOptions {
   origin?: 'upload' | 'import';
+  fileName?: string;
   /** Settings a new game starts with (the "default phone"); explicit MIDlet choices still win. */
   defaults?: Partial<GameSettings>;
 }
@@ -166,6 +170,7 @@ export class Library {
     `);
     this.migrate();
     this.classes = new Classifications(this.db);
+    this.fillNativeResolutions();
   }
 
   /**
@@ -179,6 +184,7 @@ export class Library {
     if (!cols.includes('package_ext')) this.db.exec('ALTER TABLE games ADD COLUMN package_ext TEXT');
     if (!cols.includes('package_format')) this.db.exec('ALTER TABLE games ADD COLUMN package_format TEXT');
     if (!cols.includes('play_seconds')) this.db.exec('ALTER TABLE games ADD COLUMN play_seconds INTEGER NOT NULL DEFAULT 0');
+    if (!cols.includes('native_resolution_json')) this.db.exec('ALTER TABLE games ADD COLUMN native_resolution_json TEXT');
     this.dropStaleNativeSkins();
     this.fillPackageFormats();
     this.db.exec(`
@@ -293,6 +299,41 @@ export class Library {
     this.db.close();
   }
 
+  /** Cache the result for games already on disk, including games with no usable hint. */
+  private fillNativeResolutions(): void {
+    const rows = this.db.prepare(`
+      SELECT id, name, platform,
+        (SELECT rel_path FROM sources WHERE game_id = games.id ORDER BY missing, rel_path LIMIT 1) AS source_path
+      FROM games WHERE native_resolution_json IS NULL
+    `).all() as unknown as { id: string; name: string; platform: string; source_path: string | null }[];
+    if (!rows.length) return;
+    const update = this.db.prepare('UPDATE games SET native_resolution_json = ? WHERE id = ?');
+    this.db.exec('BEGIN');
+    try {
+      for (const row of rows) {
+        const name = row.source_path ? path.basename(row.source_path) : row.name;
+        let resolution = this.packageResolution(row.platform, name);
+        if (row.platform === 'j2me') {
+          const files = this.paths(row.id);
+          try {
+            const attrs = readAttributes(readFileSync(files.jar), files.jad ? readFileSync(files.jad) : undefined);
+            resolution = readScreenHints(attrs, name)[0] ?? resolution;
+          } catch { /* keep the filename hint if the stored package cannot be read */ }
+        }
+        update.run(JSON.stringify(resolution), row.id);
+      }
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  private packageResolution(platform: string, name: string): ScreenHint | null {
+    if (platform === 'ngage') return { width: 176, height: 208, source: 'N-Gage display' };
+    return readScreenHints({}, name)[0] ?? null;
+  }
+
   private toMeta(r: Row): GameMeta {
     return {
       id: r.id,
@@ -314,6 +355,7 @@ export class Library {
       warnings: JSON.parse(r.warnings_json),
       origin: r.origin === 'import' ? 'import' : 'upload',
       platform: isPlatform(r.platform) ? r.platform : 'j2me',
+      ...(r.native_resolution_json && r.native_resolution_json !== 'null' ? { nativeResolution: JSON.parse(r.native_resolution_json) } : {}),
       ...(r.package_format ? { packageFormat: r.package_format as PackageFormat } : {}),
     };
   }
@@ -440,9 +482,9 @@ export class Library {
     this.db
       .prepare(
         `INSERT INTO games (id, sha256, name, vendor, version, group_key, midlets_json, class_version, size_bytes, has_icon, has_jad,
-          favorite, created_at, last_played_at, settings_json, warnings_json, origin, platform, package_ext, package_format) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,?,?,?,?)`,
+          favorite, created_at, last_played_at, settings_json, warnings_json, origin, platform, package_ext, package_format, native_resolution_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,?,?,?,?,?)`,
       )
-      .run(id, sha, name, vendor, '', groupKey, '[]', 0, bytes.length, 0, 0, new Date().toISOString(), JSON.stringify(settings), '[]', opts.origin ?? 'upload', platform, ext, ext === 'sis' || ext === 'sisx' ? sisFormatOf(bytes.subarray(0, 8)) : null);
+      .run(id, sha, name, vendor, '', groupKey, '[]', 0, bytes.length, 0, 0, new Date().toISOString(), JSON.stringify(settings), '[]', opts.origin ?? 'upload', platform, ext, ext === 'sis' || ext === 'sisx' ? sisFormatOf(bytes.subarray(0, 8)) : null, JSON.stringify(this.packageResolution(platform, fileName)));
     return { game: this.get(id)!, duplicate: false };
   }
 
@@ -470,13 +512,13 @@ export class Library {
     this.db
       .prepare(
         `INSERT INTO games (id, sha256, name, vendor, version, group_key, midlets_json, class_version, size_bytes, has_icon, has_jad,
-          favorite, created_at, last_played_at, settings_json, warnings_json, origin) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,?)`,
+          favorite, created_at, last_played_at, settings_json, warnings_json, origin, native_resolution_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,?,?)`,
       )
       .run(
         id, sha, name, vendor, sanitizeText(info.version, 40), groupKey,
         JSON.stringify(info.midlets.map((m) => ({ name: sanitizeText(m.name), className: m.className }))),
         info.classVersion, jar.length, info.icon ? 1 : 0, jadBytes ? 1 : 0,
-        new Date().toISOString(), JSON.stringify(settings), JSON.stringify(info.warnings), opts.origin ?? 'upload',
+        new Date().toISOString(), JSON.stringify(settings), JSON.stringify(info.warnings), opts.origin ?? 'upload', JSON.stringify(readScreenHints(info.attributes, opts.fileName ?? name)[0] ?? null),
       );
     return { game: this.get(id)!, duplicate: false };
   }

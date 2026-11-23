@@ -6,6 +6,8 @@ Formatted after [Keep a Changelog](https://keepachangelog.com/); versions follow
 ## [Unreleased]
 
 ### Added
+- Native resolution labels in the library list and tiles, with colours for common sizes.
+- Force 30/60 FPS in the Java ME session panel. KEmulator applies the drawing limit when the game starts. The toolbar now labels the screenshot, FPS, copy, rotate and fullscreen tools.
 - **Sign out** (sidebar, when the server asks for a token) and `POST /api/auth/logout`.
 - **Token guessing is slowed down**: ten wrong tokens a minute from one address, then `429` with `Retry-After` (a valid token never counts).
 - The gateway compresses text (UI scripts and styles, JSON) with gzip; a page that fails to draw shows a recovery page instead of a blank screen; an address that is not a page goes to the library.

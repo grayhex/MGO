@@ -101,7 +101,7 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
         </div>
       </header>
       <main className="content" id="main">
-        <div className={`container${inPlayer ? ' wide' : ''}`}>{children}</div>
+        <div className={`container${inPlayer ? ' wide' : path === '/' ? ' library-container' : ''}`}>{children}</div>
       </main>
     </div>
   );

@@ -37,6 +37,14 @@ function playTime(seconds: number): string | null {
   return t.h > 0 ? translateUI('{h} h {m} min', { h: t.h, m: String(t.m).padStart(2, '0') }) : translateUI('{m} min', { m: t.m });
 }
 
+function ResolutionTag({ resolution }: { resolution: GameMeta['nativeResolution'] }) {
+  if (!resolution) return <span className="resolution-tag muted" title={translateUI('Native resolution unknown')} aria-label={translateUI('Native resolution unknown')}>—</span>;
+  const label = `${resolution.width}×${resolution.height}`;
+  const tone = { '240×320': 'blue', '176×208': 'green', '176×220': 'green', '128×128': 'red', '128×160': 'red' }[label] ?? 'neutral';
+  const source = resolution.source.startsWith('attribute ') ? resolution.source.slice(10) : translateUI(resolution.source);
+  return <span className={`resolution-tag ${tone}`} title={translateUI('Native resolution: {source}', { source })}>{label}</span>;
+}
+
 function Cover({ g }: { g: GameMeta }) {
   const [broken, setBroken] = useState(false);
   const art = !!(g.ngageInfo?.hasCover || g.info?.hasCover) && !broken; // a MobyGames cover, served by this server
@@ -251,7 +259,7 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
 
       {view === 'list' && groups.length > 0 && (
         <div className="lib-table-head" aria-hidden>
-          <span /><span>{translateUI("Title")}</span><span className="c-vendor">{translateUI("Publisher")}</span><span className="c-genre">{translateUI("Genre")}</span><span className="c-version">{translateUI("Version")}</span><span className="c-time">{translateUI("Time")}</span><span />
+          <span /><span>{translateUI("Title")}</span><span className="c-vendor">{translateUI("Publisher")}</span><span className="c-genre">{translateUI("Genre")}</span><span className="c-version">{translateUI("Version")}</span><span className="c-resolution">{translateUI("Resolution")}</span><span className="c-time">{translateUI("Time")}</span><span />
         </div>
       )}
       <div className={`lib-grid${view === 'list' ? ' list' : ''}`} data-view={view}>
@@ -303,6 +311,7 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
               <span className="cell c-vendor muted" title={sel.vendor}>{translateUI(sel.info?.year ? `${sel.vendor} · ${sel.info.year}` : sel.vendor)}</span>
               <span className="cell c-genre">{genreButton}</span>
               <span className="cell c-version">{versionControl}</span>
+              <span className="cell c-resolution"><ResolutionTag resolution={sel.nativeResolution} /></span>
               <span className="cell c-time">{time}</span>
               <span className="cell actions">{actions}</span>
             </article>
@@ -315,7 +324,7 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
                   <h3>{sel.name}</h3>
                   <p className="muted">{translateUI(sel.info?.year ? `${sel.vendor} · ${sel.info.year}` : sel.vendor)}</p>
                   {sel.ngageInfo && <p className="ngage-card-facts">{sel.ngageInfo.publisher} · {sel.ngageInfo.year}{sel.ngageInfo.rating !== null ? ` · ${sel.ngageInfo.rating}%` : ''}</p>}
-                  <p>{time}</p>
+                  <p className="card-resolution"><ResolutionTag resolution={sel.nativeResolution} />{time}</p>
                 </div>
               </button>
               {sel.ngageInfo && <div className="ngage-attribution"><span>{sel.ngageInfo.multiplayer ?? sel.ngageInfo.developer}</span><a href={sel.ngageInfo.sourceUrl} target="_blank" rel="noreferrer">All About Symbian ↗</a></div>}

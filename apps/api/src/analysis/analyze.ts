@@ -4,6 +4,9 @@ import { unzipSync } from 'fflate';
 import { parseAttributes } from '../jar.js';
 import { API_FAMILIES, CHECKED_PREFIXES } from './apis.js';
 import { ClassFormatError, readConstantPool } from './classfile.js';
+import { readScreenHints, type ScreenHint } from './screenHints.js';
+
+export type { ScreenHint } from './screenHints.js';
 
 export type Level = 'info' | 'warn' | 'error';
 export type PlatformFamily = 'nokia' | 'sonyericsson' | 'siemens' | 'motorola' | 'samsung' | 'lg' | 'doja' | 'jphone' | 'generic';
@@ -26,12 +29,6 @@ export interface Finding {
   level: Level;
   code: string;
   message: string;
-}
-
-export interface ScreenHint {
-  width: number;
-  height: number;
-  source: string;
 }
 
 export interface JarAnalysis {
@@ -77,14 +74,6 @@ function familyOf(name: string) {
 
 function inChecked(name: string): boolean {
   return CHECKED_PREFIXES.some((p) => name.startsWith(p));
-}
-
-function screenFromText(text: string, source: string, out: ScreenHint[]) {
-  const m = /(\d{2,4})\s*[x,×]\s*(\d{2,4})/.exec(text);
-  if (m) {
-    const w = Number(m[1]), h = Number(m[2]);
-    if (w >= 64 && w <= 800 && h >= 64 && h <= 800) out.push({ width: w, height: h, source });
-  }
 }
 
 export function analyzeJar(jar: Uint8Array, attrs: Record<string, string>, emulatorClasses: Set<string>, jarName = ''): JarAnalysis {
@@ -171,9 +160,7 @@ export function analyzeJar(jar: Uint8Array, attrs: Record<string, string>, emula
   const family: PlatformFamily = best ? (best[0] as PlatformFamily) : 'generic';
 
   // ---- screen hints
-  const screenHints: ScreenHint[] = [];
-  for (const k of ['Nokia-MIDlet-Original-Display-Size', 'SEMC-Screen-Size', 'MIDxlet-ScreenSize', 'Nokia-MIDlet-Display-Size']) if (attrs[k]) screenFromText(attrs[k]!, `attribute ${k}`, screenHints);
-  screenFromText(path.basename(jarName), 'file name', screenHints);
+  const screenHints = readScreenHints(attrs, path.basename(jarName));
 
   // ---- findings
   const findings: Finding[] = [];

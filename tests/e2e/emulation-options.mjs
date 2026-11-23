@@ -54,8 +54,18 @@ try {
   // ---- game speed ----
   const game = await upload('tests/fixtures/labgames/build/kemgame.jar');
   await p.goto(base + '/play/' + game.id);
+  const limits = p.getByRole('radiogroup', { name: 'Frame limit (fps)' });
+  await limits.getByRole('radio', { name: 'Force 30 FPS' }).click();
   await p.locator('.ctrl-col').getByRole('button', { name: 'Start', exact: true }).click();
   await wait(async () => (await running())?.framesReceived > 5, 'game drawing');
+  const first = await running();
+  assert.equal(first.frameRateLimit, 30);
+  await limits.getByRole('radio', { name: 'Force 60 FPS' }).click();
+  await p.getByText('Restart to apply the frame limit.').waitFor();
+  assert.equal((await running()).id, first.id, 'choosing a limit keeps the game running');
+  await p.locator('.ctrl-col').getByRole('button', { name: 'Restart', exact: true }).click();
+  await wait(async () => { const s = await running(); return s?.id !== first.id && s?.frameRateLimit === 60 && s.framesReceived > 5; }, '60 FPS applied on restart');
+  assert.match(readFileSync(path.join(dir, 'saves', 'default', game.id, 'midlets.ini'), 'utf8'), /FrameRate=60/);
   await p.getByRole('radio', { name: '×0.5', exact: true }).click();
   await wait(async () => (await running()).speed === -50, 'half speed');
   await wait(async () => (await p.getByRole('radio', { name: '×0.5', exact: true }).getAttribute('aria-checked')) === 'true', 'the control shows the speed');
