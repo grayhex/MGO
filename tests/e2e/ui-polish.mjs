@@ -2,7 +2,7 @@
 // player, the list view as an even table, renaming a game. Real API + Chromium. Run with `node --import tsx`.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -12,6 +12,7 @@ const { makeJar } = await import(pathToFileURL(path.join(process.cwd(), 'apps/ap
 const dir = mkdtempSync(path.join(tmpdir(), 'mgo-pol-'));
 const port = 22700 + Math.floor(Math.random() * 90);
 const base = `http://127.0.0.1:${port}`;
+mkdirSync('test-results', { recursive: true });
 const server = spawn('node', ['apps/api/dist/server.js'], { env: { ...process.env, PORT: String(port), DATA_DIR: dir, HOST: '127.0.0.1', LOG_LEVEL: 'warn' }, stdio: ['ignore', 'inherit', 'inherit'] });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const wait = async (fn, what) => { for (let i = 0; i < 200; i++) { try { if (await fn()) return; } catch {} await sleep(100); } throw Error(`timeout: ${what}`); };
@@ -50,6 +51,30 @@ try {
     assert.equal(await p.locator('header.header').isVisible(), false, `no top bar on ${route}`);
   }
   console.log('✔ no top bar; language switch on the right; search in the library toolbar');
+
+  await p.goto(base + '/');
+  await p.locator('.game-card').first().waitFor();
+  // Theme selection follows the system until explicitly changed and persists across navigation and reload.
+  const theme = p.getByRole('combobox', { name: 'Theme', exact: true });
+  await p.emulateMedia({ colorScheme: 'light' });
+  await p.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+  const palette = () => p.locator('body').evaluate(el => getComputedStyle(el).backgroundColor);
+  assert.equal(await palette(), 'rgb(248, 250, 252)');
+  await p.screenshot({ path: 'test-results/mgo-verdana-library-light.png', animations: 'disabled' });
+  await theme.selectOption('dark');
+  await p.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+  assert.equal(await palette(), 'rgb(15, 23, 42)');
+  await p.reload();
+  await theme.waitFor();
+  assert.equal(await theme.inputValue(), 'dark');
+  await p.locator('.game-card').first().waitFor();
+  await p.screenshot({ path: 'test-results/mgo-verdana-library-dark.png', animations: 'disabled' });
+  await theme.selectOption('system');
+  await p.emulateMedia({ colorScheme: 'dark' });
+  await p.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+  await p.emulateMedia({ colorScheme: 'light' });
+  await p.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+  console.log('✔ light and dark themes follow the system or persist a manual choice');
 
   // ---- the list is a table: every row has the same columns ----
   await p.goto(base + '/');
@@ -105,6 +130,28 @@ try {
   await mob.locator('.header .seg.lang').waitFor({ state: 'visible' });
   assert.ok(await mob.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no horizontal scroll');
   console.log('✔ on a phone screen the slim bar with the menu stays');
+
+  await mob.setViewportSize({ width: 320, height: 720 });
+  for (const locale of ['EN', 'RU']) {
+    await mob.goto(base + '/settings');
+    await mob.locator('.header .lang').getByRole('radio', { name: locale }).click();
+    await mob.locator('.header .theme-select select').selectOption(locale === 'RU' ? 'dark' : 'light');
+    const tabs = await mob.getByRole('tab').all();
+    for (const tab of tabs) {
+      await tab.click();
+      const problems = await mob.getByRole('tabpanel').evaluate(panel => {
+        const clipped = document.documentElement.scrollWidth > innerWidth + 1;
+        const overlap = [...panel.querySelectorAll('.field > .label-caps')].some(label => {
+          const field = label.nextElementSibling?.getBoundingClientRect();
+          const text = label.getBoundingClientRect();
+          return field && text.height > 0 && field.height > 0 && text.bottom > field.top + 1;
+        });
+        return { clipped, overlap };
+      });
+      assert.deepEqual(problems, { clipped: false, overlap: false }, `${locale}: ${await tab.textContent()}`);
+    }
+  }
+  console.log('✔ settings labels and fields fit at 320px in English and Russian');
 
   assert.deepEqual(errors, []);
   console.log('ui polish e2e OK');

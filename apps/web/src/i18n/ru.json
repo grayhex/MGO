@@ -1025,5 +1025,9 @@
   "Emulator screen": "Экран эмулятора",
   "Game resolution": "Разрешение игры",
   "Estimated from game frames": "Оценка по кадрам игры",
-  "The MIDlet class declared for this game is missing from the JAR. Upload a complete copy of the game with its matching JAD.": "В JAR отсутствует класс запуска MIDlet. Загрузите полную версию игры с подходящим файлом JAD."
+  "The MIDlet class declared for this game is missing from the JAR. Upload a complete copy of the game with its matching JAD.": "В JAR отсутствует класс запуска MIDlet. Загрузите полную версию игры с подходящим файлом JAD.",
+  "Theme": "Тема",
+  "System theme": "Авто",
+  "Light theme": "Светлая",
+  "Dark theme": "Тёмная"
 }

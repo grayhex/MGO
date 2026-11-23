@@ -1,12 +1,12 @@
 .lib-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: var(--s-xl); }
 .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
-.game-card { display: flex; flex-direction: column; overflow: hidden; background: var(--surface-elevated); border: 1px solid var(--outline); border-radius: var(--r-lg); box-shadow: var(--shadow-subtle); transition: box-shadow var(--t-normal) var(--ease), transform var(--t-normal) var(--ease), border-color var(--t-normal) var(--ease); }
+.game-card { display: flex; flex-direction: column; overflow: hidden; background: var(--surface-elevated); border: 1px solid var(--outline); border-radius: var(--r-sm); transition: box-shadow var(--t-normal) var(--ease), transform var(--t-normal) var(--ease), border-color var(--t-normal) var(--ease); }
 .game-card:hover { box-shadow: var(--shadow-raised); transform: translateY(-2px); border-color: var(--primary); }
 .card-main { all: unset; cursor: pointer; display: block; box-sizing: border-box; }
 .card-main:disabled { cursor: not-allowed; opacity: 0.6; }
 .card-main:focus-visible { outline: 2px solid var(--primary-focus); outline-offset: -2px; }
-.cover { aspect-ratio: 16 / 10; display: grid; place-items: center; background: linear-gradient(135deg, hsl(var(--hue) 70% 22%), hsl(calc(var(--hue) + 14) 80% 14%)); position: relative; overflow: hidden; }
-.cover::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 80% 0%, rgba(0, 229, 255, 0.18), transparent 60%); }
+.cover { aspect-ratio: 16 / 10; display: grid; place-items: center; background: linear-gradient(135deg, hsl(var(--hue) 28% 28%), hsl(calc(var(--hue) + 14) 32% 17%)); position: relative; overflow: hidden; }
+.cover::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 80% 0%, #ffffff14, transparent 60%); }
 .cover img { width: 64px; height: 64px; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35)); position: relative; z-index: 1; }
 .initials { font: 700 1.75rem/1 var(--mono); color: rgba(255, 255, 255, 0.92); letter-spacing: 0.04em; position: relative; z-index: 1; }
 .meta { padding: 12px 16px 4px; }
@@ -30,7 +30,7 @@
 .facts dt { color: var(--muted); } .facts dd { margin: 0; overflow-wrap: anywhere; }
 .menu-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
 .login { min-height: 100dvh; display: grid; grid-template-columns: 1fr 1fr; }
-.login-hero { background: radial-gradient(900px 480px at 20% 10%, rgba(0, 229, 255, 0.22), transparent 70%), var(--surface); border-right: 1px solid var(--outline); color: var(--fg); display: grid; align-content: center; padding: var(--s-4xl); gap: 16px; }
+.login-hero { background: var(--accent-tint); border-right: 1px solid var(--outline); color: var(--fg); display: grid; align-content: center; padding: clamp(24px, 7vw, 80px); gap: 16px; }
 .login-hero h1 { font-size: 3rem; line-height: 1; font-weight: 600; letter-spacing: -0.025em; }
 .login-hero p { max-width: 36ch; opacity: 0.9; }
 .login-side { display: grid; place-items: center; padding: var(--s-xl); background: var(--bg); }
@@ -77,12 +77,12 @@ button.genre-badge.unconfirmed { color: var(--muted); font-weight: 500; font-sty
 
 /* toolbar over the library: search, sort, state, filter, view */
 .lib-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: var(--s-lg); }
-.lib-search { flex: 1 1 240px; min-width: 180px; max-width: 420px; height: 32px; padding-left: 34px;
+.lib-search { flex: 1 1 240px; min-width: min(180px, 100%); max-width: 420px; min-height: 34px; padding-left: 34px;
   background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2398989d' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E") no-repeat 10px center; }
-.lib-toolbar .seg { height: 32px; }
+.lib-toolbar .seg { align-items: center; }
 .lib-toolbar .seg button { height: 24px; padding: 0 10px; }
 .page-head { align-items: center; margin-bottom: var(--s-lg); }
-.page-head .btn.sm { height: 30px; padding: 0 12px; }
+.page-head .btn.sm { min-height: 32px; }
 
 /* Keep the list readable at the actual content width, including the sidebar. */
 .container.library-container { max-width: 1700px; }
@@ -92,10 +92,10 @@ button.genre-badge.unconfirmed { color: var(--muted); font-weight: 500; font-sty
   padding: 2px 7px; border-radius: 5px; font-size: .72rem; font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.resolution-tag.blue { color: #9dcaff; background: #193457; }
-.resolution-tag.green { color: #a8e8b8; background: #183e2a; }
-.resolution-tag.red { color: #ffc2c5; background: #51282f; }
-.resolution-tag.neutral { color: #fff; background: #34373d; }
+.resolution-tag.blue { color: var(--resolution-blue); background: var(--resolution-blue-bg); }
+.resolution-tag.green { color: var(--resolution-green); background: var(--resolution-green-bg); }
+.resolution-tag.red { color: var(--resolution-red); background: var(--resolution-red-bg); }
+.resolution-tag.neutral { color: var(--resolution-neutral); background: var(--resolution-neutral-bg); }
 .card-resolution { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .card-resolution .playtime { margin: 0; }
 
@@ -107,7 +107,7 @@ button.genre-badge.unconfirmed { color: var(--muted); font-weight: 500; font-sty
 .lib-table-head .c-time { text-align: right; }
 .lib-grid.list { grid-template-columns: 1fr; gap: 6px; }
 .lib-grid.list .game-row { padding: 6px 12px; border-radius: var(--r-md); min-height: 52px; }
-.lib-grid.list .game-row:hover { transform: none; }
+.lib-grid.list .game-row:hover { transform: none; background: var(--surface-soft); }
 .lib-grid.list .row-cover { all: unset; cursor: pointer; display: block; width: 40px; height: 40px; }
 .lib-grid.list .row-cover .cover, .lib-grid.list .row-cover .cover.art { width: 40px; height: 40px; aspect-ratio: 1; border-radius: var(--r-sm); }
 .lib-grid.list .row-cover .cover img { width: 28px; height: 28px; }
@@ -144,9 +144,9 @@ button.genre-badge.unconfirmed { color: var(--muted); font-weight: 500; font-sty
 .plat-filter { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid var(--outline); border-radius: var(--r-md); background: var(--surface-soft); }
 .plat-filter button { display: inline-flex; align-items: center; height: 28px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--muted); font: inherit; font-size: 0.8125rem; cursor: pointer; }
 .plat-filter button:hover { border-color: var(--outline-strong); }
-.plat-filter button.on { border-color: var(--primary); background: var(--primary-tint); color: var(--fg); }
+.plat-filter button.on { border-color: var(--outline-strong); background: var(--accent-tint); color: var(--on-accent-tint); }
 
 .login-hero .login-logo { width: min(360px, 100%); height: auto; }
-.login-hero .login-art { display: block; width: min(640px, 100%); max-height: 49vh; object-fit: contain; }
-.login-card .login-shield { justify-self: start; }
-@media (max-width: 760px) { .login-hero .login-art { max-height: 180px; } }
+.login-preferences { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.login-card .login-shield { width: 44px; height: 44px; display: grid; place-items: center; border-radius: var(--r-sm); background: var(--accent-tint); color: var(--on-accent-tint); }
+.login-card .login-shield svg { width: 24px; height: 24px; }
