@@ -93,7 +93,7 @@ def guarded_curl(command, *, timeout, **kwargs):
                 cmd += ["--resolve", f"{parts.hostname}:443:{formatted}"]
                 target = url
         except (OSError, ValueError) as exc:
-            raise OSError(str(exc)) from exc
+            raise OSError(f"Archive metadata network is unavailable: {exc}") from exc
         done = subprocess.run([*cmd, target], capture_output=True, timeout=budget + 1, check=False)
         response = done.stdout.rsplit(b"\n", 3)
         if len(response) != 4:

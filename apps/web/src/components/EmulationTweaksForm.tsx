@@ -8,7 +8,7 @@ type Size = 'small' | 'medium' | 'large';
  * The per-game options that change what the game sees (see EmulationTweaks). An empty field means "the emulator's
  * default", which is shown as the placeholder; nothing here is stored unless the user changes it.
  */
-export function EmulationTweaksForm({ value, onChange, disabled }: { value: EmulationTweaks; onChange: (v: EmulationTweaks) => void; disabled?: boolean }) {
+export function EmulationTweaksForm({ value, onChange, disabled, pointerDefault }: { value: EmulationTweaks; onChange: (v: EmulationTweaks) => void; disabled?: boolean; pointerDefault: boolean }) {
   const set = (patch: Partial<EmulationTweaks>) => {
     const next: EmulationTweaks = { ...value, ...patch };
     for (const k of Object.keys(next) as (keyof EmulationTweaks)[]) if (next[k] === undefined) delete next[k];
@@ -26,7 +26,7 @@ export function EmulationTweaksForm({ value, onChange, disabled }: { value: Emul
       <div className="field-row">
       <label className="field">
         <span className="label-caps">{translateUI('FPS limit')}</span>
-        <input className="input" type="number" min={EMULATION_LIMITS.frameRate[0]} max={EMULATION_LIMITS.frameRate[1]} placeholder={String(EMULATION_DEFAULTS.frameRate)} value={value.frameRate ?? ''}
+        <input className="input" type="number" min={EMULATION_LIMITS.frameRate[0]} max={EMULATION_LIMITS.frameRate[1]} placeholder={translateUI("Default")} value={value.frameRate ?? ''}
           onChange={(e) => set({ frameRate: e.target.value === '' ? undefined : Math.min(EMULATION_LIMITS.frameRate[1], Math.max(EMULATION_LIMITS.frameRate[0], Math.round(Number(e.target.value)))) })} aria-label={translateUI('Frame limit (fps)')} />
       </label>
       <label className="field">
@@ -44,7 +44,7 @@ export function EmulationTweaksForm({ value, onChange, disabled }: { value: Emul
         </div>
       </div>
       <div className="control-line">
-        <Switch checked={value.pointerEvents ?? EMULATION_DEFAULTS.pointerEvents} onChange={(v) => set({ pointerEvents: v === EMULATION_DEFAULTS.pointerEvents ? undefined : v })}>{translateUI('Touch events')}</Switch>
+        <Switch checked={value.pointerEvents ?? pointerDefault} onChange={(v) => set({ pointerEvents: v === pointerDefault ? undefined : v })}>{translateUI('Touch events')}</Switch>
         <Hint text="Tell the game the phone has a touch screen" />
       </div>
       <div className="control-line">

@@ -58,7 +58,9 @@ function Cover({ g }: { g: GameMeta }) {
   );
 }
 
-export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: Toast['kind'], t: string) => void; onPlay: (id: string) => void; health: HealthStatus | null; query: string; onQuery: (v: string) => void }) {
+export function Library({ returnGameId, toast, onPlay, health, query, onQuery }: { returnGameId?: string | undefined; toast: (k: Toast['kind'], t: string) => void; onPlay: (id: string) => void; health: HealthStatus | null; query: string; onQuery: (v: string) => void }) {
+  const [focusGame] = useState(returnGameId);
+  const focused = useRef(false);
   const [games, setGames] = useState<GameMeta[] | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [platform, setPlatform] = useState<GamePlatform | 'all'>(() => {
@@ -199,6 +201,26 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
       .sort((a, b) => compareGroups(a, b, filter === 'recent' && sort === 'name' ? 'played' : sort)); // "Recent" keeps its order unless another one is chosen
   }, [games, query, filter, genre, status, sort, platform, archiveFilter]);
 
+  useEffect(() => {
+    if (!focusGame || focused.current || !games) return;
+    const game = games.find(g => g.id === focusGame);
+    if (!game) return;
+    if (!groups.some(versions => versions[0]?.groupKey === game.groupKey)) {
+      if (query) onQuery('');
+      setFilter('all'); setPlatform('all'); setStatusState('all'); setGenreState('all'); setArchiveFilter('all');
+      return;
+    }
+    const row = document.querySelector<HTMLButtonElement>(`[data-library-group="${game.groupKey}"] .card-main`);
+    if (!row) return;
+    const frame = requestAnimationFrame(() => {
+      focused.current = true;
+      const target = row.disabled ? row.closest<HTMLElement>('[data-library-group]') : row;
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ block: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusGame, games, groups, query, onQuery]);
+
   // games per genre (one per group, so the versions of a game count once), from what is already loaded
   const genreCounts = useMemo(() => {
     const seen = new Map<string, GameMeta>();
@@ -278,7 +300,7 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
       )}
       <div className={`lib-grid${view === 'list' ? ' list' : ''}`} data-view={view}>
         {groups.map((vs) => {
-          const sel = vs.find((v) => v.id === chosen[vs[0]!.groupKey]) ?? vs[0]!;
+          const sel = vs.find((v) => v.id === chosen[vs[0]!.groupKey]) ?? vs.find(v => v.id === focusGame) ?? vs[0]!;
           const java = (sel.platform ?? 'j2me') === 'j2me';
           const bad = java && sel.classVersion >= 49;
           const blocked = bad || (java && health?.ok === false);
@@ -318,7 +340,7 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
             </>
           );
           if (view === 'list') return (
-            <article className="card game-card game-row" key={sel.groupKey}>
+            <article className="card game-card game-row" key={sel.groupKey} data-library-group={sel.groupKey} tabIndex={-1}>
               <button className="row-cover" tabIndex={-1} aria-hidden onClick={() => onPlay(sel.id)} disabled={blocked}><Cover g={sel} /></button>
               <button className="card-main row-title" onClick={() => onPlay(sel.id)} disabled={blocked} title={translateUI(bad ? 'Java 5+ class files are not supported by KEmulator' : `Play ${sel.name}`)}>
                 <h3>{sel.name}</h3>
@@ -333,7 +355,7 @@ export function Library({ toast, onPlay, health, query, onQuery }: { toast: (k: 
             </article>
           );
           return (
-            <article className="card game-card" key={sel.groupKey}>
+            <article className="card game-card" key={sel.groupKey} data-library-group={sel.groupKey} tabIndex={-1}>
               <button className="card-main" onClick={() => onPlay(sel.id)} disabled={blocked} title={translateUI(bad ? 'Java 5+ class files are not supported by KEmulator' : `Play ${sel.name}`)}>
                 <Cover g={sel} />
                 <div className="meta">

@@ -11,6 +11,7 @@ import { SymbianPanel } from '../components/SymbianPanel';
 import { MyPhones } from '../components/MyPhones';
 import { PhoneDefaultsForm, ServerForm, SoundControlsForm } from '../components/SettingsForms';
 import { SystemDashboard } from '../components/SystemDashboard';
+import { CuratedSetup } from '../components/CuratedSetup';
 import { ArchiveSettings } from '../components/ArchiveSettings';
 import { NgageCatalogPanel } from '../components/NgageCatalogPanel';
 
@@ -65,6 +66,7 @@ export function SettingsPage({ toast, onRunWizard, onLibraryChanged }: { toast: 
       <div role="tabpanel" id="panel-system" aria-labelledby="tab-system" hidden={tab !== 'system'}><Section id="system" icon="cpu" title={translateUI("System")} hint={translateUI("Is everything MGO needs installed and working?")}>{tab === 'system' && <SystemDashboard toast={toast} />}</Section></div>
       <div role="tabpanel" id="panel-library" aria-labelledby="tab-library" hidden={tab !== 'library'}><Section id="library" icon="library" title={translateUI("Game library")} hint={translateUI("One folder for each kind of games. MGO only reads them; you can also add games from the browser.")}>
         <LibraryFolders toast={toast} onChanged={onLibraryChanged} />
+        <details className="more lib-more"><summary>{translateUI('Curated Java ME library')}</summary>{tab === 'library' && <CuratedSetup />}</details>
         <details className="more lib-more"><summary>{translateUI("More: missing files, empty everything, genres")}</summary>
           <h3>{translateUI("Clean up")}</h3>
           <CleanupPanel toast={toast} onChanged={() => { onLibraryChanged(); }} />
@@ -72,7 +74,22 @@ export function SettingsPage({ toast, onRunWizard, onLibraryChanged }: { toast: 
           <CatalogPanel toast={toast} onChanged={onLibraryChanged} />
         </details>
       </Section></div>
-      <div role="tabpanel" id="panel-mobygames" aria-labelledby="tab-mobygames" hidden={tab !== 'mobygames'}><Section id="mobygames" icon="info" title={translateUI("Game metadata")} hint={translateUI("Covers, descriptions, genres, publishers, years, ratings and screenshots (optional).")}>{tab === 'mobygames' && <ArchiveSettings onChanged={onLibraryChanged} />}<NgageCatalogPanel toast={toast} onChanged={onLibraryChanged} /><MobyPanel toast={toast} /></Section></div>
+      <div role="tabpanel" id="panel-mobygames" aria-labelledby="tab-mobygames" hidden={tab !== 'mobygames'}>
+        <Section id="mobygames" icon="info" title={translateUI("Game metadata")}>
+          {tab === 'mobygames' && <div className="metadata-sources">
+            <section aria-labelledby="java-sources">
+              <h3 id="java-sources">Java ME</h3>
+              <div className="metadata-source-grid">
+                <ArchiveSettings onChanged={onLibraryChanged} />
+                <MobyPanel toast={toast} />
+              </div>
+            </section>
+            <section aria-label="N-Gage">
+              <NgageCatalogPanel toast={toast} onChanged={onLibraryChanged} />
+            </section>
+          </div>}
+        </Section>
+      </div>
       <div role="tabpanel" id="panel-phone" aria-labelledby="tab-phone" hidden={tab !== 'phone'}><Section id="phone" icon="phone" title={translateUI("My phones")} hint={translateUI("The phones you play on, and which one starts each kind of games.")}><MyPhones toast={toast} /><details className="more lib-more"><summary>{translateUI("Screen size, key layout and look of the Java ME phone")}</summary><PhoneDefaultsForm toast={toast} /></details></Section></div>
       <div role="tabpanel" id="panel-sound" aria-labelledby="tab-sound" hidden={tab !== 'sound'}><Section id="sound" icon="gamepad" title={translateUI("Sound & controls")}><SoundControlsForm toast={toast} /></Section></div>
       <div role="tabpanel" id="panel-symbian" aria-labelledby="tab-symbian" hidden={tab !== 'symbian'}><Section id="symbian" icon="cpu" title={translateUI("Symbian and N-Gage firmware")} hint={translateUI("Symbian S60 and N-Gage games run in a second emulator (EKA2L1). You bring your own firmware.")}><SymbianPanel toast={toast} /></Section></div>

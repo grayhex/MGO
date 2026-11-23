@@ -19,8 +19,10 @@ it('offers a larger phone that can run a Symbian game, only when its firmware is
 it('never offers a phone that cannot run an N-Gage 1.0 game', () => {
   assert.equal(betterPhone({ platform: 'ngage', current: 'nokia-n-gage-classic', options: phones, hasFirmware: () => true }), null);
 });
-it('Java ME: only a phone with exactly the screen the game was made for', () => {
+it('Java ME: fits the game’s resolution in both directions', () => {
   assert.equal(betterPhone({ platform: 'j2me', current: 'nokia-n-gage-classic', options: phones, wanted: { width: 240, height: 320 } })?.id, 'nokia-n95');
+  assert.equal(betterPhone({ platform: 'j2me', current: 'nokia-n8', options: phones, wanted: { width: 240, height: 320 } })?.id, 'nokia-n95');
+  assert.equal(betterPhone({ platform: 'j2me', current: 'nokia-n95', options: phones, wanted: { width: 176, height: 220 } })?.id, 'sony-ericsson-k750i');
   assert.equal(betterPhone({ platform: 'j2me', current: 'nokia-n95', options: phones, wanted: { width: 240, height: 320 } }), null);
   assert.equal(betterPhone({ platform: 'j2me', current: 'nokia-n95', options: phones, wanted: null }), null, 'no stated screen: nothing to claim');
   assert.equal(betterPhone({ platform: 'j2me', current: 'nokia-n95', options: phones, wanted: { width: 128, height: 128 } }), null, 'no phone with that screen among the options');

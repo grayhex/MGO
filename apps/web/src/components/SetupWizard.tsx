@@ -3,6 +3,7 @@ import type { SystemStatus } from '@mgo/protocol';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import { setServerSettings, useServerSettings } from '../serverSettings';
+import { CuratedSetup } from './CuratedSetup';
 import { FirmwareSetup } from './FirmwareSetup';
 import { LibraryFolders } from './LibraryFolders';
 import { currentPhones, missingRoles, MyPhones, PHONE_ROLES } from './MyPhones';
@@ -72,6 +73,7 @@ export function SetupWizard({ toast, onClose, onFinished }: { toast: Toaster; on
             <h3>{translateUI("Where are your games?")}</h3>
             <p>{translateUI("Choose a folder for each kind of games you have: Java ME (.jar), N-Gage and Symbian (.sis). MGO only reads them. Skip a kind you do not have, or upload games from the browser instead.")}</p>
             <LibraryFolders toast={toast} wizard />
+            {!hasLibrary && status?.storage.libraryBytes === 0 && <CuratedSetup />}
           </div>
         )}
         {step.id === 'phones' && (

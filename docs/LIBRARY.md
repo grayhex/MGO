@@ -166,3 +166,12 @@ SHA-256 MGO предложит открыть существующую игру.
   [Индекс](https://github.com/toca-1/new-j2me-software-archive-search/releases/tag/index-v2) ·
   [Поисковик toca-1](https://toca-1.github.io/new-j2me-software-archive-search/) ·
   [Условия Internet Archive](https://archive.org/about/terms.php)
+
+### Кураторский список
+
+Список названий для мастера хранится в
+[`java_curated_top.txt`](../apps/api/archive-tools/java_curated_top.txt).
+Одна строка соответствует одному названию. Обновление списка поставляется с
+новой сборкой MGO. Мастер предлагает сборку при точном совпадении названия и явно преобладающем издателе. Остальные варианты доступны для ручного выбора. После подтверждения выбранные JAR
+скачиваются по одному в `DATA_DIR/import/Curated Java ME/`. Ход и ошибки можно
+посмотреть в **Настройки → Библиотека игр → Кураторская библиотека Java ME**.

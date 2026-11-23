@@ -7,6 +7,9 @@ export const PHONE_SKIN_IDS = [
 export type PhoneSkinId = typeof PHONE_SKIN_IDS[number];
 export const isPhoneSkinId = (value: unknown): value is PhoneSkinId => typeof value === 'string' && (PHONE_SKIN_IDS as readonly string[]).includes(value);
 
+/** Physical pointer capability, used for the default Java ME Canvas behaviour. */
+export const phoneHasTouch = (id?: PhoneSkinId): boolean => id === 'nokia-5800' || id === 'samsung-s5230' || id === 'nokia-n8';
+
 /** Fractions of the artwork dimensions. Never framebuffer pixels. */
 export interface SkinRect { x: number; y: number; width: number; height: number }
 export interface PhoneSkinView {

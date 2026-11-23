@@ -9,12 +9,12 @@ export function NgageCatalogPanel({ toast, onChanged }: { toast: (kind: 'info' |
   const total = (status?.matched ?? 0) + (status?.unmatched.length ?? 0);
   return (
     <div className="catalog-source" data-testid="ngage-catalog">
-      <h3>{t('N-Gage games')}</h3>
+      <h3>N-Gage · All About Symbian</h3>
       <p className="muted small">{t('Genre, publisher, year, multiplayer and the cover of original N-Gage games come from the All About Symbian directory. No key is needed.')}</p>
       <p><strong>{status?.matched ?? 0}</strong> {t('of')} <strong>{total}</strong> {t('N-Gage games recognised')}{status && status.covers > 0 ? ` · ${status.covers} ${t('covers')}` : ''}</p>
       {status && status.unmatched.length > 0 && <details className="more"><summary>{t('Not recognised')}: {status.unmatched.length}</summary><ul className="plain-list">{status.unmatched.map((n) => <li key={n}>{n}</li>)}</ul><p className="muted small">{t('Only games of the original N-Gage (.zip card dumps) are in the directory. Rename the file to the game’s title to be recognised.')}</p></details>}
       {status?.source === 'snapshot' && !status.error && <p className="muted small">{t('Using the list that ships with MGO. Covers are downloaded when the directory is reachable.')}</p>}
-      {status?.error && <p className="note warn" role="status">{status.error}</p>}
+      {status?.error && <p className="note warn" role="status">{t(status.error)}</p>}
       <div className="btn-row">
         <button className="btn" disabled={!!status?.running} onClick={() => void api.ngageCatalogRefresh().then(setStatus, e => toast('error', e.message))}>{t(status?.running ? 'Updating…' : 'Update N-Gage metadata')}</button>
         <a href="https://allaboutsymbian.com/n-gage-games/original/" target="_blank" rel="noreferrer">All About Symbian ↗</a>

@@ -72,9 +72,9 @@ function PhoneCard({ skin, frame, current, disabled, onPick, catalog, fit, mine 
       <h2>{c.manufacturer} {c.model}</h2>
       <div className="phone-facts">
         <InfoChip icon={<Icon name="device" />} title={translateUI('Screen size of the phone')}>{c.screen.width} × {c.screen.height}</InfoChip>
-        {mine && <InfoChip icon={<Icon name="star" />} tone="ok" testId={`my-${c.id}`}>{translateUI('My phone')}</InfoChip>}
+        {mine && <span className="phone-owned" data-testid={`my-${c.id}`} aria-label={translateUI('My phone')} title={translateUI('My phone')}><Icon name="star" /></span>}
       </div>
-      <div className="phone-platforms">{platforms.map(p => <span key={p} className={fit.native === p ? 'fit-on' : ''}><PlatformTag platform={p} size="sm" /></span>)}</div>
+      <div className="phone-platforms">{platforms.map(p => <span key={p} className={fit.native === p ? 'fit-on' : ''}><PlatformTag platform={p} size="sm" glyphOnly /></span>)}</div>
       {fw.devices.length > 0 && (
         <InfoChip icon={<Icon name={fw.loaded.length ? 'check' : 'alert'} />} tone={fw.loaded.length ? 'ok' : 'warn'} testId={`phone-firmware-${c.id}`} dataset={{ 'data-loaded': fw.loaded.length ? '1' : '0' }}
           title={`${translateUI(fw.loaded.length ? 'The firmware for this phone is installed in the Symbian service, so its games can run here.' : 'No firmware for this phone is installed. Add it in Settings → Symbian; the picture alone cannot run Symbian games.')} (${fw.devices.map(d => d.firmware.product).join(', ')})`}>

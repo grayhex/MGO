@@ -1,4 +1,4 @@
-import type { ArchiveStatus, ArchiveTransfer, ArchiveMatchJob, ArchiveReviewItem, ArchiveMatch, ArchiveSearchItem, ArchiveDownload, CatalogReport, DevicePreset, GameClassification, Genre, GenreSummary, EmulationTweaks, GameFileEntry, GameInfo, GameMeta, GameSettings, HealthStatus, KemulatorRelease, KemulatorUpdateStatus, LibraryCheck, LibraryRoot, MetadataJob, MobyCandidate, PublicSettings, Platform, ScanReport, SessionStatus, SettingsResponse, SymbianJob, SymbianStatus, SystemStatus } from '@mgo/protocol';
+import type { CuratedTitle, CuratedImport, ArchiveStatus, ArchiveTransfer, ArchiveMatchJob, ArchiveReviewItem, ArchiveMatch, ArchiveSearchItem, ArchiveDownload, CatalogReport, DevicePreset, GameClassification, Genre, GenreSummary, EmulationTweaks, GameFileEntry, GameInfo, GameMeta, GameSettings, HealthStatus, KemulatorRelease, KemulatorUpdateStatus, LibraryCheck, LibraryRoot, MetadataJob, MobyCandidate, PublicSettings, Platform, ScanReport, SessionStatus, SettingsResponse, SymbianJob, SymbianStatus, SystemStatus } from '@mgo/protocol';
 
 export type GameSettingsPatch = Partial<Omit<GameSettings, 'device' | 'emulation' | 'symbianDevice' | 'emulatedDeviceId'>> & { device?: string | null; emulation?: EmulationTweaks | null; symbianDevice?: string | null; emulatedDeviceId?: string | null };
 
@@ -54,6 +54,10 @@ export const api = {
   installKemulatorUpdate: (release: KemulatorRelease) => req<KemulatorUpdateStatus>('/api/kemulator/install-update', jsonInit('POST', { version: release.version, sha256: release.sha256 })),
   restoreBundledKemulator: () => req<KemulatorUpdateStatus>('/api/kemulator/restore-bundled', jsonInit('POST', {})),
   login: (token: string) => req<{ ok: true }>('/api/auth/login', jsonInit('POST', { token })),
+  curatedStatus: () => req<{ count: number; job: CuratedImport | null }>('/api/archive/curated'),
+  curatedPreview: () => req<{ titles: CuratedTitle[] }>('/api/archive/curated/preview'),
+  curatedImport: (selection: { title: string; sha256: string }[]) => req<CuratedImport>('/api/archive/curated', jsonInit('POST', { selection, confirmed: true })),
+  curatedCancel: () => req<{ cancelled: boolean }>('/api/archive/curated', { method: 'DELETE' }),
   archiveStatus: () => req<ArchiveStatus>('/api/archive'),
   archiveIndex: () => req<ArchiveTransfer>('/api/archive/index', { method: 'POST' }),
   archiveCancelIndex: () => req<{ cancelled: boolean }>('/api/archive/index/job', { method: 'DELETE' }),

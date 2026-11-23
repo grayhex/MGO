@@ -11,6 +11,7 @@ import { createReadStream, readFileSync } from 'node:fs';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
@@ -26,7 +27,7 @@ import { registerSymbianRoutes } from './symbianRoutes.js';
 import { symbianDiagnosticsText } from './eka2l1/status.js';
 import { Library, newId, validateSettings } from './library.js';
 import { MetadataService } from './metadata.js';
-import { DEFAULT_API_BASE, MobyClient } from './mobygames.js';
+import { DEFAULT_API_BASE, MobyClient, mobyGatewayFetch } from './mobygames.js';
 import { buildDiagnostics } from './diagnostics.js';
 import { GAME_FILES_QUOTA_BYTES, GameFiles } from './gameFiles.js';
 import { nativeDefaults, gameDefaults, ScanManager } from './scanner.js';
@@ -35,7 +36,7 @@ import { SoundfontStore } from './soundfont.js';
 import { SessionError, SessionManager, type StreamClient } from './sessions.js';
 
 /** The release being run: MGO_VERSION (set by the systemd unit), else the VERSION file of the release tree, else the dev default. */
-const VERSION = process.env.MGO_VERSION?.trim() || readReleaseVersion() || '0.1.0-beta.1';
+const VERSION = process.env.MGO_VERSION?.trim() || readReleaseVersion() || 'dev';
 
 function readReleaseVersion(): string | null {
   try {
@@ -50,6 +51,17 @@ const COOKIE = 'j2me_auth';
 function hostOnly(h: string | undefined): string {
   if (!h) return '';
   return h.startsWith('[') ? h.slice(0, h.indexOf(']') + 1) : h.split(':')[0]!.toLowerCase();
+}
+
+function isLanHost(host: string): boolean {
+  const plain = host.replace(/^\[|\]$/g, '');
+  if (isIP(plain) === 4) {
+    const [first, second] = plain.split('.').map(Number);
+    return first === 10 || (first === 192 && second === 168) || (first === 172 && second! >= 16 && second! <= 31);
+  }
+  if (isIP(plain) === 6) return /^(?:f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/.test(plain);
+  return /^(?:[a-z0-9][a-z0-9-]*\.)*(?:[a-z0-9][a-z0-9-]*\.(?:local|lan|home\.arpa))$/.test(plain) ||
+    /^[a-z][a-z0-9-]*$/.test(plain);
 }
 
 function javaVersion(javaBin: string): Promise<string | null> {
@@ -88,7 +100,8 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
   const soundfont = new SoundfontStore(cfg.dataDir);
   const sessions = new SessionManager(cfg, library, () => soundfont.path());
   const java = await javaVersion(cfg.javaBin);
-  const moby = new MobyClient(() => settings.mobygamesKey(), { base: process.env.MOBYGAMES_API_BASE || DEFAULT_API_BASE, ...(process.env.MOBYGAMES_MIN_INTERVAL_MS ? { minIntervalMs: Number(process.env.MOBYGAMES_MIN_INTERVAL_MS) } : {}), onWait: (until) => metadata.setWaiting(until) });
+  const metadataGateway = process.env.MGO_METADATA_GATEWAY;
+  const moby = new MobyClient(() => settings.mobygamesKey(), { base: process.env.MOBYGAMES_API_BASE || DEFAULT_API_BASE, ...(!process.env.MOBYGAMES_API_BASE && metadataGateway ? { fetch: mobyGatewayFetch(metadataGateway) } : {}), ...(process.env.MOBYGAMES_MIN_INTERVAL_MS ? { minIntervalMs: Number(process.env.MOBYGAMES_MIN_INTERVAL_MS) } : {}), onWait: (until) => metadata.setWaiting(until) });
   const metadata = new MetadataService(library, cfg.dataDir, () => moby, () => moby.hasKey());
   const scan = new ScanManager(cfg, library, {
     settings: () => settings.get(),
@@ -165,8 +178,8 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
   app.addHook('onRequest', async (req, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff').header('Referrer-Policy', 'no-referrer').header('X-Frame-Options', 'DENY');
     const host = req.headers.host?.toLowerCase() ?? '';
-    if (!cfg.authToken && !LOOPBACK_HOSTS.has(hostOnly(host)) && !allowedOriginHosts.has(host)) {
-      return reply.code(403).send({ error: 'bad_host', message: 'Unexpected Host header (the unauthenticated mode is loopback-only)' });
+    if (!cfg.authToken && !LOOPBACK_HOSTS.has(hostOnly(host)) && !(cfg.lanMode && isLanHost(hostOnly(host))) && !allowedOriginHosts.has(host)) {
+      return reply.code(403).send({ error: 'bad_host', message: 'Unexpected Host header for this installation' });
     }
     const origin = req.headers.origin;
     if (origin) {
@@ -557,7 +570,7 @@ async function main(): Promise<void> {
       try { app.scan.start('update'); } catch (e) { app.fastify.log.warn(`automatic library scan not started: ${(e as Error).message}`); }
     }, 3000).unref();
   }
-  if (cfg.authToken === null) app.fastify.log.warn(`no AUTH_TOKEN: API is unauthenticated, reachable only on ${cfg.host}`);
+  if (cfg.authToken === null) app.fastify.log.info(`MGO login disabled (${cfg.lanMode ? 'LAN' : cfg.host})`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
