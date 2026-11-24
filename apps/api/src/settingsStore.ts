@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import path from 'node:path';
 import { isPhoneId, PHONE_SKIN_IDS, skinSupportsPlatform, KEY_LAYOUTS, PHONE_PROFILES, type LayoutId, type PublicSettings, type SetupStatus } from '@mgo/protocol';
 import type { Config } from './config.js';
+import { folderSegments } from './archive/destination.js';
 import { UploadError } from './jar.js';
 
 /** Phone skins shipped with the web UI (apps/web/public/phones); the list lives in the protocol package, a test keeps it in sync with the directory. */
@@ -76,13 +77,18 @@ function noExtra(o: Record<string, unknown>, allowed: string[], name: string): v
  */
 export function mergeSettings(base: PublicSettings, patch: unknown): PublicSettings {
   const p = obj(patch, 'settings');
-  noExtra(p, ['libraryPath', 'libraryPaths', 'nativePhones', 'myPhones', 'autoScan', 'autoMetadata', 'phone', 'audio', 'controls', 'server'], 'settings');
+  noExtra(p, ['libraryPath', 'libraryPaths', 'archiveDownloadFolder', 'nativePhones', 'myPhones', 'autoScan', 'autoMetadata', 'phone', 'audio', 'controls', 'server'], 'settings');
   const out: PublicSettings = JSON.parse(JSON.stringify(base));
   if ('libraryPath' in p) {
     const v = p.libraryPath;
     if (v === null || v === '') out.libraryPath = null;
     else if (typeof v !== 'string' || v.length > 1024 || v.includes('\0') || !path.isAbsolute(v)) bad('libraryPath must be an absolute path or null');
     else out.libraryPath = path.normalize(v).replace(/\/+$/, '') || '/';
+  }
+  if ('archiveDownloadFolder' in p) {
+    const folder = p.archiveDownloadFolder;
+    if (typeof folder !== 'string' || folder.length > 512) bad('archiveDownloadFolder must be a relative subfolder');
+    out.archiveDownloadFolder = folderSegments(folder as string).join('/');
   }
   if ('libraryPaths' in p) {
     const paths = obj(p.libraryPaths, 'libraryPaths');
@@ -244,6 +250,7 @@ export class SettingsStore {
     return {
       libraryPath: typeof s.libraryPath === 'string' ? s.libraryPath : d.libraryPath,
       libraryPaths: { ...d.libraryPaths!, ...(s.libraryPaths ?? {}) },
+      archiveDownloadFolder: s.archiveDownloadFolder ?? 'Curated Java ME',
       nativePhones: { ...d.nativePhones, ...(s.nativePhones ?? {}) },
       myPhones: Array.isArray(s.myPhones) ? s.myPhones : null,
       autoScan: s.autoScan ?? d.autoScan,
@@ -265,7 +272,7 @@ export class SettingsStore {
     // keep what was saved sparse: only values somebody set are stored, the rest keep following the defaults
     const stored: Record<string, unknown> = { ...this.data.settings, server: overrides };
     const p = patch as Record<string, unknown>;
-    for (const k of ['libraryPath', 'libraryPaths', 'nativePhones', 'myPhones', 'autoScan', 'autoMetadata'] as const) if (k in p) stored[k] = next[k];
+    for (const k of ['libraryPath', 'libraryPaths', 'archiveDownloadFolder', 'nativePhones', 'myPhones', 'autoScan', 'autoMetadata'] as const) if (k in p) stored[k] = next[k];
     for (const sec of ['phone', 'audio', 'controls'] as const) {
       if (!(sec in p)) continue;
       const cur = (stored[sec] ?? {}) as Record<string, unknown>;

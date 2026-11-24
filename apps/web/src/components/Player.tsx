@@ -21,6 +21,7 @@ import type { Toast } from '../App';
 import { PcmAudio } from '../audio';
 import { InputController } from '../input';
 import { isSkinId, useCatalog, usePrefs } from '../skin/registry';
+import { keypadCut } from '../skin/hitboxes';
 import { PhoneSkin } from '../skin/PhoneSkin';
 import type { LoadedSkin } from '../skin/types';
 import { useHeld } from '../skin/useHeld';
@@ -39,7 +40,7 @@ type Conn = 'connecting' | 'open' | 'reconnecting' | 'closed' | 'idle';
 
 const STATE_BADGE: Record<string, string> = { running: 'prod', starting: 'dev', stopping: 'dev', failed: 'danger', exited: '', idle: '' };
 
-export function Player({ gameId, toast, onExit, health }: { gameId: string; toast: (k: Toast['kind'], t: string) => void; onExit: () => void; health: HealthStatus | null }) {
+export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, health }: { gameId: string; autoStart: boolean; onAutoStartConsumed: () => void; toast: (k: Toast['kind'], t: string) => void; onExit: () => void; health: HealthStatus | null }) {
   const developer=useDeveloperMode();
   const [game, setGame] = useState<GameMeta | null>(null);
   const [failure, setFailure] = useState<{ failure: import('@mgo/protocol').StartFailure; sessionId: string | null } | null>(null);
@@ -83,6 +84,8 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
   const [keymap, setKeymap] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [sessionsChecked, setSessionsChecked] = useState(false);
+  const autoStarted = useRef(false);
   const [padMenu, setPadMenu] = useState(false);
   const padMenuOpen = useRef(false); padMenuOpen.current = padMenu;
   const [padState, setPadState] = useState<PadState>({controllers:[],pressed:[]});
@@ -156,7 +159,10 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
         // only a JAR has an analysis (a Symbian / N-Gage package answers 404: no error in the console for nothing)
         if ((g.platform ?? 'j2me') === 'j2me') api.analysis(gameId).then((a) => { if (!dead) setAnalysis(a); }, () => undefined);
         const running = (await api.sessions()).find((s) => s.gameId === gameId && (s.state === 'running' || s.state === 'starting'));
-        if (running && !dead) attach(running);
+        if (!dead) {
+          if (running) attach(running);
+          setSessionsChecked(true);
+        }
       } catch (e) { toast('error', (e as Error).message); }
     })();
     api.devices().then((d) => { if (!dead) setDevices(d.presets); }, () => undefined);
@@ -509,6 +515,17 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
     setAdvanced(true); setDevice(''); setRes({ width: sizeHint.width, height: sizeHint.height });
   }, [loaded, j2me, running, advanced, sizeHint?.width, sizeHint?.height, gameId, game?.nativeResolution?.source]);
   const canStart = !!game && loaded && !running && !busy && (j2me ? health?.ok !== false && (advanced || !!matched) : native.data?.plan.ready === true);
+  useEffect(() => {
+    if (!autoStart || autoStarted.current || !sessionsChecked) return;
+    if (!running) {
+      if (!canStart) return;
+      // The resolved auto profile must have reached the launch settings before playing.
+      if (matched && (res?.width !== matched.preset.width || res?.height !== matched.preset.height || layout !== matched.layout || device !== matched.preset.id)) return;
+    }
+    autoStarted.current = true;
+    onAutoStartConsumed();
+    if (!running) void start();
+  });
   const resKey = res ? `${res.width}x${res.height}` : '';
   const needRestart = running && res && session && (res.width !== session.width || res.height !== session.height || device !== (session.device ?? '') || layout !== session.layout || heapMb !== session.heapMb);
   const dev = devices.find((d) => d.id === device);
@@ -517,6 +534,7 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
   const res_ = session?.resources ?? null;
   const keypadRequired = view === 'screen' || skin?.config.input?.externalKeypad === true;
   const external = keypadRequired || showKeypad;
+  const crop = skin && external ? keypadCut(skin) : undefined;
   const skinScreen = skin?.config.screen;
 
   const overlay = !running ? (
@@ -569,7 +587,9 @@ export function Player({ gameId, toast, onExit, health }: { gameId: string; toas
         <div className={`stage-row${external ? ' with-keypad' : ''}`}>
           {external && (
             <div className="stage-foot side">
-              <Keypad input={input} softLeft={softkeys.left} softRight={softkeys.right} />
+              {skin && crop !== undefined
+                ? <PhoneSkin skin={skin} view="full" keypadCrop={crop} frame={frameSize} input={input} interactive={live} className="physical-keypad" />
+                : <Keypad input={input} softLeft={softkeys.left} softRight={softkeys.right} />}
             </div>
           )}
           <div className={`stage ${view === 'screen' ? 'stage-screen' : ''} ${skin?.config.input?.kind === 'touchscreen' ? 'stage-touchscreen' : ''}`}>

@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
-import type { ArchiveStatus, CuratedImport, CuratedTitle } from '@mgo/protocol';
+import type { ArchiveStatus, CuratedImport, CuratedTitle, CuratedDestination } from '@mgo/protocol';
 import { api } from '../api';
 import { t } from '../i18n';
 import { Icon } from './Icon';
+import { setServerSettings, useServerSettings } from '../serverSettings';
 import { archiveSize } from './ArchiveBrowser';
 
 export function CuratedSetup() {
+  const savedFolder = useServerSettings()?.settings.archiveDownloadFolder ?? 'Curated Java ME';
+  const [folder, setFolder] = useState(savedFolder);
+  const [destination, setDestination] = useState<CuratedDestination | null>(null);
   const [status, setStatus] = useState<ArchiveStatus | null>(null);
   const [job, setJob] = useState<CuratedImport | null>(null);
   const [titles, setTitles] = useState<CuratedTitle[] | null>(null);
@@ -15,8 +19,9 @@ export function CuratedSetup() {
   const [error, setError] = useState('');
   async function refresh() {
     const [archive, curated] = await Promise.all([api.archiveStatus(), api.curatedStatus()]);
-    setStatus(archive); setJob(curated.job);
+    setStatus(archive); setJob(curated.job); setDestination(curated.destination);
   }
+  useEffect(() => { setFolder(savedFolder); }, [savedFolder]);
   const installing = status?.indexJob?.state === 'running';
   const running = job?.state === 'running';
   useEffect(() => {
@@ -55,6 +60,21 @@ export function CuratedSetup() {
       <h3><Icon name="library" /> {t('Curated Java ME library')}</h3>
       <p className="muted small">{t('Choose builds from the curated list to create your library.')} <a href="https://github.com/grayhex/MGO/blob/main/apps/api/archive-tools/java_curated_top.txt" target="_blank" rel="noreferrer">{t('View the game list')} ↗</a></p>
     </div></div>
+    <form className="curated-destination" onSubmit={event => {
+      event.preventDefault();
+      void act(async () => {
+        setServerSettings(await api.patchSettings({ archiveDownloadFolder: folder.trim() }));
+        await refresh();
+      });
+    }}>
+      <label className="field">
+        <span>{t('Download subfolder')}</span>
+        <input className="input" value={folder} onChange={event => setFolder(event.target.value)} maxLength={512} required disabled={running} />
+      </label>
+      <button className="btn sm" type="submit" disabled={running || busy || folder.trim() === savedFolder}>{t('Save')}</button>
+      {destination && <p className="small">{t('Destination')} <code>{destination.path}</code></p>}
+      {destination && !destination.writable && <p className="small error">{t('The Java ME folder is read-only. Give MGO write access to download here.')}</p>}
+    </form>
     {status && !status.index && <div className="btn-row">
       <button className="btn sm primary" type="button" disabled={busy || installing} onClick={() => void act(async () => { await api.archiveIndex(); await refresh(); })}>{t(installing ? 'Installing archive index…' : 'Install index')}</button>
       {installing && <button className="btn sm" type="button" onClick={() => void act(async () => { await api.archiveCancelIndex(); await refresh(); })}>{t('Cancel index installation')}</button>}
@@ -80,17 +100,27 @@ export function CuratedSetup() {
           </label>
         </li>)}
       </ul>
-      <p className="hint">{t('Files are added to Curated Java ME. Download only software you have the right to use.')} <a href="https://archive.org/about/terms.php" target="_blank" rel="noreferrer">{t('Internet Archive terms')} ↗</a></p>
-      <div><button className="btn sm primary" type="button" disabled={busy || !selection.length} onClick={() => void act(async () => { setJob(await api.curatedImport(selection)); setTitles(null); })}>{t('Download {n} selected games', { n: selection.length })}</button></div>
+      <p className="hint">{t('Some builds are stored in shared 7z blocks. Retrieving one small JAR may require downloading and unpacking a much larger block.')}</p>
+      <div><button className="btn sm primary" type="button" disabled={busy || !selection.length || !destination?.writable || folder.trim() !== savedFolder} onClick={() => void act(async () => { setJob(await api.curatedImport(selection)); setTitles(null); })}>{t('Download {n} selected games', { n: selection.length })}</button></div>
     </>}
     {job && <div className="archive-progress">
       <div className="btn-row">
         <span role="status">{t('{done}/{total} imported · {duplicates} already installed · {errors} failed', { done: job.imported, total: job.total, duplicates: job.duplicates, errors: job.failed.length })}</span>
         {running && <button className="btn sm" type="button" disabled={busy} onClick={() => void act(async () => { await api.curatedCancel(); await refresh(); })}>{t('Cancel download')}</button>}
       </div>
-      {running && <><progress aria-label={t('Download progress')} max={job.total} value={job.imported + job.duplicates + job.failed.length} /><p className="hint">{job.current} {job.progress}</p></>}
+      {running && <><progress aria-label={t('Download progress')} max={job.total} value={job.imported + job.duplicates + job.failed.length} /><p className="small"><strong>{job.current}</strong>{job.currentBytes ? ` · ${archiveSize(job.currentBytes)} JAR` : ''}</p>
+        <p className="hint">{blockProgress(job.progress)}</p></>}
+      {job.destination && <p className="small muted">{t('Destination')} <code>{job.destination}</code></p>}
       {!!job.failed.length && <details className="more"><summary>{t('Errors')} ({job.failed.length})</summary><ul>{job.failed.map(failure => <li key={failure.title}>{failure.title} · {t(failure.message)}</li>)}</ul></details>}
     </div>}
     {error && <p className="note err" role="alert">{t(error)}</p>}
   </section>;
+}
+
+
+function blockProgress(line: string | null): string {
+  const values = line && /^Decoded\s+([\d.]+)%\s*\|\s*([\d.]+)\/([\d.]+) MiB \| downloaded ([\d.]+) MiB \| cached ([\d.]+) MiB/.exec(line);
+  return values ? t('Unpacked {done}/{total} MiB · downloaded {received} MiB · reused {cached} MiB', {
+    done: values[2]!, total: values[3]!, received: values[4]!, cached: values[5]!,
+  }) : t('Preparing archive data…');
 }

@@ -47,7 +47,13 @@ export class ArchiveMatching {
 
   isRunning(): boolean { return this.running !== null; }
   async idle(): Promise<void> { await this.running; }
-  current(): ArchiveMatchJob | null { return this.checkpoint?.report ?? null; }
+  current(): ArchiveMatchJob | null {
+    const report = this.checkpoint?.report;
+    if (!report || report.state !== 'applied') return report ?? null;
+    const review = this.library.db.prepare(`SELECT count(*) AS n FROM archive_matches a JOIN games g ON g.id=a.game_id
+      WHERE json_extract(a.match_json,'$.state')='review' AND json_array_length(a.candidates_json)>0`).get();
+    return { ...report, review: Number(review?.n ?? 0) };
+  }
   pause(): boolean {
     if (!this.running) return false;
     this.paused = true;
@@ -143,7 +149,7 @@ export class ArchiveMatching {
   rows(preview: boolean, page: number): { rows: ArchiveReviewItem[]; more: boolean } {
     if (!Number.isInteger(page) || page < 0 || page > 4999) throw new UploadError('archive_page', 'Invalid archive results page');
     const table = preview ? 'archive_preview' : 'archive_matches';
-    const where = preview ? '' : "WHERE json_extract(a.match_json,'$.state')='review'";
+    const where = "WHERE json_extract(a.match_json,'$.state')='review' AND json_array_length(a.candidates_json)>0";
     const result = this.library.db.prepare(`SELECT g.id,g.name,g.vendor,g.version,g.sha256,a.match_json,a.candidates_json
       FROM ${table} a JOIN games g ON g.id=a.game_id ${where}
       ORDER BY g.name,g.id LIMIT ? OFFSET ?`).all(PAGE_SIZE + 1, page * PAGE_SIZE) as unknown as (LocalGame & MatchRow)[];

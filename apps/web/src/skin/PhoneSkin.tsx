@@ -14,6 +14,8 @@ export interface PhoneSkinProps {
   view: SkinViewId;
   /** Size of the emulated framebuffer. Never stretched: the picture is centred in the display window with margins. */
   frame: { w: number; h: number };
+  /** Render the photographed keypad below the display, with its original hitboxes. */
+  keypadCrop?: number;
   /** Turns the picture inside the display window (presentation only). */
   rotation?: Rotation;
   canvasRef?: Ref<HTMLCanvasElement>;
@@ -58,22 +60,27 @@ const centroid = (h: Hitbox): [number, number] => [h.points.reduce((a, p) => a +
  * Stacking (bottom to top): display backplate, Canvas (real KEmulator framebuffer), body (transparent window),
  * glass, hitboxes. The body ignores the pointer so the canvas keeps receiving game pointer events through the window.
  */
-export function PhoneSkin({ skin, view, frame, rotation = 0, canvasRef, canvasProps, integer = true, smooth = false, input, interactive = true, onKey, lcdOverlay, lcdBadge, debug, size, className = '', glass = true }: PhoneSkinProps) {
+export function PhoneSkin({ skin, view, frame, keypadCrop, rotation = 0, canvasRef, canvasProps, integer = true, smooth = false, input, interactive = true, onKey, lcdOverlay, lcdBadge, debug, size, className = '', glass = true }: PhoneSkinProps) {
   const fit = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const parent = useBox(fit, !size?.w || !size?.h);
-  const v = skin.config.views[view];
+  const v = skin.config.views[keypadCrop === undefined ? view : 'full'];
+  const cut = keypadCrop ?? 0;
+  const keypad = keypadCrop !== undefined;
   const outer = { w: size?.w ?? parent.w, h: size?.h ?? parent.h };
-  const dim = useMemo(() => fitBox(outer, v.width / v.height), [outer.w, outer.h, v.width, v.height]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dim = useMemo(() => fitBox(outer, v.width / (v.height * (1 - cut))), [outer.w, outer.h, v.width, v.height, cut]); // eslint-disable-line react-hooks/exhaustive-deps
   const place = useMemo(() => placeRotated(v, dim, frame, integer, rotation), [v, dim, frame, integer, rotation]);
-  const physical = view === 'full' && v.controls === 'buttons';
+  const physical = (view === 'full' || keypad) && v.controls === 'buttons';
 
   // --- hitboxes: pointer id -> hitbox id; every pointer is its own input source
   const tracked = useRef(new Map<number, { id: string; label: string; action: string | null; source: string }>());
   const dragging = useRef(new Set<number>()); // pointers that went down on a key and are still pressed: they may slide across gaps onto other keys
   const [local, setLocal] = useState<Set<string>>(() => new Set());
   const held = useHeld(input);
-  const boxes = skin.hitboxes;
+  const boxes = useMemo(() => cut ? skin.hitboxes
+    .filter(box => box.points.every(([, y]) => y >= cut))
+    .map(box => ({ ...box, points: box.points.map(([x, y]): [number, number] => [x, (y - cut) / (1 - cut)]) }))
+    : skin.hitboxes, [skin.hitboxes, cut]);
 
   // The handlers read the latest props through a ref, so their identity never changes: a re-render must not release a held key.
   const live = useRef({ input, onKey, skinId: skin.config.id });
@@ -82,12 +89,12 @@ export function PhoneSkin({ skin, view, frame, rotation = 0, canvasRef, canvasPr
 
   const down = useCallback((pointer: number, h: Hitbox) => {
     const { input: inp, onKey: cb, skinId } = live.current;
-    const source = `skin:${skinId}:${h.id}:${pointer}`;
+    const source = `skin:${skinId}:${keypad ? 'keypad' : 'body'}:${h.id}:${pointer}`;
     tracked.current.set(pointer, { id: h.id, label: h.label, action: h.action, source });
     if (h.action) inp?.press(source, h.action);
     cb?.({ id: h.id, label: h.label, action: h.action, phase: 'down' });
     syncLocal();
-  }, [syncLocal]);
+  }, [syncLocal, keypad]);
 
   const up = useCallback((pointer: number) => {
     const t = tracked.current.get(pointer);
@@ -135,7 +142,7 @@ export function PhoneSkin({ skin, view, frame, rotation = 0, canvasRef, canvasPr
     document.addEventListener('visibilitychange', vis);
     return () => { window.removeEventListener('blur', releaseLocal); document.removeEventListener('visibilitychange', vis); releaseLocal(); };
   }, [releaseLocal]);
-  useEffect(() => { releaseLocal(); }, [skin.config.id, view, interactive]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { releaseLocal(); }, [skin.config.id, view, keypadCrop, interactive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pressed = useMemo(() => {
     const s = new Set(local);
@@ -153,12 +160,13 @@ export function PhoneSkin({ skin, view, frame, rotation = 0, canvasRef, canvasPr
       {ready && (
         <div
           ref={box}
-          className={`skin-box view-${view} ${physical ? 'has-keys' : ''}`}
+          className={`skin-box ${keypad ? 'view-keypad' : `view-${view}`} ${physical ? 'has-keys' : ''}`}
           style={{ width: dim.w, height: dim.h }}
           role="group"
-          aria-label={translateUI(`${c.manufacturer} ${c.model}, ${view === 'full' ? 'full phone' : 'screen close-up'}`)}
+          aria-label={keypad ? translateUI('Phone keypad') : translateUI(`${c.manufacturer} ${c.model}, ${view === 'full' ? 'full phone' : 'screen close-up'}`)}
+          data-testid={keypad ? 'phone-keypad' : undefined}
           data-skin={c.id}
-          data-view={view}
+          data-view={keypad ? 'keypad' : view}
           onPointerDown={onDown}
           onPointerMove={onMove}
           onPointerUp={onUp}
@@ -166,7 +174,7 @@ export function PhoneSkin({ skin, view, frame, rotation = 0, canvasRef, canvasPr
           onLostPointerCapture={onUp}
           onContextMenu={(e) => { if (physical) e.preventDefault(); }}
         >
-          <div className="skin-lcd" style={{ left: place.lcd.left, top: place.lcd.top, width: place.lcd.width, height: place.lcd.height }} data-testid="skin-lcd">
+          {!keypad && <div className="skin-lcd" style={{ left: place.lcd.left, top: place.lcd.top, width: place.lcd.width, height: place.lcd.height }} data-testid="skin-lcd">
             <canvas
               {...canvasProps}
               ref={canvasRef}
@@ -180,9 +188,9 @@ export function PhoneSkin({ skin, view, frame, rotation = 0, canvasRef, canvasPr
             />
             {lcdOverlay && <div className="skin-lcd-overlay">{lcdOverlay}</div>}
             {lcdBadge && <div className="skin-lcd-badge">{lcdBadge}</div>}
-          </div>
-          <img className="skin-body" src={url(v.body)} alt="" draggable={false} decoding="async" />
-          {glass && v.glass && <img className="skin-glass" src={url(v.glass)} alt="" draggable={false} decoding="async" />}
+          </div>}
+          <img className="skin-body" style={keypad ? { top: -dim.h * cut / (1 - cut), height: dim.h / (1 - cut) } : undefined} src={url(v.body)} alt="" draggable={false} decoding="async" />
+          {!keypad && glass && v.glass && <img className="skin-glass" src={url(v.glass)} alt="" draggable={false} decoding="async" />}
           {physical && (
             <svg className="skin-hit" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
               {boxes.map((b) => (
@@ -192,7 +200,7 @@ export function PhoneSkin({ skin, view, frame, rotation = 0, canvasRef, canvasPr
               ))}
             </svg>
           )}
-          {debug?.screen && <div className="skin-debug-rect" style={{ left: place.lcd.left, top: place.lcd.top, width: place.lcd.width, height: place.lcd.height }} />}
+          {!keypad && debug?.screen && <div className="skin-debug-rect" style={{ left: place.lcd.left, top: place.lcd.top, width: place.lcd.width, height: place.lcd.height }} />}
           {physical && debug?.labels && boxes.map((b) => {
             const [cx, cy] = centroid(b);
             return <span key={b.id} className="skin-debug-label" style={{ left: `${cx * 100}%`, top: `${cy * 100}%` }}>{b.id}</span>;

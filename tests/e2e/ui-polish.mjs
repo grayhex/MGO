@@ -54,27 +54,36 @@ try {
 
   await p.goto(base + '/');
   await p.locator('.game-card').first().waitFor();
-  // Theme selection follows the system until explicitly changed and persists across navigation and reload.
-  const theme = p.getByRole('combobox', { name: 'Theme', exact: true });
-  await p.emulateMedia({ colorScheme: 'light' });
-  await p.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+  const useDark = p.getByRole('button', { name: 'Use dark theme', exact: true });
+  const useLight = p.getByRole('button', { name: 'Use light theme', exact: true });
   const palette = () => p.locator('body').evaluate(el => getComputedStyle(el).backgroundColor);
   assert.equal(await palette(), 'rgb(248, 250, 252)');
-  await p.screenshot({ path: 'test-results/mgo-verdana-library-light.png', animations: 'disabled' });
-  await theme.selectOption('dark');
-  await p.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+  await useDark.click();
+  await useLight.waitFor();
   assert.equal(await palette(), 'rgb(15, 23, 42)');
   await p.reload();
-  await theme.waitFor();
-  assert.equal(await theme.inputValue(), 'dark');
-  await p.locator('.game-card').first().waitFor();
-  await p.screenshot({ path: 'test-results/mgo-verdana-library-dark.png', animations: 'disabled' });
-  await theme.selectOption('system');
-  await p.emulateMedia({ colorScheme: 'dark' });
-  await p.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
-  await p.emulateMedia({ colorScheme: 'light' });
-  await p.waitForFunction(() => document.documentElement.dataset.theme === 'light');
-  console.log('✔ light and dark themes follow the system or persist a manual choice');
+  await useLight.waitFor();
+  await useLight.click();
+  console.log('✔ one button switches between two saved themes');
+
+  await p.setViewportSize({ width: 1920, height: 1000 });
+  const layout = [];
+  for (const route of ['/', '/phones', '/settings#phone']) {
+    await p.goto(base + route);
+    const frame = await p.locator('.container').boundingBox();
+    const control = await p.locator('.workspace-language .theme-toggle').boundingBox();
+    layout.push([frame.x, frame.width, control.x]);
+  }
+  assert.deepEqual(layout[0], layout[1]);
+  assert.deepEqual(layout[0], layout[2]);
+  const roles = await p.locator('.role-grid select').evaluateAll(fields => fields.map(field => {
+    const rect = field.getBoundingClientRect();
+    return [rect.y, rect.width];
+  }));
+  assert.equal(roles.length, 3);
+  assert.ok(roles.every(([y, width]) => Math.abs(y - roles[0][0]) < 1 && Math.abs(width - roles[0][1]) < 1));
+  console.log('✔ library, settings and phones share a width and toolbar position; the phone defaults align');
+  await p.setViewportSize({ width: 1440, height: 900 });
 
   // ---- the list is a table: every row has the same columns ----
   await p.goto(base + '/');
@@ -135,7 +144,7 @@ try {
   for (const locale of ['EN', 'RU']) {
     await mob.goto(base + '/settings');
     await mob.locator('.header .lang').getByRole('radio', { name: locale }).click();
-    await mob.locator('.header .theme-select select').selectOption(locale === 'RU' ? 'dark' : 'light');
+    if (locale === 'RU') await mob.locator('.header .theme-toggle').click();
     const tabs = await mob.getByRole('tab').all();
     for (const tab of tabs) {
       await tab.click();

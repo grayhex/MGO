@@ -80,6 +80,7 @@ export interface GameMeta {
   /** Class-file major version found in the JAR (KEmulator accepts <= 48). */
   classVersion: number;
   sizeBytes: number;
+  fileName?: string;
   /** Default `j2me`. */
   platform?: Platform;
   hasIcon: boolean;
@@ -225,6 +226,8 @@ export interface PublicSettings {
   /** Absolute path of the library directory (always inside one of the server's library roots) or null. */
   libraryPath: string | null;
   libraryPaths?: { j2me: string | null; ngage: string | null; symbian: string | null };
+  /** Relative destination for archive downloads under the Java ME folder. */
+  archiveDownloadFolder?: string;
   nativePhones?: Partial<Record<'symbian' | 'ngage' | 'ngage2', PhoneSkinId | null>>;
   /** The phones the owner picked from the whole catalog (the pickers show only these); null = not chosen yet, every phone is offered. */
   myPhones?: PhoneSkinId[] | null;

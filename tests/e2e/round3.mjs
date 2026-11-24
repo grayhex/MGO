@@ -41,21 +41,15 @@ try {
 
   // ---- the keypad looks like a handset keypad ----
   await p.goto(base + '/play/' + game.id);
-  await p.locator('.skin-box').waitFor();
-  const keypad = p.locator('.stage-foot.side .keypad');
+  await p.locator('.stage .skin-box').waitFor();
+  const keypad = p.getByTestId('phone-keypad');
   await keypad.waitFor();
-  assert.equal(await keypad.locator('.numpad .key').count(), 12);
-  assert.equal(await keypad.locator('.numpad .key-sub').filter({ hasText: 'abc' }).count(), 1, 'letters under the numerals');
-  assert.equal(await keypad.locator('.key.clear').count(), 1, 'the C key');
-  const shape = await p.evaluate(() => ({
-    dpad: getComputedStyle(document.querySelector('.stage-foot.side .dpad')).borderRadius,
-    wingL: getComputedStyle(document.querySelector('.stage-foot.side .key.soft.left')).borderRadius,
-    wingR: getComputedStyle(document.querySelector('.stage-foot.side .key.soft.right')).borderRadius,
-  }));
-  assert.match(shape.dpad, /50%|px/);
-  assert.notEqual(shape.wingL, shape.wingR, 'the soft keys lean towards the navigation key');
-  assert.equal(await p.locator('.softkeys').count(), 0, 'no second row of soft keys');
-  console.log('✔ the side keypad is a handset keypad:', JSON.stringify(shape));
+  assert.equal(await keypad.getAttribute('data-skin'), 'nokia-n95');
+  assert.equal(await keypad.locator('polygon[data-key=d5]').count(), 1);
+  assert.equal(await keypad.locator('polygon[data-key=clear]').count(), 1);
+  assert.equal(await keypad.locator('canvas').count(), 0);
+  assert.match(await keypad.locator('.skin-body').getAttribute('src'), /nokia-n95/);
+  console.log('✔ the side keypad uses the handset photo and its real hitboxes');
 
   // ---- Lights Out keeps the body faintly visible ----
   await p.locator('.skin-lcd-overlay button.primary').click();

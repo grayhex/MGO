@@ -190,10 +190,9 @@ try {
     for (const t of ['dragenter', 'dragover', 'drop']) window.dispatchEvent(new DragEvent(t, { dataTransfer: dt, bubbles: true, cancelable: true }));
   }, bytes);
   await page.waitForSelector('article.game-card h3:has-text("KemTest")');
-  await page.click('article.game-card button.card-main');
+  await page.locator('article.game-card .play-game').click();
   await page.waitForSelector('[data-testid=skin-lcd]');
   ok('the player has no phone picker: the phones are chosen on /phones', (await page.locator('.skin-picker').count()) === 0);
-  await page.click('.skin-lcd-overlay button.primary');
   await page.waitForFunction(() => document.querySelector('[data-testid=state-badge]')?.textContent?.includes('running'), null, { timeout: 25000 });
   const px = () => page.evaluate(() => { const c = document.querySelector('canvas'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let y = 0; for (let i = 0; i < d.length; i += 4) if (d[i] === 255 && d[i + 1] === 255 && d[i + 2] === 0) y++; return { w: c.width, h: c.height, yellow: y, tl: [d[0], d[1], d[2]] }; });
   await page.waitForFunction(() => { const c = document.querySelector('canvas'); const d = c.getContext('2d').getImageData(0, 0, 1, 1).data; return d[0] === 255 && d[1] === 0; }, null, { timeout: 15000 });
@@ -220,13 +219,13 @@ try {
   ok('zoom does not change the emulated resolution', sess1.width === sess0.width && sess1.height === sess0.height && (await page.locator('[data-testid=frame-size]').innerText()) === fs0, fs0);
   const logAfter = sess1.logTail.join('\n');
   ok('the MIDlet was launched exactly once', (logAfter.match(/LAUNCHES \d+/g) ?? []).length === 1);
-  ok('in the Screen view the body has no keys and the controls are outside', (await page.locator('.skin-box polygon').count()) === 0 && (await page.locator('[data-testid=keypad]').count()) === 1);
+  ok('in the Screen view the body has no keys and the controls are outside', (await page.locator('.stage .skin-box polygon').count()) === 0 && (await page.getByTestId('phone-keypad').count()) === 1);
   const big = await page.evaluate(() => document.querySelector('canvas').getBoundingClientRect().width);
   await page.screenshot({ path: path.join(outDir, 'skin-06-player-screen.png') });
   ok('the screen view enlarges the picture', big > 200, `${Math.round(big)} px wide`);
 
   // the external keypad: hold with the mouse, release on cancel
-  const k5loc = page.locator('[data-testid=keypad] .key:has-text("5")').first();
+  const k5loc = page.getByTestId('phone-keypad').locator('polygon[data-action=d5]');
   await k5loc.scrollIntoViewIfNeeded();
   const k5 = await k5loc.boundingBox();
   await page.mouse.move(k5.x + k5.width / 2, k5.y + k5.height / 2); await page.mouse.down();

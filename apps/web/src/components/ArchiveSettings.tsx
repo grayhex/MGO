@@ -88,11 +88,11 @@ export function ArchiveSettings({ onChanged }: { onChanged: () => void }) {
       {match.state === 'paused' && <span className="hint">{t('Matching paused')}</span>}
       {match.error && <p className="note err">{t(match.error)}</p>}
       {match.state === 'preview' && <div className="btn-row">
-        <button className="btn sm" disabled={busy} onClick={() => void act(() => show(true, 0))}>{t('View preview')}</button>
-        {rows && preview && <button className="btn sm primary" disabled={busy || !index} onClick={() => void act(async () => {
+        {match.review > 0 && <button className="btn sm" disabled={busy} onClick={() => void act(() => show(true, 0))}>{t('View preview')}</button>}
+        <button className="btn sm primary" disabled={busy || !index} onClick={() => void act(async () => {
           await api.archiveApply();
-          await show(false, 0);
-        }, true)}>{t('Apply archive matches')}</button>}
+          if (match.review) await show(false, 0); else setRows(null);
+        }, true)}>{t('Apply archive matches')}</button>
       </div>}
       {match.state === 'applied' && <div className="btn-row"><span className="badge prod">{t('Matches applied')}</span>
         {match.review > 0 && <button className="btn sm" disabled={busy} onClick={() => void act(() => show(false, 0))}>{t('Review possible matches')}</button>}
@@ -100,17 +100,9 @@ export function ArchiveSettings({ onChanged }: { onChanged: () => void }) {
     </div>}
     {rows && <div className="archive-review">
       {!rows.rows.length && <p className="muted">{t('Nothing to review.')}</p>}
-      {rows.rows.map(item => {
-        const fillVendor = item.vendor === 'Unknown' && item.match.build?.vendor;
-        const fillVersion = !item.version && item.match.build?.version;
-        return <details key={item.gameId}>
+      {rows.rows.map(item => <details key={item.gameId}>
         <summary><strong>{item.name}</strong><span className="badge plain">{t(archiveMatchLabel[item.match.state])}</span></summary>
         <code className="archive-digest">{item.sha256}</code>
-        {item.match.build && <div className="stack">
-          <p className="hint">{t('Exact SHA-256. Provenance will be saved.')}</p>
-          {fillVendor && <span className="small">{t('Vendor')} · {fillVendor}</span>}
-          {fillVersion && <span className="small">{t('Version')} · {fillVersion}</span>}
-        </div>}
         {item.candidates.length > 0 && <ul className="archive-candidates">{item.candidates.map(build => <li key={build.sha256}>
           <span><strong>{build.title || build.filename}</strong><small className="muted">{build.vendor} · {build.version || t('Unknown')} · {build.sha256.slice(0, 16)}…</small></span>
           {!preview && <button className="btn sm" disabled={busy} onClick={() => void act(async () => {
@@ -122,7 +114,7 @@ export function ArchiveSettings({ onChanged }: { onChanged: () => void }) {
           await api.archiveConfirm(item.gameId, null);
           await show(false, page);
         }, true)}>{t('Keep unmatched')}</button>}
-      </details>; })}
+      </details>)}
       <ArchivePages page={page} more={rows.more} busy={busy} onPage={p => void act(() => show(preview, p))} />
     </div>}
     {error && <p className="note err" role="alert">{t(error)}</p>}

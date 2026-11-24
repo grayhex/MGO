@@ -73,3 +73,8 @@
 .metadata-sources h3 { margin: 0 0 8px; }
 .metadata-source-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
 .metadata-source-grid > * { align-self: start; }
+
+.curated-destination { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px 8px; }
+.curated-destination p { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.curated-destination .field { max-width: 440px; }
+.archive-progress code { overflow-wrap: anywhere; }

@@ -11,7 +11,7 @@ import { Library } from './components/Library';
 import { Player } from './components/Player';
 import { Shell } from './components/Shell';
 import { LanguageSwitch } from './components/LanguageSwitch';
-import { ThemeSelect } from './components/ThemeSelect';
+import { ThemeToggle } from './components/ThemeToggle';
 import { Icon } from './components/Icon';
 import { useTheme } from './theme';
 import { PhonesPage } from './pages/PhonesPage';
@@ -29,7 +29,7 @@ function Login({ onDone }: { onDone: () => void }) {
   return (
     <div className="login">
       <div className="login-hero">
-        <div className="login-preferences"><ThemeSelect /><LanguageSwitch /></div>
+        <div className="login-preferences"><ThemeToggle /><LanguageSwitch /></div>
         <img className="login-logo" src={theme === 'dark' ? '/graphics/brand/logo-horizontal.svg' : '/graphics/brand/logo-light.svg'} alt="" />
         <h1 className="sr-only">{translateUI("MGO")}</h1>
         <p>{translateUI("Your Java ME, Symbian and N-Gage games, played in real emulators on this server and streamed to any browser.")}</p>
@@ -59,6 +59,10 @@ export function App() {
   useLocale();
   const developer=useDeveloperMode();
   const [path, go] = usePath();
+  const [launch, setLaunch] = useState<string | null>(null);
+  useEffect(() => {
+    if (launch && path !== `/play/${launch}`) setLaunch(null);
+  }, [launch, path]);
   const previousPath = useRef(path);
   const returnGameId = path === '/' ? /^\/play\/([0-9a-f]{16})\/?$/.exec(previousPath.current)?.[1] : undefined;
   useLayoutEffect(() => { previousPath.current = path; }, [path]);
@@ -119,14 +123,14 @@ export function App() {
   const phoneLab = path === '/phones/lab' && !!DevPhones && developer; // the QA view of every handset (developer build + developer mode)
   const settings = path === '/settings' || path === '/settings/';
   const page = play
-    ? { title: 'Player', subtitle: 'Live emulator session', node: <Player key={play[1]} gameId={play[1]!} toast={toast} onExit={() => go('/')} health={health} /> }
+    ? { title: 'Player', subtitle: 'Live emulator session', node: <Player key={play[1]} gameId={play[1]!} autoStart={launch === play[1]} onAutoStartConsumed={() => setLaunch(null)} toast={toast} onExit={() => go('/')} health={health} /> }
     : settings
       ? { title: 'Settings', subtitle: 'Library, emulators and server preferences.', node: <SettingsPage toast={toast} onRunWizard={() => setWizard(true)} onLibraryChanged={() => window.dispatchEvent(new Event('j2me:library-changed'))} /> }
     : phoneLab && DevPhones
       ? { title: 'Phones', subtitle: 'Phone lab', node: <Suspense fallback={null}><DevPhones /></Suspense> }
     : phones
       ? { title: 'Phones', subtitle: 'Classic phones', node: <PhonesPage toast={toast} /> }
-      : { title: 'Library', subtitle: 'Your games on this server', node: <Library returnGameId={returnGameId} toast={toast} onPlay={(id) => go(`/play/${id}`)} health={health} query={query} onQuery={setQuery} /> };
+      : { title: 'Library', subtitle: 'Your games on this server', node: <Library returnGameId={returnGameId} toast={toast} onPlay={(id) => { setLaunch(id); go(`/play/${id}`); }} health={health} query={query} onQuery={setQuery} /> };
 
   return (
     <>

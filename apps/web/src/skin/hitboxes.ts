@@ -1,3 +1,4 @@
+import type { LoadedSkin } from './types';
 import type { Point } from './geometry';
 
 export interface ParsedPolygon { id: string; label: string; points: Point[] }
@@ -33,4 +34,15 @@ export function parseHitboxSvg(svg: string, problems: string[] = []): ParsedPoly
 
 export function polygonPath(points: Point[]): string {
   return points.map(([x, y]) => `${x},${y}`).join(' ');
+}
+
+/** Portrait handsets with mapped controls below the LCD can use the lower body as an external keypad. */
+export function keypadCut(skin: LoadedSkin): number | undefined {
+  const full = skin.config.views.full;
+  if (full.width >= full.height || full.controls !== 'buttons' || skin.config.input?.kind === 'touchscreen') return undefined;
+  const bottom = full.screenRect.y + full.screenRect.height;
+  const controls = skin.hitboxes.filter(box => box.action && box.points.every(([, y]) => y >= bottom));
+  if (controls.length === 0) return undefined;
+  const first = Math.min(...controls.flatMap(box => box.points.map(([, y]) => y)));
+  return (first + bottom) / 2;
 }

@@ -1,91 +1,109 @@
-import { t as translateUI } from '../i18n';
+import { t } from '../i18n';
 import type { GameInfo, GameMeta } from '@mgo/protocol';
 import { Fragment, useEffect, useState } from 'react';
 import { api } from '../api';
 import { useServerSettings } from '../serverSettings';
 import { Candidates } from './Moby';
-import { ArchiveBrowser, ArchiveFacts } from './ArchiveBrowser';
+import { ArchiveBrowser, archiveSize } from './ArchiveBrowser';
 import { archiveMatchLabel } from './ArchiveSettings';
-import { navigate } from '../router';
+import { PlatformTag } from './PlatformTag';
+import { Icon } from './Icon';
 import { Modal } from './Modal';
 
-export function GameInfoDialog({ game, toast, onClose, onChanged }: { game: GameMeta; toast: (k: 'info' | 'error', t: string) => void; onClose: () => void; onChanged: () => void }) {
-  const server = useServerSettings();
-  const hasKey = server?.secrets.mobygames.configured ?? false;
+export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onChanged }: {
+  game: GameMeta; toast: (k: 'info' | 'error', text: string) => void;
+  onClose: () => void; onPlay: (id: string) => void; playDisabled: boolean; onChanged: () => void;
+}) {
+  const hasKey = useServerSettings()?.secrets.mobygames.configured ?? false;
   const [info, setInfo] = useState<GameInfo | null>(null);
+  const [filename, setFilename] = useState(game.fileName);
+  const [checksums, setChecksums] = useState<{ sha1: string; crc32: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [change, setChange] = useState(false);
-  useEffect(() => { api.gameInfo(game.id).then(setInfo, (e) => toast('error', (e as Error).message)); }, [game.id, toast]);
+  const [selected, setSelected] = useState(0);
+  const [broken, setBroken] = useState<number[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void api.gameInfo(game.id).then(result => { if (alive) setInfo(result); }, () => undefined);
+    if (!game.fileName) void api.gameMeta(game.id).then(meta => { if (alive) setFilename(meta.fileName); }, () => undefined);
+    return () => { alive = false; };
+  }, [game.id, game.fileName]);
 
   const act = async (f: () => Promise<GameInfo>) => {
     setBusy(true);
-    try { setInfo(await f()); onChanged(); } catch (e) { toast('error', (e as Error).message); } finally { setBusy(false); }
+    try { setInfo(await f()); setSelected(0); setBroken([]); onChanged(); }
+    catch (e) { toast('error', (e as Error).message); }
+    finally { setBusy(false); }
+  };
+  const copy = async (hash: string) => {
+    try { await navigator.clipboard.writeText(hash); toast('info', t('Checksum copied')); }
+    catch (e) { toast('error', (e as Error).message); }
   };
   const archive = game.archiveMatch;
-  if (showArchive && archive?.build) return <ArchiveBrowser initialSha={archive.build.sha256} onClose={() => setShowArchive(false)} onImported={onChanged} onPlay={id => { onClose(); navigate('/play/' + id); }} />;
-  const has = info && (info.status === 'matched' || info.status === 'manual');
-  return (
-    <Modal title={translateUI(info?.title ?? game.name)} onClose={onClose} wide>
-      {game.ngageInfo && <div className="info-grid">
-        {game.ngageInfo.hasCover && <img className="info-cover" src={`/api/games/${game.id}/ngage-cover`} alt={game.ngageInfo.title} />}
-        <div><h3>{game.ngageInfo.title}</h3><dl className="facts">{Object.entries({ Genre: game.ngageInfo.genre, Publisher: game.ngageInfo.publisher, Developer: game.ngageInfo.developer, Released: game.ngageInfo.released ?? game.ngageInfo.year, Multiplayer: game.ngageInfo.multiplayer, Rating: game.ngageInfo.rating === null ? null : `${game.ngageInfo.rating}%`, 'Product code': game.ngageInfo.productCode }).map(([label,value]) => value !== null && value !== '' ? <Fragment key={label}><dt>{translateUI(label)}</dt><dd>{value}</dd></Fragment> : null)}</dl><a href={game.ngageInfo.sourceUrl} target="_blank" rel="noreferrer">{game.ngageInfo.attribution} ↗</a>{game.ngageInfo.coverSourceUrl && <> · <a href={game.ngageInfo.coverSourceUrl} target="_blank" rel="noreferrer">LaunchBox ↗</a></>}</div>
+  if (showArchive && archive?.build) return <ArchiveBrowser initialSha={archive.build.sha256} onClose={() => setShowArchive(false)} onImported={onChanged} onPlay={onPlay} />;
+
+  const has = info?.status === 'matched' || info?.status === 'manual';
+  const shots = Array.from({ length: has ? info?.screenshots ?? 0 : 0 }, (_, index) => index + 1).filter(index => !broken.includes(index));
+  const visible = shots.includes(selected) ? selected : shots[0];
+  const ngage = game.ngageInfo;
+  const fields: [string, string | undefined][] = [
+    ['Name', game.name],
+    ['File name', filename],
+    ['Size', archiveSize(game.sizeBytes)],
+    ['Resolution', game.nativeResolution ? `${game.nativeResolution.width}×${game.nativeResolution.height}` : undefined],
+    ['Version', game.version],
+    ['Genre', game.classification?.unconfirmed ? ngage?.genre || info?.genres.join(', ') : game.classification?.primaryGenre || ngage?.genre || info?.genres.join(', ')],
+    ['Publisher', game.vendor !== 'Unknown' ? game.vendor : ngage?.publisher || info?.publishers.join(', ')],
+  ];
+  return <Modal title={game.name} onClose={onClose} wide className="game-info-dialog">
+    <div className="game-info-layout">
+      <section className="game-media" aria-label={t('Screenshots')}>
+        <div className="game-shot">
+          {visible ? <a href={api.shotUrl(game.id, visible)} target="_blank" rel="noreferrer"><img src={api.shotUrl(game.id, visible)} alt={t('Screenshot {n}', { n: visible })} onError={() => setBroken(failed => [...failed, visible])} /></a>
+            : <img className="game-shot-placeholder" src="/graphics/brand/mark.svg" alt={t('No screenshots yet')} />}
+        </div>
+        {shots.length > 1 && <div className="game-shot-strip">{shots.map(index => <button type="button" key={index} aria-label={t('Screenshot {n}', { n: index })} aria-pressed={visible === index} onClick={() => setSelected(index)}>
+          <img src={api.shotUrl(game.id, index)} alt="" loading="lazy" onError={() => setBroken(failed => [...failed, index])} />
+        </button>)}</div>}
+      </section>
+      <section className="game-info-fields">
+        <PlatformTag platform={game.platform ?? 'j2me'} />
+        <dl className="game-facts">{fields.map(([name, value]) => <Fragment key={name}><dt>{t(name)}</dt><dd>{value || '—'}</dd></Fragment>)}</dl>
+        <details className="more game-checksums" onToggle={event => {
+          if (event.currentTarget.open && !checksums) void api.gameChecksums(game.id).then(setChecksums, () => undefined);
+        }}>
+          <summary>{t('File checksums')}</summary>
+          {(Object.entries({ 'SHA-256': game.sha256, 'SHA-1': checksums?.sha1, CRC32: checksums?.crc32 })).map(([label, value]) => <div className="checksum" key={label}>
+            <span>{label}</span><code>{value || '—'}</code><button className="btn sm icon" type="button" disabled={!value} aria-label={t('Copy {hash}', { hash: label })} onClick={() => { if (value) void copy(value); }}><Icon name="copy" /></button>
+          </div>)}
+        </details>
+      </section>
+    </div>
+    {has && info?.description && <p className="desc">{info.description}</p>}
+    {(ngage || archive || has || hasKey) && <details className="more game-info-sources">
+      <summary>{t('Metadata sources')}</summary>
+      {ngage && <div className="stack">
+        <dl className="facts">{Object.entries({ Developer: ngage.developer, Released: ngage.released ?? ngage.year, Multiplayer: ngage.multiplayer, 'Product code': ngage.productCode }).map(([label, value]) => value && <Fragment key={label}><dt>{t(label)}</dt><dd>{value}</dd></Fragment>)}</dl>
+        <div className="btn-row"><a href={ngage.sourceUrl} target="_blank" rel="noreferrer">{ngage.attribution} ↗</a>{ngage.coverSourceUrl && <a href={ngage.coverSourceUrl} target="_blank" rel="noreferrer">LaunchBox ↗</a>}</div>
       </div>}
-      {archive && <details className="archive-alternatives" open={!!archive.build}>
-        <summary>J2ME Archive · {translateUI(archiveMatchLabel[archive.state])}</summary>
-        <div className="stack">
-          <small className="muted">{archive.indexVersion}{archive.confidence === 'candidate' ? ' · ' + translateUI('Related build · different SHA-256') : ''}</small>
-          {archive.build && <ArchiveFacts build={archive.build} />}
-          <div className="btn-row">
-            <a href={archive.sourceUrl} target="_blank" rel="noreferrer">{translateUI("Archive search")} ↗</a>
-            {archive.build && <button className="btn sm" onClick={() => setShowArchive(true)}>{translateUI("Possible alternate builds")}</button>}
-            {archive.state === 'review' && <button className="btn sm" onClick={() => { onClose(); navigate('/settings#mobygames'); }}>{translateUI("Review possible matches")}</button>}
-          </div>
-        </div>
-      </details>}
-      {!info && <p className="muted">{translateUI("Loading…")}</p>}
-      {info && has && (
-        <div className="info-grid">
-          {info.hasCover && <img className="info-cover" src={api.coverUrl(game.id)} alt={`Cover of ${info.title}`} />}
-          <div className="stack">
-            <dl className="facts">
-              {info.year && <><dt>{translateUI("Year")}</dt><dd>{info.year}</dd></>}
-              {info.genres.length > 0 && <><dt>{translateUI("Genre")}</dt><dd>{info.genres.join(', ')}</dd></>}
-              {info.publishers.length > 0 && <><dt>{translateUI("Publisher")}</dt><dd>{info.publishers.join(', ')}</dd></>}
-              {info.developers.length > 0 && <><dt>{translateUI("Developer")}</dt><dd>{info.developers.join(', ')}</dd></>}
-              {info.score !== null && <><dt>{translateUI("MobyScore")}</dt><dd>{info.score.toFixed(1)} / 10</dd></>}
-              <dt>{translateUI("In the JAR")}</dt><dd>{game.vendor}{translateUI(game.version ? ` · v${game.version}` : '')}</dd>
-            </dl>
-            {info.description && <p className="desc">{info.description}</p>}
-          </div>
-        </div>
-      )}
-      {info && has && info.screenshots > 0 && (
-        <div className="shots" aria-label={translateUI("Screenshots")}>
-          {Array.from({ length: info.screenshots }, (_, i) => <a key={i} href={api.shotUrl(game.id, i + 1)} target="_blank" rel="noreferrer"><img src={api.shotUrl(game.id, i + 1)} alt={`Screenshot ${i + 1}`} loading="lazy" /></a>)}
-        </div>
-      )}
-      {info && !has && !game.ngageInfo && (
-        <div className="stack">
-          <dl className="facts"><dt>{translateUI("Name")}</dt><dd>{game.name}</dd><dt>{translateUI("Vendor")}</dt><dd>{game.vendor}</dd><dt>{translateUI("Version")}</dt><dd>{game.version || '—'}</dd></dl>
-          <p className="muted">{translateUI(info.status === 'ambiguous' ? 'MobyGames has several possible matches. Choose the right one:' : info.status === 'unmatched' ? 'MobyGames has no clear match for this title.' : hasKey ? 'No information from MobyGames yet.' : 'Add a MobyGames API key in Settings to fetch covers and descriptions.')}</p>
-        </div>
-      )}
-      {info && hasKey && (!has || change) && (info.status !== 'none' || change) && <Candidates gameId={game.id} info={info} toast={toast} onChanged={(i) => { setInfo(i); if (i.status === 'manual') { setChange(false); onChanged(); } }} />}
-      {info && info.error && <p className="note warn">{info.error}</p>}
-      {info && has && (
-        <p className="attrib small">
-          {info.attribution} {info.mobyUrl && <a href={info.mobyUrl} target="_blank" rel="noreferrer noopener">{translateUI("View “")}{info.title}{translateUI("” on MobyGames")}</a>}
-          {info.fetchedAt && <span className="muted"> {translateUI("· fetched")} {new Date(info.fetchedAt).toLocaleDateString()}</span>}
-        </p>
-      )}
-      <div className="modal-actions">
-        {hasKey && <button className="btn" disabled={busy} onClick={() => void act(() => api.infoRefresh(game.id))}>{translateUI(has ? 'Look up again' : 'Look up now')}</button>}
-        {hasKey && has && <button className="btn" disabled={busy} onClick={() => setChange((c) => !c)}>{translateUI("Wrong game?")}</button>}
-        {has && <button className="btn ghost" disabled={busy} onClick={() => void act(() => api.infoUnlink(game.id))}>{translateUI("Remove information")}</button>}
-        <span className="spacer" />
-        <button className="btn primary" onClick={onClose}>{translateUI("Close")}</button>
-      </div>
-    </Modal>
-  );
+      {archive && <div className="btn-row">
+        <a href={archive.sourceUrl} target="_blank" rel="noreferrer">J2ME Archive ↗</a><span className="badge plain">{t(archiveMatchLabel[archive.state])}</span>
+        {archive.build && <button className="btn sm" onClick={() => setShowArchive(true)}>{t('Possible alternate builds')}</button>}
+      </div>}
+      {has && info && <p className="attrib small">{info.attribution} {info.mobyUrl && <a href={info.mobyUrl} target="_blank" rel="noreferrer">MobyGames ↗</a>}</p>}
+      {info && hasKey && (!has || change) && (info.status !== 'none' || change) && <Candidates gameId={game.id} info={info} toast={toast} onChanged={result => { setInfo(result); if (result.status === 'manual') { setChange(false); setSelected(0); setBroken([]); onChanged(); } }} />}
+      {info?.error && <p className="note warn">{info.error}</p>}
+      {hasKey && <div className="btn-row">
+        <button className="btn sm" disabled={busy} onClick={() => void act(() => api.infoRefresh(game.id))}>{t(has ? 'Look up again' : 'Look up now')}</button>
+        {has && <button className="btn sm" disabled={busy} onClick={() => setChange(value => !value)}>{t('Wrong game?')}</button>}
+        {has && <button className="btn sm ghost" disabled={busy} onClick={() => void act(() => api.infoUnlink(game.id))}>{t('Remove information')}</button>}
+      </div>}
+    </details>}
+    <div className="modal-actions">
+      <span className="spacer" />
+      <button className="btn" onClick={onClose}>{t('Close')}</button>
+      <button className="btn primary" onClick={() => onPlay(game.id)} disabled={playDisabled}><Icon name="play" /> {t('Play')}</button>
+    </div>
+  </Modal>;
 }
