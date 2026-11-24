@@ -23,7 +23,9 @@ Automatic mode applies skinId → device + width/height + layout on the server, 
 
 ## Lights Out
 
-Screen view has a moon button. **Alt+L** toggles, **Escape** exits. A persistent visible Exit button is also available. Presentation preference is saved locally across visits. The player covers the page with a near-black background; side panels and the model picker disappear, handset/glass decorations fade. The LCD canvas and all its ancestors keep normal opacity and brightness; no framebuffer filter, decode change or JVM operation is performed. Moving/touching the pointer reveals a transient fullscreen/touch-controls HUD. Touch controls may overlay the lower area when explicitly requested. Fullscreen uses the existing browser API, handles rejection, and remains optional; mobile browsers that lack it keep Lights Out inside the viewport. Reduced motion is respected.
+Screen view shows the original handset controls alongside the display. On N-Gage Classic and QD the directional controls sit above the numeric keypad in the left column.
+
+Use the moon button or **Alt+L** to toggle Lights Out. **Escape** exits. The player hides the side panels and dims the handset and onscreen controls. The LCD stays at full brightness. Moving or touching the pointer reveals the menu for the touch controls, fullscreen and exit. The presentation preference is saved in the browser and respects reduced motion.
 
 ## Gamepads
 

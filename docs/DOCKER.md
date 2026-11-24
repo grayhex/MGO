@@ -125,7 +125,15 @@ docker compose -f compose.yaml -f compose.build.yaml up -d --build
 Hugging Face (J2ME Vault и его CDN), My Abandonware, All About Symbian и MobyGames. Стандартный Compose задаёт для API
 `MGO_METADATA_GATEWAY: http://gateway:9090` и подключает шлюз к сети
 `edge`. При обновлении старого стека обновите оба образа и перенесите новые
-настройки шлюза. Диагностика при HTTP 502: `docker compose logs gateway`.
+настройки шлюза. При ошибке DNS, таймауте или HTTP 502 проверьте доступ к
+My Abandonware из контейнера шлюза. Открытие сайта в браузере проверяет
+сетевой путь самого браузера.
+
+```bash
+docker compose exec gateway wget -Y off -S -O /dev/null http://127.0.0.1:9090/java-sources/www.myabandonware.com/game/batman-begins-wg7
+docker compose logs gateway
+```
+
 JAR и EKA2L1 продолжают работать во внутренних сетях.
 
 ### J2ME Archive в Docker и на NAS

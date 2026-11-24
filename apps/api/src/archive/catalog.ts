@@ -16,25 +16,58 @@ const indexUrls = [
   'https://wakkatobakka.github.io/j2me-archive/data/catalog.json',
 ];
 const origin = 'https://www.myabandonware.com';
-const allowedSite = (url: URL) => url.hostname === 'www.myabandonware.com' || url.hostname === 'myabandonware.com';
+const alternateOrigin = 'https://myabandonware.com';
+const allowedSite = (url: URL) => url.origin === origin || url.origin === alternateOrigin;
 const safeScreenshot = (src: unknown): src is string => typeof src === 'string' &&
   /^\/media\/screenshots\/(?:[a-z0-9_-]+\/)+[a-z0-9_.-]+\.(?:png|jpe?g|webp|gif)$/i.test(src);
+const javaPlatform = /\b(?:J2ME|Java\s+ME)\b/i;
+const entities: Record<string, string> = { amp: '&', quot: '"', apos: "'", '#039': "'", '#39': "'", lt: '<', gt: '>', nbsp: ' ' };
+const decode = (html: string) => html.replace(/&([#a-z0-9]+);/gi, (whole, entity: string) => entities[entity] ?? whole);
 type Listing = { id: string; title: string; aliases: string[]; genres: string[]; listed_year: string };
 type Stored = Omit<JavaCatalogInfo, 'screenshots'> & { images: string[] };
 
+function screenshotPath(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  try {
+    const url = new URL(value, origin);
+    return allowedSite(url) && !url.username && !url.password && safeScreenshot(url.pathname) ? url.pathname : null;
+  } catch { return null; }
+}
+
 export function parseJavaCatalogPage(html: string) {
   let images: string[] = [];
-  const gallery = /const platformGalleries\s*=\s*(\{[^\r\n]*?\});/.exec(html)?.[1];
+  const gallery = /\bplatformGalleries\s*=\s*(\{[^]*?\})\s*;/.exec(html)?.[1];
   if (gallery) {
     try {
-      const items: unknown = JSON.parse(gallery)?.J2ME?.items;
-      if (Array.isArray(items)) images = [...new Set(items.map(item => item?.src).filter(safeScreenshot))].slice(0, 8);
+      const platforms = JSON.parse(gallery) as Record<string, { items?: { src?: unknown }[] }>;
+      const items = Object.entries(platforms).flatMap(([name, platform]) => javaPlatform.test(name) && Array.isArray(platform?.items) ? platform.items : []);
+      images = [...new Set(items.map(item => screenshotPath(item?.src)).filter((src): src is string => src !== null))].slice(0, 8);
     } catch { /* some listings have no Java ME gallery */ }
   }
-  const meta = /<meta\s+name="description"\s+content="([^"]*)"/i.exec(html)?.[1] ?? '';
-  const entities: Record<string, string> = { amp: '&', quot: '"', apos: "'", '#039': "'", '#39': "'", lt: '<', gt: '>', nbsp: ' ' };
-  const description = /\bJ2ME\b/i.test(meta) ? meta.replace(/&([#a-z0-9]+);/gi, (whole, entity: string) => entities[entity] ?? whole).slice(0, 600) : '';
+  let description = '';
+  for (const [tag] of html.matchAll(/<meta\s+(?:"[^"]*"|'[^']*'|[^'">])*?>/gi)) {
+    const attrs = new Map([...tag.matchAll(/\s(name|property|content)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)]
+      .map(([, key, double, single]) => [key!.toLowerCase(), decode(double ?? single ?? '')]));
+    const name = (attrs.get('name') ?? attrs.get('property'))?.toLowerCase();
+    const content = attrs.get('content') ?? '';
+    if ((name === 'description' || name === 'og:description') && javaPlatform.test(content)) {
+      description = content.trim().slice(0, 600);
+      break;
+    }
+  }
   return { images, description };
+}
+
+const retryable = (error: unknown) => !(error instanceof RemoteResponseError) || [403, 408, 429, 500, 502, 503, 504].includes(error.status);
+
+function providerError(error: unknown, provider: string): string {
+  if (error instanceof RemoteResponseError) return `${provider} · HTTP ${error.status}`;
+  if (error instanceof Error && error.name === 'TimeoutError') return `${provider} · request timed out`;
+  if (error instanceof TypeError) {
+    const code = (error.cause as { code?: unknown } | null)?.code;
+    return `${provider} · ${code === 'ENOTFOUND' || code === 'EAI_AGAIN' ? 'DNS lookup failed' : 'server connection failed'}`;
+  }
+  return `${provider} · unexpected response`;
 }
 
 export class JavaCatalog {
@@ -43,6 +76,7 @@ export class JavaCatalog {
   private active?: Promise<void>;
   private jobAbort?: AbortController;
   private shutdown = new AbortController();
+  private preferredOrigin = origin;
   private getInfo: StatementSync;
 
   constructor(private library: Library, private exactBuild: (sha: string) => ArchiveBuild | null, private fetcher: typeof fetch = fetch) {
@@ -88,17 +122,25 @@ export class JavaCatalog {
     return index;
   }
 
-  private signal(signal = this.shutdown.signal) { return AbortSignal.any([signal, this.shutdown.signal, AbortSignal.timeout(10_000)]); }
+  // The gateway can spend time on DNS before starting its HTTPS connect and read timers.
+  private signal(signal = this.shutdown.signal) { return AbortSignal.any([signal, this.shutdown.signal, AbortSignal.timeout(30_000)]); }
 
-  private async page(url: URL, signal: AbortSignal) {
-    const allowed = (at: URL) => allowedSite(at) && /^\/game\/[a-z0-9-]+\/?$/.test(at.pathname);
+  private async site(pathname: string, allowedPath: (path: string) => boolean, maxBytes: number, accept: string, signal = this.shutdown.signal) {
+    const allowed = (at: URL) => allowedSite(at) && allowedPath(at.pathname);
+    const headers = { accept, 'user-agent': 'MGO game metadata (https://github.com/grayhex/MGO)' };
+    const preferred = this.preferredOrigin;
+    const read = (host: string) => readRemote(this.fetcher, new URL(pathname, host), allowed, maxBytes, this.signal(signal), headers);
     try {
-      return await readRemote(this.fetcher, url, allowed, 4 * MIB, this.signal(signal));
+      return await read(preferred);
     } catch (error) {
       signal.throwIfAborted();
-      if (error instanceof RemoteResponseError && ![429, 502, 503, 504].includes(error.status)) throw error;
+      this.shutdown.signal.throwIfAborted();
+      if (!retryable(error)) throw error;
       await delay(750, undefined, { signal });
-      return readRemote(this.fetcher, url, allowed, 4 * MIB, this.signal(signal));
+      const alternate = preferred === origin ? alternateOrigin : origin;
+      const response = await read(alternate);
+      this.preferredOrigin = response.url.origin;
+      return response;
     }
   }
 
@@ -154,7 +196,7 @@ export class JavaCatalog {
     let unavailable = false;
     if (fetchPage) {
       try {
-        const { bytes } = await this.page(url, signal);
+        const { bytes } = await this.site(url.pathname, name => /^\/game\/[a-z0-9-]+\/?$/.test(name), 4 * MIB, 'text/html,application/xhtml+xml', signal);
         const page = parseJavaCatalogPage(bytes.toString('utf8'));
         if (page.description || page.images.length) {
           Object.assign(data, page);
@@ -165,7 +207,7 @@ export class JavaCatalog {
       } catch (cause) {
         signal.throwIfAborted();
         unavailable = !(cause instanceof RemoteResponseError) || [401, 403, 429].includes(cause.status) || cause.status >= 500;
-        error = cause instanceof RemoteResponseError ? `My Abandonware · HTTP ${cause.status}` : 'My Abandonware is temporarily unavailable';
+        error = providerError(cause, 'My Abandonware');
       }
     }
     const stored = this.stored(game.groupKey);
@@ -182,7 +224,7 @@ export class JavaCatalog {
     const cached = path.join(directory, createHash('sha256').update(file).digest('hex'));
     let bytes = await readFile(cached).catch(() => null);
     if (!bytes || !sniffImage(bytes)) {
-      ({ bytes } = await readRemote(this.fetcher, new URL(file, origin), at => allowedSite(at) && safeScreenshot(at.pathname), 2 * MIB, this.signal()));
+      ({ bytes } = await this.site(file, safeScreenshot, 2 * MIB, 'image/*'));
       if (sniffImage(bytes)) {
         const partial = `${cached}.${randomUUID()}.part`;
         try {
@@ -241,9 +283,7 @@ export class JavaCatalog {
       report.state = 'done';
     } catch (error) {
       report.state = signal.aborted ? 'cancelled' : 'failed';
-      if (!signal.aborted) report.error = error instanceof RemoteResponseError
-        ? `Java ME metadata index · HTTP ${error.status}`
-        : 'My Abandonware or the Java ME metadata index is temporarily unavailable';
+      if (!signal.aborted) report.error = providerError(error, 'Java ME metadata index');
     }
   }
 

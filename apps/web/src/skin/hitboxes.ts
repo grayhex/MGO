@@ -1,4 +1,4 @@
-import type { LoadedSkin } from './types';
+import type { Hitbox, LoadedSkin, Rect } from './types';
 import type { Point } from './geometry';
 
 export interface ParsedPolygon { id: string; label: string; points: Point[] }
@@ -36,13 +36,32 @@ export function polygonPath(points: Point[]): string {
   return points.map(([x, y]) => `${x},${y}`).join(' ');
 }
 
-/** Portrait handsets with mapped controls below the LCD can use the lower body as an external keypad. */
-export function keypadCut(skin: LoadedSkin): number | undefined {
+function within(box: Hitbox, rect: Rect): boolean {
+  return box.points.every(([x, y]) => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height);
+}
+
+export function cropHitboxes(boxes: Hitbox[], rect: Rect): Hitbox[] {
+  return boxes.filter(box => within(box, rect)).map(box => ({
+    ...box, points: box.points.map(([x, y]) => [(x - rect.x) / rect.width, (y - rect.y) / rect.height]),
+  }));
+}
+
+/** Use the photographed controls below a portrait LCD or to either side of a landscape LCD. */
+export function keypadCrops(skin: LoadedSkin): Rect[] {
   const full = skin.config.views.full;
-  if (full.width >= full.height || full.controls !== 'buttons' || skin.config.input?.kind === 'touchscreen') return undefined;
+  if (full.controls !== 'buttons' || skin.config.input?.kind === 'touchscreen') return [];
+  if (full.width >= full.height) {
+    const right = full.screenRect.x + full.screenRect.width;
+    const sides = [
+      { x: 0, y: 0, width: full.screenRect.x, height: 1 },
+      { x: right, y: 0, width: 1 - right, height: 1 },
+    ];
+    return sides.every(rect => skin.hitboxes.some(box => box.action && within(box, rect))) ? sides : [];
+  }
   const bottom = full.screenRect.y + full.screenRect.height;
   const controls = skin.hitboxes.filter(box => box.action && box.points.every(([, y]) => y >= bottom));
-  if (controls.length === 0) return undefined;
+  if (controls.length === 0) return [];
   const first = Math.min(...controls.flatMap(box => box.points.map(([, y]) => y)));
-  return (first + bottom) / 2;
+  const cut = (first + bottom) / 2;
+  return [{ x: 0, y: cut, width: 1, height: 1 - cut }];
 }

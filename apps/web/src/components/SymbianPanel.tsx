@@ -90,7 +90,7 @@ export function SymbianPanel({ toast }: { toast: Toaster }) {
 
           <h3>{translateUI('Installed devices')} <Hint text="A device is one firmware installed in the service. A game runs on exactly one of them; MGO shows here which phone each firmware belongs to." /></h3>
           {st.firmware.devices.length === 0
-            ? <div className="sym-empty" data-testid="no-devices"><p><strong>{translateUI('No firmware yet')}</strong></p><p className="muted">{translateUI('Symbian and N-Gage games cannot start until you add a firmware archive below.')}</p></div>
+            ? <div className="sym-empty" data-testid="no-devices"><p><strong>{translateUI('No firmware yet')}</strong></p><p className="muted">{translateUI('Add device firmware below to play Symbian and N-Gage games.')}</p></div>
             : <ul className="sym-devices" data-testid="devices">{st.firmware.devices.map((d) => {
               const cat = catalogOf(d.code);
               const skin = skinOf(cat);
@@ -144,7 +144,7 @@ export function SymbianPanel({ toast }: { toast: Toaster }) {
         </>
       )}
       <details className="more firmware-reference">
-            <summary>{translateUI('Which firmware archive do I need?')}</summary>
+            <summary>{translateUI('Which firmware file do I need?')}</summary>
             <p className="small muted">{translateUI('Use the phone model and product code to identify the firmware. Keep the original filenames inside the archive.')}</p>
             <ul className="firmware-reference-list">
               {EMULATED_DEVICES.filter((device): device is Native => device.engine === 'eka2l1').map(device => (

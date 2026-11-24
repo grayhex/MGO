@@ -3,8 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CanvasHTMLAttri
 import type { InputController } from '../input';
 import { buzz } from '../serverSettings';
 import { fitBox, hitTest, placeRotated, toNormalized, type Rotation } from './geometry';
-import { polygonPath } from './hitboxes';
-import type { Hitbox, LoadedSkin, SkinViewId } from './types';
+import { cropHitboxes, polygonPath } from './hitboxes';
+import type { Hitbox, LoadedSkin, Rect, SkinViewId } from './types';
 import { useHeld } from './useHeld';
 
 export interface SkinDebug { screen?: boolean; hitboxes?: boolean; labels?: boolean }
@@ -14,8 +14,8 @@ export interface PhoneSkinProps {
   view: SkinViewId;
   /** Size of the emulated framebuffer. Never stretched: the picture is centred in the display window with margins. */
   frame: { w: number; h: number };
-  /** Render the photographed keypad below the display, with its original hitboxes. */
-  keypadCrop?: number;
+  /** Render a region of the original handset and its controls. */
+  keypadCrop?: Rect;
   /** Turns the picture inside the display window (presentation only). */
   rotation?: Rotation;
   canvasRef?: Ref<HTMLCanvasElement>;
@@ -64,24 +64,24 @@ export function PhoneSkin({ skin, view, frame, keypadCrop, rotation = 0, canvasR
   const fit = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const parent = useBox(fit, !size?.w || !size?.h);
-  const v = skin.config.views[keypadCrop === undefined ? view : 'full'];
-  const cut = keypadCrop ?? 0;
+  const v = skin.config.views[keypadCrop ? 'full' : view];
   const keypad = keypadCrop !== undefined;
   const outer = { w: size?.w ?? parent.w, h: size?.h ?? parent.h };
-  const dim = useMemo(() => fitBox(outer, v.width / (v.height * (1 - cut))), [outer.w, outer.h, v.width, v.height, cut]); // eslint-disable-line react-hooks/exhaustive-deps
+  const aspect = v.width * (keypadCrop?.width ?? 1) / (v.height * (keypadCrop?.height ?? 1));
+  const dim = useMemo(() => fitBox(outer, aspect), [outer.w, outer.h, aspect]); // eslint-disable-line react-hooks/exhaustive-deps
   const place = useMemo(() => placeRotated(v, dim, frame, integer, rotation), [v, dim, frame, integer, rotation]);
   const physical = (view === 'full' || keypad) && v.controls === 'buttons';
-  const bodyPosition = keypad ? { top: -dim.h * cut / (1 - cut), height: dim.h / (1 - cut) } : undefined;
+  const bodyPosition = keypadCrop ? {
+    left: -dim.w * keypadCrop.x / keypadCrop.width, width: dim.w / keypadCrop.width,
+    top: -dim.h * keypadCrop.y / keypadCrop.height, height: dim.h / keypadCrop.height,
+  } : undefined;
 
   // --- hitboxes: pointer id -> hitbox id; every pointer is its own input source
   const tracked = useRef(new Map<number, { id: string; label: string; action: string | null; source: string }>());
   const dragging = useRef(new Set<number>()); // pointers that went down on a key and are still pressed: they may slide across gaps onto other keys
   const [local, setLocal] = useState<Set<string>>(() => new Set());
   const held = useHeld(input);
-  const boxes = useMemo(() => cut ? skin.hitboxes
-    .filter(box => box.points.every(([, y]) => y >= cut))
-    .map(box => ({ ...box, points: box.points.map(([x, y]): [number, number] => [x, (y - cut) / (1 - cut)]) }))
-    : skin.hitboxes, [skin.hitboxes, cut]);
+  const boxes = useMemo(() => keypadCrop ? cropHitboxes(skin.hitboxes, keypadCrop) : skin.hitboxes, [skin.hitboxes, keypadCrop]);
 
   // The handlers read the latest props through a ref, so their identity never changes: a re-render must not release a held key.
   const live = useRef({ input, onKey, skinId: skin.config.id });

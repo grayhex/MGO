@@ -12,10 +12,10 @@ export class RemoteResponseError extends Error {
 }
 
 /** Read a bounded public response. Redirects must stay within the provider's allowed HTTPS hosts. */
-export async function readRemote(fetcher: typeof fetch, url: URL, allowed: (url: URL) => boolean, maxBytes: number, signal: AbortSignal) {
+export async function readRemote(fetcher: typeof fetch, url: URL, allowed: (url: URL) => boolean, maxBytes: number, signal: AbortSignal, headers?: HeadersInit) {
   for (let redirects = 0; redirects <= 4; redirects++) {
     if (url.protocol !== 'https:' || url.username || url.password || url.port || !allowed(url)) throw new Error('Unexpected download host');
-    const response = await fetcher(url, { signal, redirect: 'manual' });
+    const response = await fetcher(url, { signal, redirect: 'manual', ...(headers ? { headers } : {}) });
     if (response.status >= 300 && response.status < 400) {
       await response.body?.cancel();
       const location = response.headers.get('location');
@@ -37,7 +37,7 @@ export async function readRemote(fetcher: typeof fetch, url: URL, allowed: (url:
     try {
       for (;;) {
         const { done, value } = await reader.read();
-        if (done) return { bytes: Buffer.concat(chunks, length), headers: response.headers };
+        if (done) return { bytes: Buffer.concat(chunks, length), headers: response.headers, url };
         length += value.length;
         if (length > maxBytes) throw new Error('Remote response exceeded the size limit');
         chunks.push(value);
