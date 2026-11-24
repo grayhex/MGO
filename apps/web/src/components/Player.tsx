@@ -571,7 +571,10 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const displayProfile = live && session ? { width: session.width, height: session.height } : res;
   const mismatch = j2me && actualGameSize && displayProfile &&
     (actualGameSize.width !== displayProfile.width || actualGameSize.height !== displayProfile.height);
-  const { skins } = useCatalog(!!mismatch || (!j2me && !!(actualGameSize || session?.framesReceived)));
+  const physicalScreen = skin?.config.screen;
+  const skinMismatch = actualGameSize && physicalScreen &&
+    (actualGameSize.width !== physicalScreen.width || actualGameSize.height !== physicalScreen.height);
+  const { skins } = useCatalog(j2me ? !!skinMismatch : !!phoneCatalog);
   const suggestion = useMemo(() => {
     if (!game || !skins) return null;
     const mine = getServerSettings()?.settings.myPhones;
