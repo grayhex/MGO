@@ -1,22 +1,22 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ArchiveBuild, ArchiveDownload, ArchiveSearchItem, ArchiveStatus, ArchiveTransfer, CuratedTitle, CuratedImport, PublicSettings } from '@mgo/protocol';
+import type { ArchiveBuild, ArchiveDownload, ArchiveSearchItem, ArchiveStatus, ArchiveTransfer, CuratedTitle, CuratedImport, GameMeta, PublicSettings } from '@mgo/protocol';
 import type { Config } from '../config.js';
 import { javaGroupKey, type Library } from '../library.js';
 import type { ScanManager } from '../scanner.js';
 import { parseJar, UploadError } from '../jar.js';
 import { resolveInsideRoots } from '../libraryPath.js';
-import { assertSpace, folderSegments, managedRoot, publishJar, withDestination, writable } from './destination.js';
-import { ArchiveIndex, MIB, SHA256, SOURCE } from './index.js';
+import { assertSpace, folderSegments, managedRoot, publishedJarName, publishJar, removePublishedJar, withDestination, writable } from './destination.js';
+import { ArchiveIndex, archiveTitleKey as titleKey, MIB, normalized, SHA256, SOURCE } from './index.js';
 import { ArchiveMatching } from './matching.js';
+import type { JarMirror } from './mirror.js';
 
 export type ArchiveWorker = (args: string[], workspace: string, proxy: string, signal: AbortSignal, progress: (line: string) => void) => Promise<void>;
 type Job = { abort: AbortController; task: Promise<void> };
-const DOWNLOAD_BUDGET = 512 * MIB;
 const curatedPath = fileURLToPath(new URL('../../archive-tools/java_curated_top.txt', import.meta.url));
 const workerPath = fileURLToPath(new URL('../../archive-tools/worker.py', import.meta.url));
 
@@ -33,7 +33,7 @@ export const runArchiveWorker: ArchiveWorker = (args, workspace, proxy, signal, 
       try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already exited */ }
     }
   };
-  const timeout = setTimeout(kill, args[0] === 'index' ? 30 * 60_000 : 370_000);
+  const timeout = setTimeout(kill, args[0] === 'index' ? 30 * 60_000 : 120_000);
   signal.addEventListener('abort', kill, { once: true });
   if (signal.aborted) kill();
   child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
@@ -71,7 +71,8 @@ export class ArchiveService {
   private curatedAbort: AbortController | null = null;
   private curatedPlan: { index: ArchiveIndex; rows: Promise<CuratedTitle[]> } | null = null;
 
-  constructor(private cfg: Config, private library: Library, private scanner: ScanManager, private worker: ArchiveWorker = runArchiveWorker, private settings?: () => PublicSettings) {
+  constructor(private cfg: Config, private library: Library, private scanner: ScanManager, private worker: ArchiveWorker = runArchiveWorker, private settings?: () => PublicSettings,
+    private mirror: JarMirror | null = null) {
     this.matching = new ArchiveMatching(library);
     this.dir = path.join(cfg.dataDir, 'j2me-archive');
     this.indexPath = path.join(this.dir, 'index.sqlite');
@@ -83,6 +84,32 @@ export class ArchiveService {
       try { this.index = new ArchiveIndex(this.indexPath); }
       catch { this.indexJob = { state: 'failed', phase: 'finished', message: 'Archive index version mismatch. Rebuild the index in Settings.' }; }
     }
+    this.recoverDownloads();
+  }
+
+  private recoverDownloads() {
+    const rows = this.library.db.prepare(`SELECT g.id,g.sha256,s.rel_path FROM games g JOIN sources s ON s.game_id=g.id
+      JOIN archive_matches a ON a.game_id=g.id
+      WHERE g.download_json IS NULL AND g.origin='import' AND g.platform='j2me'
+      AND json_extract(a.match_json,'$.state')='exact' AND json_extract(a.match_json,'$.matchedSha256')=g.sha256
+      AND s.sha256=g.sha256 AND s.missing=0 ORDER BY s.rel_path`).all();
+    for (const row of rows) {
+      const sha = String(row.sha256);
+      const source = String(row.rel_path);
+      if (!publishedJarName(path.basename(source), sha)) continue;
+      const location = this.scanner.archiveLocation(source);
+      if (location) this.library.recordDownload(String(row.id), { ...location, provider: 'J2ME Archive' });
+    }
+  }
+
+  removeDownload(game: GameMeta): void {
+    if (this.scanner.isRunning()) throw new UploadError('scan_running', 'Wait for the library scan to finish before deleting a downloaded game', 409);
+    const download = this.library.downloadOf(game.id);
+    if (!download) throw new UploadError('archive_not_downloaded', 'This JAR was not downloaded by MGO', 409);
+    if (download.root !== managedRoot(this.cfg) && resolveInsideRoots(this.cfg, download.root)?.real !== download.root) {
+      throw new UploadError('archive_bad_root', 'The download folder is unavailable', 409);
+    }
+    removePublishedJar(download.root, download.relative, game.sha256, game.sizeBytes);
   }
 
   status(): ArchiveStatus {
@@ -118,6 +145,8 @@ export class ArchiveService {
     if (!this.index) throw new UploadError('archive_index_missing', 'Install the J2ME Archive index in Settings', 409);
     return this.index;
   }
+
+  exactBuild(sha: string) { return this.index?.get(sha) ?? null; }
 
   private ensureIdle(fromCurated = false): void {
     if (this.job || this.matching.isRunning() || (this.curatedTask && !fromCurated)) throw new UploadError('archive_busy', 'Another archive operation is running', 409);
@@ -241,7 +270,7 @@ export class ArchiveService {
     if (rootId === 'managed') mkdirSync(root, { mode: 0o700, recursive: true });
     withDestination(root, segments, dir => assertSpace(dir, build.size));
     mkdirSync(this.dir, { mode: 0o700, recursive: true });
-    assertSpace(this.dir, DOWNLOAD_BUDGET + 2 * build.size);
+    assertSpace(this.dir, 32 * MIB + 2 * build.size);
     const staging = path.join(this.dir, '.download');
     mkdirSync(staging, { mode: 0o700, recursive: true });
     const file = path.join(staging, 'verified.jar');
@@ -250,10 +279,23 @@ export class ArchiveService {
     this.download = report;
     this.start(report, async signal => {
       try {
-        await this.worker(['download', sha, file, path.join(staging, 'cache'), String(Math.min(64, Math.ceil(this.cfg.maxUploadBytes / MIB))), build.collection === '96x65pixels J2ME mini' ? 'mini' : 'auto'], staging, this.proxy(), signal, line => {
+        const progress = (line: string) => {
           report.message = line.slice(0, 300);
-          if (fromCurated && this.curated) this.curated.progress = report.message;
-        });
+          if (fromCurated && this.curated) {
+            this.curated.progress = report.message;
+            if (report.source) this.curated.source = report.source;
+          }
+        };
+        report.source = 'J2ME Vault';
+        progress('Looking for a direct JAR…');
+        const direct = await this.mirror?.download(build, signal);
+        if (direct) writeFileSync(file, direct, { mode: 0o600 });
+        else {
+          report.source = 'J2ME Archive';
+          progress('Checking the archive fallback…');
+          await this.worker(['download', sha, file, path.join(staging, 'cache'), String(Math.min(64, Math.ceil(this.cfg.maxUploadBytes / MIB))),
+            build.collection === '96x65pixels J2ME mini' ? 'mini' : 'auto'], staging, this.proxy(), signal, progress);
+        }
         signal.throwIfAborted();
         report.phase = 'verifying';
         const stat = lstatSync(file);
@@ -265,8 +307,12 @@ export class ArchiveService {
         report.phase = 'importing';
         // It may have been uploaded while the archive job was still transferring.
         const duplicate = this.library.findBySha(sha);
-        const game = duplicate ?? withDestination(root, segments, dir => publishJar(dir, build.filename, sha, bytes, (name, mtime) =>
-          this.scanner.importArchiveJar(root, [...segments, name].join('/'), bytes, sha, mtime).game));
+        const game = duplicate ?? withDestination(root, segments, dir => publishJar(dir, build.filename, sha, bytes, (name, mtime) => {
+          const relative = [...segments, name].join('/');
+          const result = this.scanner.importArchiveJar(root, relative, bytes, sha, mtime);
+          if (!result.duplicate) this.library.recordDownload(result.game.id, { root, relative, provider: report.source! });
+          return result.game;
+        }));
         this.matching.exact(game.id, index.info.version, build);
         report.gameId = game.id;
         report.duplicate = !!duplicate;
@@ -285,19 +331,59 @@ export class ArchiveService {
     const index = this.requireIndex();
     if (this.curatedPlan?.index !== index) {
       const rows = async () => {
+        const files = await this.mirror?.catalog();
+        if (index !== this.index) throw new UploadError('archive_index_changed', 'The archive index changed. Refresh the list.', 409);
+        const titles = this.curatedTitles();
+        const wanted = new Set(titles.map(titleKey));
+        const directBuilds = new Map<string, ArchiveBuild[]>();
+        for (const [sha] of files?.byHash ?? []) {
+          const build = index.get(sha);
+          if (!build) continue;
+          const key = titleKey(build.title);
+          if (!wanted.has(key)) continue;
+          const list = directBuilds.get(key) ?? [];
+          list.push(build);
+          directBuilds.set(key, list);
+        }
         const plan: CuratedTitle[] = [];
-        for (const title of this.curatedTitles()) {
+        for (const title of titles) {
           await new Promise<void>(done => setImmediate(done));
           if (index !== this.index) throw new UploadError('archive_index_changed', 'The archive index changed. Refresh the list.', 409);
           const { builds, suggested } = index.curatedCandidates(title);
-          plan.push({ title, builds: builds.map(build => this.decorate(build)), suggested });
+          const typical = builds.find(build => build.sha256 === suggested);
+          const direct = directBuilds.get(titleKey(title)) ?? [];
+          const options = [...new Map([...direct, ...builds].map(build => [build.sha256, build])).values()]
+            .sort((a, b) => Number(!!files?.candidates(b).length) - Number(!!files?.candidates(a).length));
+          const recommended = typical && (options.find(build => normalized(build.vendor) === normalized(typical.vendor) && !!files?.candidates(build).length) ?? typical);
+          plan.push({ title, builds: options.map(build => ({ ...this.decorate(build), ...(files?.candidates(build).length ? { direct: true } : {}) })), suggested: recommended?.sha256 ?? null });
         }
         return plan;
       };
       this.curatedPlan = { index, rows: rows() };
     }
     // Installed status is live even after completing an earlier import.
-    return (await this.curatedPlan.rows).map(item => ({ ...item, builds: item.builds.map(build => this.decorate(build)) }));
+    const plan = await this.curatedPlan.rows;
+    const installed = this.installedTitles();
+    return plan.map(item => {
+      const installedGameId = installed.get(titleKey(item.title));
+      return { ...item, ...(installedGameId ? { installedGameId } : {}),
+        builds: item.builds.map(build => ({ ...build, ...this.decorate(build) })) };
+    });
+  }
+
+  private installedTitles() {
+    const installed = new Map<string, string>();
+    const rows = this.library.db.prepare(`SELECT g.id,g.name,g.sha256,coalesce(t.title,c.canonical_title) as display
+      FROM games g LEFT JOIN game_titles t USING(group_key) LEFT JOIN game_classifications c USING(group_key)
+      WHERE g.platform='j2me'`).all();
+    for (const row of rows) {
+      const id = String(row.id);
+      const stored = String(row.name);
+      const indexed = this.index?.get(String(row.sha256))?.title;
+      const displayed = typeof row.display === 'string' ? row.display : null;
+      for (const name of [stored, indexed, displayed]) if (name) installed.set(titleKey(name), id);
+    }
+    return installed;
   }
 
   currentCurated(): CuratedImport | null { return this.curated; }
@@ -339,9 +425,16 @@ export class ArchiveService {
     for (const item of selection) {
       if (signal.aborted) break;
       report.current = item.title;
-      report.currentBytes = this.index?.get(item.sha256)?.size ?? 0;
+      const build = this.index?.get(item.sha256);
+      report.currentBytes = build?.size ?? 0;
       report.progress = null;
+      delete report.source;
       try {
+        const installed = this.installedTitles();
+        if (installed.has(titleKey(item.title)) || (build?.title && installed.has(titleKey(build.title)))) {
+          report.duplicates++;
+          continue;
+        }
         const job = this.startDownload(item.sha256, destination.rootId, destination.folder, destination.root);
         await this.job?.task;
         if (signal.aborted) break;

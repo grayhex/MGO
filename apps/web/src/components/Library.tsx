@@ -74,6 +74,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
   const [editing, setEditing] = useState<GameMeta | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiveFilter, setArchiveFilter] = useState<'all' | 'exact' | 'review' | 'unknown'>('all');
+  const [downloadedOnly, setDownloadedOnly] = useState(false);
   const [infoFor, setInfoFor] = useState<GameMeta | null>(null);
   const [genreFor, setGenreFor] = useState<GameMeta | null>(null);
   const [sort, setSortState] = useState<SortKey>(loadSort);
@@ -193,13 +194,15 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
       .filter((vs) => genre === 'all' || (genre === 'unclassified' ? !vs[0]!.classification : vs[0]!.classification?.primaryGenre === genre || !!vs[0]!.classification?.genres.includes(genre)))
       .filter((vs) => (filter === 'favorites' ? vs.some((g) => g.favorite) : filter === 'recent' ? vs.some((g) => g.lastPlayedAt) : true))
       .filter((vs) => matchesStatus(vs, status))
+      .map(vs => downloadedOnly ? vs.filter(game => game.downloadedFrom) : vs)
+      .filter(vs => vs.length > 0)
       .filter((vs) => archiveFilter === 'all' || vs.some(g => {
         if ((g.platform ?? 'j2me') !== 'j2me') return false;
         const state = g.archiveMatch?.state ?? 'unknown';
         return state === archiveFilter || (archiveFilter === 'exact' && state === 'manual');
       }))
       .sort((a, b) => compareGroups(a, b, filter === 'recent' && sort === 'name' ? 'played' : sort)); // "Recent" keeps its order unless another one is chosen
-  }, [games, query, filter, genre, status, sort, platform, archiveFilter]);
+  }, [games, query, filter, genre, status, sort, platform, archiveFilter, downloadedOnly]);
 
   useEffect(() => {
     if (!focusGame || focused.current || !games) return;
@@ -207,7 +210,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
     if (!game) return;
     if (!groups.some(versions => versions[0]?.groupKey === game.groupKey)) {
       if (query) onQuery('');
-      setFilter('all'); setPlatform('all'); setStatusState('all'); setGenreState('all'); setArchiveFilter('all');
+      setFilter('all'); setPlatform('all'); setStatusState('all'); setGenreState('all'); setArchiveFilter('all'); setDownloadedOnly(false);
       return;
     }
     const row = document.querySelector<HTMLButtonElement>(`[data-library-group="${game.groupKey}"] .card-main`);
@@ -271,6 +274,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
         <select className="select compact" value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)} aria-label={translateUI("Show games")} data-testid="status-filter">
           {STATUS_FILTERS.map((k) => <option key={k} value={k}>{translateUI(STATUS_LABEL[k])}</option>)}
         </select>
+        {(games ?? []).some(game => game.downloadedFrom) && <button type="button" className="btn sm" aria-pressed={downloadedOnly} onClick={() => setDownloadedOnly(value => !value)}><Icon name="download" /> {translateUI('Downloaded by MGO')}</button>}
         <Seg<Filter> label={translateUI("Filter")} value={filter} onChange={setFilter} options={[{ value: 'all', label: 'All' }, { value: 'favorites', label: 'Favorites' }, { value: 'recent', label: 'Recent' }]} />
         <Seg<View> label={translateUI("View")} value={view} onChange={setView} options={[{ value: 'tiles', label: 'Tiles', title: 'Large tiles with covers' }, { value: 'list', label: 'List', title: 'Compact list, one game per line' }]} />
       </div>
@@ -302,6 +306,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
         {groups.map((vs) => {
           const sel = vs.find((v) => v.id === chosen[vs[0]!.groupKey]) ?? vs.find(v => v.id === focusGame) ?? vs[0]!;
           const java = (sel.platform ?? 'j2me') === 'j2me';
+          const returned = vs.some(version => version.id === focusGame);
           const bad = java && sel.classVersion >= 49;
           const blocked = bad || (java && health?.ok === false);
           const unconfirmed = !sel.classification || sel.classification.unconfirmed;
@@ -326,6 +331,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
               {sel.warnings.length > 0 && <span className="badge mock" title={translateUI(sel.warnings.join('\n'))}>!</span>}
               {sel.sourceMissing && <span className="badge plain" title={translateUI("The file is no longer in the library folder; the game stays here with its saves")}>{translateUI("file gone")}</span>}
               {archiveMark}
+              {sel.downloadedFrom && <span className="archive-mark downloaded" role="img" title={translateUI('Downloaded by MGO · {source}', { source: sel.downloadedFrom })} aria-label={translateUI('Downloaded by MGO')}><Icon name="download" /></span>}
               {sel.info?.status === 'ambiguous' && <span className="badge mock" title={translateUI("Several MobyGames matches: open the info to choose")}>{translateUI("review")}</span>}
             </>
           );
@@ -340,7 +346,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
             </>
           );
           if (view === 'list') return (
-            <article className="card game-card game-row" key={sel.groupKey} data-library-group={sel.groupKey} tabIndex={-1}
+            <article className="card game-card game-row" key={sel.groupKey} data-library-group={sel.groupKey} data-returned={returned || undefined} tabIndex={-1}
               onClick={event => { if (!(event.target as Element).closest('button, select, a')) setInfoFor(sel); }}>
               <button className="row-cover" tabIndex={-1} aria-hidden onClick={() => setInfoFor(sel)}><Cover g={sel} /></button>
               <button className="card-main row-title" onClick={() => setInfoFor(sel)} title={translateUI("Game information")}>
@@ -356,7 +362,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
             </article>
           );
           return (
-            <article className="card game-card" key={sel.groupKey} data-library-group={sel.groupKey} tabIndex={-1}>
+            <article className="card game-card" key={sel.groupKey} data-library-group={sel.groupKey} data-returned={returned || undefined} tabIndex={-1}>
               <button className="card-main" onClick={() => setInfoFor(sel)} title={translateUI("Game information")}>
                 <Cover g={sel} />
                 <div className="meta">

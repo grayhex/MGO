@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from build_index import main
-from jarchive_download import RangeCache
+from jarchive_download import RangeCache, RetrievalError, main as download
 from transport import route
 
 
@@ -37,6 +37,20 @@ class ArchiveWorkerTests(unittest.TestCase):
             second = RangeCache(Path(temp), {**source, "before": 180, "size": 16}, True)
             self.assertEqual(second.read(80, 4), b"abcd")
             self.assertIsNone(RangeCache(Path(temp), {**source, "block_number": 3}, True).read(80, 4))
+
+    def test_heavy_solid_archive_is_skipped_before_data_requests(self):
+        sha = "1" * 64
+        sources = [{ "size": 100 * 1024, "skip": 90 * 1024 * 1024, "archive_name": "JARchive.7z",
+                     "compressed_upper_bound": 30 * 1024 * 1024 }]
+        with tempfile.TemporaryDirectory() as temp:
+            index = Path(temp) / "manifest.json"
+            index.touch()
+            with patch("jarchive_download.resolve_hash", return_value=(sha, None)), \
+                 patch("jarchive_download.load_sources", return_value=sources), \
+                 patch("jarchive_download.curl_metadata") as network:
+                with self.assertRaisesRegex(RetrievalError, "exceeds the unpacking limit"):
+                    download([sha, "--index", temp, "--max-decode-mib", "16"])
+                network.assert_not_called()
 
     def test_verified_record_and_mini_map(self):
         sha = "1" * 64

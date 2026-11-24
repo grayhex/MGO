@@ -100,6 +100,8 @@ export interface GameMeta {
   warnings: string[];
   /** 'upload' (web upload) or 'import' (scanned from the library directory). */
   origin?: 'upload' | 'import';
+  downloadedFrom?: import('./j2meArchive.js').DownloadProvider;
+  javaCatalog?: { genres: string[]; year: number | null };
   /** True when every file this game was imported from has disappeared from the library directory (the game itself is kept). */
   sourceMissing?: boolean;
   /** Short MobyGames summary, when the game has been matched. */

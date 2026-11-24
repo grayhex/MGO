@@ -17,6 +17,7 @@ export interface ArchiveBuild {
 export interface ArchiveSearchItem extends ArchiveBuild {
   gameId: string | null;
   otherBuildsInLibrary: number;
+  direct?: boolean;
 }
 
 export type ArchiveMatchState = 'exact' | 'review' | 'unknown' | 'manual';
@@ -74,12 +75,16 @@ export interface ArchiveDownload extends ArchiveTransfer {
   sha256: string;
   gameId: string | null;
   duplicate: boolean;
+  source?: DownloadProvider;
 }
+
+export type DownloadProvider = 'J2ME Vault' | 'J2ME Archive';
 
 export interface CuratedTitle {
   title: string;
   suggested: string | null;
   builds: ArchiveSearchItem[];
+  installedGameId?: string;
 }
 
 export interface CuratedDestination { path: string; writable: boolean }
@@ -94,4 +99,22 @@ export interface CuratedImport {
   currentBytes?: number;
   destination?: string;
   progress: string | null;
+  source?: DownloadProvider;
+}
+
+export interface JavaCatalogInfo {
+  title: string;
+  sourceUrl: string;
+  genres: string[];
+  description: string;
+  screenshots: number;
+  year: number | null;
+}
+
+export interface JavaCatalogJob {
+  state: 'running' | 'done' | 'failed';
+  total: number;
+  processed: number;
+  matched: number;
+  errors: number;
 }

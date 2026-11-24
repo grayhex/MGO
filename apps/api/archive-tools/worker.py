@@ -24,7 +24,8 @@ elif sys.argv[1] == "download":
         cache_bytes -= size
     resource.setrlimit(resource.RLIMIT_FSIZE, (64 * MIB, 64 * MIB))
     sys.exit(main([sha, "--output", output, "--cache-dir", cache,
-                   "--time-limit", "360", "--stall-limit", "45", "--request-timeout", "20",
-                   "--source", sources[0] if sources else "auto", "--max-download-mib", "192", "--max-jar-mib", upload_mib, "--route-passes", "1"]))
+                   "--time-limit", "45", "--stall-limit", "15", "--request-timeout", "8",
+                   "--source", sources[0] if sources else "auto", "--max-download-mib", "8",
+                   "--max-decode-mib", "16", "--max-jar-mib", upload_mib, "--route-passes", "1"]))
 else:
     raise SystemExit("Unknown archive job")

@@ -1,4 +1,5 @@
 import type { CuratedTitle, CuratedImport, ArchiveStatus, ArchiveTransfer, ArchiveMatchJob, ArchiveReviewItem, ArchiveMatch, ArchiveSearchItem, ArchiveDownload, CatalogReport, DevicePreset, GameClassification, Genre, GenreSummary, EmulationTweaks, GameFileEntry, GameInfo, GameMeta, GameSettings, HealthStatus, KemulatorRelease, KemulatorUpdateStatus, LibraryCheck, LibraryRoot, MetadataJob, MobyCandidate, PublicSettings, Platform, ScanReport, SessionStatus, SettingsResponse, SymbianJob, SymbianStatus, SystemStatus } from '@mgo/protocol';
+import type { JavaCatalogInfo, JavaCatalogJob } from '@mgo/protocol';
 
 export type GameSettingsPatch = Partial<Omit<GameSettings, 'device' | 'emulation' | 'symbianDevice' | 'emulatedDeviceId'>> & { device?: string | null; emulation?: EmulationTweaks | null; symbianDevice?: string | null; emulatedDeviceId?: string | null };
 
@@ -121,7 +122,12 @@ export const api = {
   symbianJob: (id: string) => req<SymbianJob>(`/api/symbian/jobs/${id}`),
   symbianRemove: (code: string) => req<SymbianJob>(`/api/symbian/firmware/${encodeURIComponent(code)}`, { method: 'DELETE' }),
   patchGame: (id: string, patch: { favorite?: boolean; settings?: GameSettingsPatch }) => req<GameMeta>(`/api/games/${id}`, jsonInit('PATCH', patch)),
-  deleteGame: (id: string, saves: boolean) => req<void>(`/api/games/${id}${saves ? '?saves=1' : ''}`, { method: 'DELETE' }),
+  deleteGame: (id: string, saves: boolean, downloaded = false) => {
+    const query = new URLSearchParams();
+    if (saves) query.set('saves', '1');
+    if (downloaded) query.set('downloaded', '1');
+    return req<void>(`/api/games/${id}?${query}`, { method: 'DELETE' });
+  },
   iconUrl: (id: string) => `/api/games/${id}/icon`,
   startSession: (gameId: string, settings?: GameSettingsPatch) => req<SessionStatus>('/api/sessions', jsonInit('POST', { gameId, settings })),
   devices: () => req<{ presets: DevicePreset[]; defaultName: string | null }>('/api/devices'),
@@ -191,6 +197,11 @@ export const api = {
   gameMeta: (id: string) => req<GameMeta>(`/api/games/${id}`),
   gameChecksums: (id: string) => req<{ sha1: string; crc32: string }>(`/api/games/${id}/checksums`),
   gameInfo: (id: string) => req<GameInfo>(`/api/games/${id}/info`),
+  javaCatalogInfo: (id: string) => req<{ info: JavaCatalogInfo | null }>(`/api/games/${id}/java-catalog`),
+  javaCatalogLookup: (id: string) => req<{ info: JavaCatalogInfo | null; resolution: GameMeta['nativeResolution'] | null }>(`/api/games/${id}/java-catalog`, { method: 'POST' }),
+  javaCatalogStatus: () => req<{ job: JavaCatalogJob | null }>('/api/catalog/java'),
+  javaCatalogStart: () => req<JavaCatalogJob>('/api/catalog/java', { method: 'POST' }),
+  javaCatalogShotUrl: (id: string, n: number) => `/api/games/${id}/java-catalog/shot/${n}`,
   infoRefresh: (id: string) => req<GameInfo>(`/api/games/${id}/info/refresh`, { method: 'POST' }),
   infoSearch: (id: string, query: string) => req<GameInfo>(`/api/games/${id}/info/search`, jsonInit('POST', { query })),
   infoChoose: (id: string, mobyId: number) => req<GameInfo>(`/api/games/${id}/info/choose`, jsonInit('POST', { mobyId })),

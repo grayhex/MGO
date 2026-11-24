@@ -47,7 +47,9 @@ try {
   await p.waitForURL('**/play/' + game.id);
   await p.locator('.stage .skin-box').waitFor();
   await p.locator('.sidebar').getByRole('link', { name: 'Library', exact: true }).click();
-  await p.locator('.game-card').first().waitFor();
+  const returned = p.locator(`.game-card[data-library-group="${game.groupKey}"][data-returned="true"]`);
+  await returned.waitFor();
+  await p.waitForFunction(() => document.activeElement?.closest('[data-returned="true"]'));
   const back = p.locator('.sidebar').getByTestId('current-game');
   assert.equal(await back.count(), 1);
   await back.click();
@@ -111,7 +113,7 @@ try {
   assert.equal(await p.locator('.stage-bar').getByRole('radio', { name: 'Screen', exact: true }).count(), 0);
   const geo = await p.evaluate(() => { const f = document.querySelector('.stage-foot.side').getBoundingClientRect(); const s = document.querySelector('.stage').getBoundingClientRect(); const l = document.querySelector('[data-testid=skin-lcd]').getBoundingClientRect(); return { footRight: f.right, stageLeft: s.left, lcdLeft: l.left, footW: f.width }; });
   assert.ok(geo.footRight <= geo.stageLeft + 1 && geo.footRight <= geo.lcdLeft, JSON.stringify(geo));
-  assert.ok(geo.footW <= 200, `compact keys (${geo.footW}px)`);
+  assert.ok(geo.footW >= 240 && geo.footW <= 270, `enlarged keys (${geo.footW}px)`);
   console.log('✔ monoblock: no Screen view, the keys are a narrow column left of the phone', JSON.stringify(geo));
 
   assert.deepEqual(errors, []);

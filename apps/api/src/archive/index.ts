@@ -1,7 +1,8 @@
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { statSync } from 'node:fs';
 import type { ArchiveBuild, ArchiveStatus } from '@mgo/protocol';
 import { UploadError } from '../jar.js';
+import { cleanTitle } from '../title.js';
 
 const project = 'toca-1/new-j2me-software-archive-search';
 export const SEARCH_URL = 'https://toca-1.github.io/new-j2me-software-archive-search/';
@@ -18,10 +19,23 @@ export const SHA256 = /^[a-f0-9]{64}$/;
 const fields = ['sha256', 'sha1', 'crc32', 'size', 'filename', 'collection', 'archivePath', 'archiveFile', 'title', 'vendor', 'version', 'cldc', 'midp'] as const;
 const columns = fields.map(f => `b.${f}`).join(',');
 export const normalized = (s: string): string => (s.normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).join(' ');
+const titleAliases = new Map([
+  ['ewjim', 'earthwormjim'],
+  ['asphalturbangt2', 'asphalt2'],
+  ['asphalt3', 'asphalt3streetrules'],
+  ['asphalt6', 'asphalt6adrenaline'],
+]);
+
+/** Compare titles across Java ME manifests without losing sequel numbers or the 3D edition marker. */
+export const archiveTitleKey = (title: string) => {
+  const key = normalized(cleanTitle(title)).replaceAll(' ', '');
+  return titleAliases.get(key) ?? key;
+};
 
 export class ArchiveIndex {
   readonly info: NonNullable<ArchiveStatus['index']>;
   private db: DatabaseSync;
+  private bySha: StatementSync;
 
   constructor(file: string) {
     this.db = new DatabaseSync(file, { readOnly: true });
@@ -30,6 +44,7 @@ export class ArchiveIndex {
       const info = this.db.prepare('SELECT version,builtAt,builds FROM info').get() as Omit<NonNullable<ArchiveStatus['index']>, 'bytes'> | undefined;
       if (schema !== 1 || !info?.version || !info.builds) throw new Error('Archive index version mismatch. Rebuild the index in Settings.');
       this.info = { ...info, bytes: statSync(file).size };
+      this.bySha = this.db.prepare(`SELECT ${columns} FROM builds b WHERE sha256=?`);
     } catch (error) {
       this.db.close();
       throw error;
@@ -39,7 +54,7 @@ export class ArchiveIndex {
   close(): void { this.db.close(); }
 
   get(sha: string): ArchiveBuild | null {
-    return this.db.prepare(`SELECT ${columns} FROM builds b WHERE sha256=?`).get(sha) as unknown as ArchiveBuild ?? null;
+    return this.bySha.get(sha) as unknown as ArchiveBuild ?? null;
   }
 
   search(query: string, within: string, page: number): { builds: ArchiveBuild[]; more: boolean } {

@@ -18,6 +18,7 @@ import tempfile
 import time
 import urllib.parse
 import zipfile
+import transport
 from transport import guarded_curl
 import zlib
 
@@ -576,7 +577,7 @@ def extract_one(source: dict, sha256: str, *, expected_sha1: str | None,
         else:
             chunk = b""
         try:
-            decoded = decoder.decompress(chunk, max_length=MIB)
+            decoded = decoder.decompress(chunk, max_length=min(MIB, end - uncompressed_at))
         except (lzma.LZMAError, EOFError) as exc:
             raise RetrievalError(f"LZMA2 decoding failed at byte {compressed_at:,}: {exc}; "
                                  "try --no-cache if cached ranges may be wrong") from exc
@@ -759,6 +760,8 @@ def main(argv=None):
                         help="Maximum complete passes through available hosts per range")
     parser.add_argument("--chunk-kib", type=int, default=1024)
     parser.add_argument("--max-download-mib", type=int, default=512)
+    parser.add_argument("--max-decode-mib", type=int, default=0,
+                        help="Skip solid archive sources whose decoded span exceeds this limit (0 disables)")
     parser.add_argument("--max-jar-mib", type=int, default=128)
     parser.add_argument("--cache-dir", type=Path, default=Path(".jarchive-cache"),
                         help="Where to keep verified-complete HTTP range chunks for resume")
@@ -845,7 +848,7 @@ def main(argv=None):
         data = download_mini_jar(mini, connect_timeout=args.connect_timeout,
                                  request_timeout=args.request_timeout,
                                  max_jar_mib=args.max_jar_mib,
-                                 max_download_mib=args.max_download_mib,
+                                 max_download_mib=args.max_jar_mib if args.max_decode_mib else args.max_download_mib,
                                  absolute_deadline=absolute_deadline)
         publish_verified_jar(output, data)
         print(f"PASS: saved verified Mini JAR to\n{output}")
@@ -867,6 +870,13 @@ def main(argv=None):
         print("Dry run: no archive ranges downloaded (remote index lookup may use HTTP).")
         return 0
 
+    if args.max_decode_mib:
+        sources = [source for source in sources
+                   if source["skip"] + source["size"] <= args.max_decode_mib * MIB]
+        if not sources:
+            raise RetrievalError("No direct JAR found. The archive fallback exceeds the unpacking limit.")
+        # The app's bounded fallback attempts only the cheapest available solid source.
+        sources = sources[:1]
     require_curl()
     absolute_deadline = time.monotonic() + args.time_limit if args.time_limit else None
     metadata = None
@@ -877,6 +887,9 @@ def main(argv=None):
         if metadata is None:
             print("  IA metadata unavailable; trying canonical archive.org route only.", flush=True)
     routes = discover_routes(args.base_url, metadata, not args.no_direct)
+    if args.max_decode_mib:
+        # Count bytes consumed by unsuccessful range requests as well as verified ranges.
+        transport.remaining = min(transport.remaining, args.max_download_mib * MIB)
     print("HTTP routes: " + ", ".join(route["name"] for route in routes), flush=True)
     errors = []
     for n, source in enumerate(sources, 1):

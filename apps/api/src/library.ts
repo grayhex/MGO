@@ -25,6 +25,7 @@ interface Row {
   class_version: number;
   size_bytes: number;
   file_name?: string | null;
+  download_json?: string | null;
   has_icon: number;
   has_jad: number;
   favorite: number;
@@ -38,6 +39,12 @@ interface Row {
   package_ext?: string | null;
   package_format?: string | null;
   native_resolution_json?: string | null;
+}
+
+export interface DownloadedJar {
+  root: string;
+  relative: string;
+  provider: NonNullable<GameMeta['downloadedFrom']>;
 }
 
 export interface SourceRow {
@@ -198,6 +205,7 @@ export class Library {
     if (!cols.includes('package_format')) this.db.exec('ALTER TABLE games ADD COLUMN package_format TEXT');
     if (!cols.includes('play_seconds')) this.db.exec('ALTER TABLE games ADD COLUMN play_seconds INTEGER NOT NULL DEFAULT 0');
     if (!cols.includes('file_name')) this.db.exec('ALTER TABLE games ADD COLUMN file_name TEXT');
+    if (!cols.includes('download_json')) this.db.exec('ALTER TABLE games ADD COLUMN download_json TEXT');
     if (!cols.includes('native_resolution_json')) this.db.exec('ALTER TABLE games ADD COLUMN native_resolution_json TEXT');
     this.dropStaleNativeSkins();
     this.fillPackageFormats();
@@ -376,6 +384,7 @@ export class Library {
       settings: JSON.parse(r.settings_json),
       warnings: JSON.parse(r.warnings_json),
       origin: r.origin === 'import' ? 'import' : 'upload',
+      ...(r.download_json ? { downloadedFrom: (JSON.parse(r.download_json) as DownloadedJar).provider } : {}),
       platform: isPlatform(r.platform) ? r.platform : 'j2me',
       ...(r.native_resolution_json && r.native_resolution_json !== 'null' ? { nativeResolution: JSON.parse(r.native_resolution_json) } : {}),
       ...(r.package_format ? { packageFormat: r.package_format as PackageFormat } : {}),
@@ -576,6 +585,15 @@ export class Library {
     this.db.prepare('DELETE FROM sources WHERE game_id = ?').run(id);
     rmSync(path.join(this.gamesDir, id), { recursive: true, force: true });
     return true;
+  }
+
+  recordDownload(id: string, download: DownloadedJar): void {
+    this.db.prepare('UPDATE games SET download_json=? WHERE id=? AND download_json IS NULL').run(JSON.stringify(download), id);
+  }
+
+  downloadOf(id: string): DownloadedJar | null {
+    const row = this.db.prepare('SELECT download_json FROM games WHERE id=?').get(id);
+    return typeof row?.download_json === 'string' ? JSON.parse(row.download_json) as DownloadedJar : null;
   }
 
   /** Games whose every file has disappeared from the library folder ("file gone"). */
