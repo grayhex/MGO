@@ -88,7 +88,7 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
       <section className="game-media" aria-label={t('Screenshots')}>
         <div className="game-shot">
           {visible ? <a href={visible} target="_blank" rel="noreferrer"><img src={visible} alt={t('Screenshot {n}', { n: shotIndex + 1 })} onError={() => setBroken(failed => [...failed, visible])} /></a>
-            : java ? <JavaCover game={game} coverOnly hasCover={info?.hasCover ?? game.info?.hasCover} />
+            : java ? <JavaCover game={game} hasCover={info?.hasCover ?? game.info?.hasCover} />
             : <img className="game-shot-placeholder" src="/graphics/brand/mark.svg" alt={t('No screenshots yet')} />}
           {shots.length > 1 && <>
             <button type="button" className="game-shot-arrow previous" aria-label={t('Previous screenshot')} onClick={() => stepShot(-1)}><Icon name="back" /></button>

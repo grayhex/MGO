@@ -10,7 +10,8 @@ import type { MetadataService, Scope } from './metadata.js';
 import { MobyClient, MobyError } from './mobygames.js';
 import type { ScanManager } from './scanner.js';
 import type { SettingsStore } from './settingsStore.js';
-import { SOUNDFONT_MAX_BYTES, type SoundfontStore } from './soundfont.js';
+import { SOUNDFONT_MAX_BYTES } from '@mgo/protocol';
+import type { SoundfontStore } from './soundfont.js';
 import { resourceUsage } from './monitoring.js';
 import { systemStatus } from './systemStatus.js';
 
@@ -100,7 +101,8 @@ export function registerAdminRoutes(app: FastifyInstance, c: AdminContext): void
   // MIDI banks are streamed to disk and selected for the next Java ME session.
   app.put('/api/settings/soundfont', async (req) => {
     if (!req.isMultipart()) throw new UploadError('bad_request', 'Expected multipart/form-data with an .sf2 file');
-    const part = await req.file({ limits: { fileSize: SOUNDFONT_MAX_BYTES } });
+    // Busboy flags a stream truncated when it reaches its cap, including at exactly that size.
+    const part = await req.file({ limits: { fileSize: SOUNDFONT_MAX_BYTES + 1 } });
     if (!part) throw new UploadError('no_file', 'No file in the upload', 400);
     await soundfont.save(part.file, part.filename ?? '');
     return settingsResponse();

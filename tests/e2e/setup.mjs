@@ -26,7 +26,9 @@ put('Racing/Racer.jar', makeJar('Racer', { vendor: 'ACME' }));
 put('Backup/Racer copy.jar', makeJar('Racer', { vendor: 'ACME' }));
 put('Puzzle/Snake.jar', makeJar('Snake', { vendor: 'Nokia', version: '1.0' }));
 put('Puzzle/Snake 2.jar', makeJar('Snake', { vendor: 'Nokia', version: '2.0' }));
-put('Misc/Unknown Thing.jar', makeJar('Unknown Thing'));
+put('Misc/Unknown Thing.jar', makeJar('Unknown Thing', {
+  icon: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jF9sAAAAASUVORK5CYII=', 'base64'),
+}));
 
 const fake = await new FakeMoby().start();
 fake.games = [
@@ -137,8 +139,19 @@ try {
     throw e;
   });
   ok('the folder was imported: 5 files, one duplicate, two versions of Snake => 3 games', true);
-  await page.waitForSelector('article.game-card .java-cover-media img[src$="/cover"]', { timeout: 20000 });
-  ok('the matched game shows its cover, served by this server', (await page.locator('article.game-card .java-cover-media img[src$="/cover"]').first().getAttribute('src')).startsWith('/api/games/'));
+  for (const view of ['Tiles', 'List']) {
+    await page.getByRole('radio', { name: view, exact: true }).click();
+    const selector = (title) => page.locator('article.game-card').filter({ hasText: title }).locator('.java-library-thumbnail');
+    const shot = selector('Racer').locator('img[src$="/screenshots/1"]');
+    const icon = selector('Unknown Thing').locator('img[src$="/icon"]');
+    await shot.waitFor({ timeout: 20000 });
+    await icon.waitFor();
+    await shot.scrollIntoViewIfNeeded();
+    await icon.scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('.java-library-thumbnail img')).filter(img => img.naturalWidth > 0).length >= 2);
+    ok(`${view} use a real screenshot first and the embedded thumbnail when there is no screenshot`, true);
+  }
+  await page.getByRole('radio', { name: 'Tiles', exact: true }).click();
   await page.waitForSelector('article.game-card .badge:has-text("review")', { timeout: 20000 });
   ok('an ambiguous title is flagged for a manual decision', true);
   await page.screenshot({ path: path.join(outDir, 'setup-05-library.png') });

@@ -3,11 +3,8 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
-import type { SoundfontInfo } from '@mgo/protocol';
+import { SOUNDFONT_MAX_BYTES, SOUNDFONT_MAX_MB, type SoundfontInfo } from '@mgo/protocol';
 import { UploadError } from './jar.js';
-
-/** The biggest SoundFont accepted. General-purpose banks are 30-150 MB; the file is streamed to disk, not buffered. */
-export const SOUNDFONT_MAX_BYTES = 256 * 1024 * 1024;
 
 const bankId = /^(?:custom|[0-9a-f]{32})$/;
 
@@ -82,11 +79,12 @@ export class SoundfontStore {
     const tmp = file + '.tmp';
     try {
       await pipeline(src, createWriteStream(tmp, { mode: 0o640 }));
-      if (src.truncated) throw new UploadError('too_large', `The SoundFont is larger than ${SOUNDFONT_MAX_BYTES / (1024 * 1024)} MB`, 413);
+      const { size } = statSync(tmp);
+      if (src.truncated || size > SOUNDFONT_MAX_BYTES) throw new UploadError('too_large', `The SoundFont is larger than ${SOUNDFONT_MAX_MB} MB`, 413);
       const problem = sf2Problem(tmp);
       if (problem) throw new UploadError('invalid_soundfont', problem, 400);
       renameSync(tmp, file);
-      const info = { id, name, size: statSync(file).size, updatedAt: new Date().toISOString() };
+      const info = { id, name, size, updatedAt: new Date().toISOString() };
       writeFileSync(this.metaPath(id), JSON.stringify(info), { mode: 0o640 });
       this.select(id);
       return info;

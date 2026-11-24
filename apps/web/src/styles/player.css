@@ -46,7 +46,22 @@
 .ctrl-col .control-line { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
 .ctrl-col .control-line .label-caps { margin: 0; }
 .ctrl-col .player-seg button { height: 26px; padding: 0 8px; font-size: 0.75rem; }
-.ctrl-col .audio-controls .field { flex: 1; min-width: 90px; }
+.volume-slider { display: grid; min-width: 0; gap: 2px; }
+.volume-heading, .volume-ticks { display: flex; justify-content: space-between; align-items: baseline; color: var(--muted); font-variant-numeric: tabular-nums; }
+.volume-heading { font-size: .75rem; }
+.volume-heading b { color: var(--fg); }
+.volume-slider input { width: 100%; margin: 0; }
+.volume-ticks { font-size: .65rem; }
+.volume-ticks span { display: grid; justify-items: center; gap: 3px; }
+.volume-ticks span::before { content: ''; width: 1px; height: 3px; background: var(--muted); opacity: .6; }
+.ctrl-col .audio-controls { align-items: center; flex-wrap: nowrap; }
+.ctrl-col .audio-controls .volume-slider { flex: 1; }
+.ctrl-col .audio-controls .switch { flex: none; }
+.phone-load-status { position: absolute; z-index: 8; bottom: 12px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 20px); display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px 10px; padding: 5px 10px; color: var(--fg); background: var(--surface-elevated); border: 1px solid var(--outline); border-radius: var(--r-md); font-size: .75rem; }
+.player-bare-screen { height: 100%; display: grid; place-items: center; position: relative; }
+.player-bare-screen canvas { grid-area: 1 / 1; max-width: 100%; max-height: 85%; object-fit: contain; background: #0b100e; touch-action: none; }
+.player-bare-screen canvas.pixelated { image-rendering: pixelated; }
+.player-bare-controls { grid-area: 1 / 1; position: relative; display: grid; gap: 8px; justify-items: center; padding: 14px; background: var(--surface-elevated); color: var(--fg); border-radius: var(--r-md); text-align: center; }
 .ctrl-col .hint { margin: 0; }
 .ctrl-col .native-platform { margin: 0; }
 .session-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

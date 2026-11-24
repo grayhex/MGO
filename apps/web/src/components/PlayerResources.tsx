@@ -16,7 +16,7 @@ export function PlayerResources() {
       if (document.hidden || loading) return;
       loading = true;
       try {
-        const value = await api.systemResources();
+        const value = await api.systemResources(AbortSignal.timeout(5000));
         if (!disposed) setUsage(value);
       } catch {
         if (!disposed) setUsage(null);

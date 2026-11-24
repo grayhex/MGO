@@ -196,17 +196,16 @@ export function parseJar(buf: Uint8Array, jad?: Record<string, string>): JarInfo
 
   // Icon
   let icon: JarInfo['icon'] = null;
-  const iconPathRaw = attrs['MIDlet-Icon'] ?? first?.icon ?? null;
-  if (iconPathRaw) {
-    const p = iconPathRaw.replace(/^\/+/, '');
-    if (nameSet.has(p) && safeEntryName(p)) {
-      try {
-        const b = read([p], MAX_ICON)[p];
-        if (b && b[0] === 0x89 && b[1] === 0x50) icon = { bytes: b, path: p };
-      } catch {
-        /* optional */
-      }
-    }
+  const candidates = [attrs['MIDlet-Icon'], ...midlets.map(midlet => midlet.icon), manifest['MIDlet-Icon'], entrypoint(manifest['MIDlet-1'])?.icon, 'icon.png'];
+  for (const raw of new Set(candidates)) {
+    if (!raw) continue;
+    const requested = raw.replace(/^\/+/, '');
+    const p = nameSet.has(requested) ? requested : names.find(n => n.toLowerCase() === requested.toLowerCase());
+    if (!p) continue;
+    try {
+      const bytes = read([p], MAX_ICON)[p];
+      if (bytes?.[0] === 0x89 && bytes[1] === 0x50) { icon = { bytes, path: p }; break; }
+    } catch { /* Try the next icon declaration. */ }
   }
 
   return {

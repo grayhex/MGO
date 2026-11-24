@@ -60,6 +60,21 @@ describe('library scan', () => {
     assert.deepEqual(r.versionGroups[0]!.versions.map((v) => v.version).sort(), ['1.0', '1.2']);
   });
 
+  it('recovers missing thumbnails from JARs already in the library', async () => {
+    const { cfg, library } = setup();
+    const icon = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+    const withIcon = library.add(makeJar('With icon', { icon }), null, cfg.libraryQuotaBytes).game;
+    const withoutIcon = library.add(makeJar('Without icon'), null, cfg.libraryQuotaBytes).game;
+    rmSync(library.paths(withIcon.id).icon!);
+    library.db.prepare('UPDATE games SET has_icon = 0').run();
+    assert.equal(library.get(withIcon.id)?.iconPending, true);
+    assert.deepEqual(Buffer.from((await library.readIcon(withIcon.id))!), icon);
+    assert.equal(library.get(withIcon.id)?.hasIcon, true);
+    assert.equal(library.get(withIcon.id)?.iconPending, undefined);
+    assert.equal(await library.readIcon(withoutIcon.id), null);
+    assert.equal(library.get(withoutIcon.id)?.iconPending, undefined, 'the missing icon is checked only once');
+  });
+
   it('an update scan does not re-read unchanged files and keeps games, favourites and saves', async () => {
     const t = setup();
     const f = put(t.root, 'Game.jar', makeJar('Game'));

@@ -15,11 +15,8 @@ export function setServerSettings(r: SettingsResponse): void {
   emit();
 }
 
-export async function loadServerSettings(): Promise<SettingsResponse | null> {
-  try {
-    setServerSettings(await api.settings());
-  } catch { /* not signed in yet, or an older server: keep the built-in defaults */ }
-  return state;
+export async function loadServerSettings(): Promise<void> {
+  setServerSettings(await api.settings(AbortSignal.timeout(8000)));
 }
 
 export function getServerSettings(): SettingsResponse | null {

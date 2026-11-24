@@ -273,7 +273,7 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
   });
 
   app.get<{ Params: { id: string } }>('/api/games/:id/icon', async (req, reply) => {
-    const icon = library.get(req.params.id) ? library.readIcon(req.params.id) : null;
+    const icon = await library.readIcon(req.params.id);
     if (!icon) throw new UploadError('not_found', 'No icon', 404);
     return reply.header('Content-Type', 'image/png').header('Cache-Control', 'private, max-age=86400').send(icon);
   });

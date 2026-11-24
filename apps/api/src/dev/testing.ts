@@ -5,11 +5,11 @@ import { strToU8, zipSync } from 'fflate';
 import { loadConfig, type Config } from '../config.js';
 
 /** Helpers shared by the unit tests: a minimal valid J2ME JAR and a throw-away configuration. */
-export function makeJar(name: string, opts: { vendor?: string; version?: string; extra?: string } = {}): Uint8Array {
+export function makeJar(name: string, opts: { vendor?: string; version?: string; extra?: string; icon?: Uint8Array } = {}): Uint8Array {
   const cls = new Uint8Array(16);
   cls.set([0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 47]);
-  const manifest = `MIDlet-Name: ${name}\nMIDlet-Vendor: ${opts.vendor ?? 'Test Vendor'}\nMIDlet-Version: ${opts.version ?? '1.0.0'}\nMIDlet-1: ${name},,a.Game\n${opts.extra ?? ''}`;
-  return zipSync({ 'META-INF/MANIFEST.MF': strToU8(manifest), 'a/Game.class': cls });
+  const manifest = `MIDlet-Name: ${name}\nMIDlet-Vendor: ${opts.vendor ?? 'Test Vendor'}\nMIDlet-Version: ${opts.version ?? '1.0.0'}\nMIDlet-1: ${name},${opts.icon ? '/icon.png' : ''},a.Game\n${opts.extra ?? ''}`;
+  return zipSync({ 'META-INF/MANIFEST.MF': strToU8(manifest), 'a/Game.class': cls, ...(opts.icon ? { 'icon.png': opts.icon } : {}) });
 }
 
 export function tmpDir(prefix = 'mgo-test-'): string {
