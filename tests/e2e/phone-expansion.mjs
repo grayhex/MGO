@@ -109,7 +109,10 @@ try {
     const still = await (await fetch(base + '/api/sessions/' + running.id)).json();
     assert.equal(still.state, 'running'); assert.equal(still.createdAt, running.createdAt);
     assert.deepEqual([still.width, still.height], [c.screen.width, c.screen.height]);
-    assert.equal(await page.locator('.skin-hit polygon').count(), 0, 'zoom has no body hitboxes');
+    assert.equal(await page.locator('.stage .skin-hit polygon').count(), 0, 'the zoomed display itself has no body hitboxes');
+    if (c.input.kind === 'keypad' && c.views.full.width < c.views.full.height) {
+      assert.ok(await page.getByTestId('phone-keypad').locator('polygon[data-action=d5]').count(), 'the original numeric key is on the side keypad');
+    }
     const metrics = await page.locator('.skin-canvas').evaluate(el => ({ w: el.getBoundingClientRect().width, h: el.getBoundingClientRect().height }));
     assert.ok(Math.abs(metrics.w / metrics.h - c.screen.width / c.screen.height) < 0.01);
     const zoomLcd = await page.getByTestId('skin-lcd').boundingBox();
@@ -131,7 +134,7 @@ try {
   for (const width of [390, 768]) {
     await page.setViewportSize({ width, height: 844 });
     await page.waitForTimeout(200);
-    const bounds = await page.locator('.skin-box').boundingBox();
+    const bounds = await page.locator('.stage .skin-box').boundingBox();
     assert.ok(bounds.width <= width && bounds.x >= 0, 'phone fits responsive viewport');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
   }
