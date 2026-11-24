@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { request as httpsRequest } from 'node:https';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
@@ -21,8 +21,11 @@ const request = (url, options = {}, size = 0) => new Promise((resolve,reject) =>
   send();
 });
 try {
+  const fixture = path.join(dir, 'upstream.mjs');
+  copyFileSync('tests/fixtures/https-upstream.mjs', fixture);
+  chmodSync(fixture, 0o644);
   docker('network','create',id);
-  docker('run','-d','--name',id+'-app','--network',id,'--network-alias','app','--read-only','--cap-drop','ALL','--mount',`type=bind,source=${path.resolve('tests/fixtures/https-upstream.mjs')},target=/upstream.mjs,readonly`,'--entrypoint','node',process.env.MGO_TLS_UPSTREAM_IMAGE || 'node:22-alpine','/upstream.mjs');
+  docker('run','-d','--name',id+'-app','--network',id,'--network-alias','app','--read-only','--cap-drop','ALL','--mount',`type=bind,source=${fixture},target=/upstream.mjs,readonly`,'--entrypoint','node',process.env.MGO_TLS_UPSTREAM_IMAGE || 'node:22-alpine','/upstream.mjs');
   docker('run','-d','--name',id+'-gateway','--network',id,'--read-only','--cap-drop','ALL','--cap-add','CHOWN','--cap-add','SETUID','--cap-add','SETGID','--tmpfs','/tmp','--tmpfs','/var/run','--tmpfs','/var/cache/nginx','--tmpfs','/etc/nginx/conf.d','-v',id+'-certs:/certs','-e',`MGO_HTTPS_PORT=${httpsPort}`,'-p',`127.0.0.1:${httpPort}:8080`,'-p',`127.0.0.1:${httpsPort}:8443`,process.env.MGO_TLS_IMAGE || 'mgo-gateway:verify');
   let copied=false;
   for(let i=0;i<100;i++) { try { docker('cp',id+'-gateway:/certs/server.crt',path.join(dir,'server.crt')); copied=true; break; } catch {} await new Promise(r=>setTimeout(r,100)); }
@@ -36,11 +39,15 @@ try {
   const size=70*1048576;
   const upload=await request(`https://127.0.0.1:${httpsPort}/api/symbian/upload-probe`,{method:'POST',headers:{'content-length':size}},size);
   assert.equal(upload.status,200);assert.equal(JSON.parse(upload.body).received,size);
+  const bankSize = 148 * 1048576;
+  const bank = await request(`https://127.0.0.1:${httpsPort}/api/settings/soundfont`, { method: 'PUT', headers: { 'content-length': bankSize } }, bankSize);
+  assert.equal(bank.status, 200);
+  assert.equal(JSON.parse(bank.body).received, bankSize);
   const certificate=readFileSync(path.join(dir,'server.crt'),'utf8');
   docker('restart',id+'-gateway');
   docker('cp',id+'-gateway:/certs/server.crt',path.join(dir,'server.crt'));
   assert.equal(readFileSync(path.join(dir,'server.crt'),'utf8'),certificate,'certificate persists across restart');
-  console.log('PASS HTTPS: trusted certificate, HTTP redirect, WSS upgrade, 70 MB streaming and persistent certificate');
+  console.log('PASS HTTPS: trusted certificate, HTTP redirect, WSS upgrade, streamed firmware and SoundFont, persistent certificate');
 } catch(e) {
   try { const logs = spawnSync('docker',['logs',id+'-gateway'],{encoding:'utf8'}); console.error((logs.stdout + logs.stderr).slice(-5000)); }catch{}
   throw e;

@@ -53,34 +53,54 @@ export function ArchiveBrowser({ onClose, onImported, onPlay, initial, initialSh
   const [job, setJob] = useState<ArchiveDownload | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [connectionError, setConnectionError] = useState('');
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    let active = true;
-    void Promise.all([api.archiveStatus(), api.archiveDownload()]).then(async ([value, { job }]) => {
-      if (!active) return;
+    const request = new AbortController();
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(10000)]);
+    void api.archiveStatus(signal).then(value => {
+      if (request.signal.aborted) return;
       setStatus(value);
-      setJob(job?.state === 'running' ? job : null);
-      if (!value.index) return;
+    }, error => { if (!request.signal.aborted) setConnectionError(error.message); });
+    void api.archiveDownload(signal).then(({ job }) => {
+      if (!request.signal.aborted && job?.state === 'running') setJob(current => current ?? job);
+    }, () => undefined);
+    return () => request.abort();
+  }, [attempt]);
+  const ready = !!status?.index;
+  useEffect(() => {
+    if (!ready || (!initial && !initialSha)) return;
+    const request = new AbortController();
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(10000)]);
+    setSearching(true);
+    void (async () => {
       if (initialSha) {
-        const build = await api.archiveBuild(initialSha);
-        if (active) setDetail(build);
+        const build = await api.archiveBuild(initialSha, signal);
+        if (!request.signal.aborted) setDetail(build);
       } else if (initial) {
-        const found = await api.archiveSearch(initial, '', 0);
-        if (active) setResults(found);
+        const found = await api.archiveSearch(initial, '', 0, signal);
+        if (!request.signal.aborted) setResults(found);
       }
-    }).catch(e => { if (active) setError((e as Error).message); });
-    return () => { active = false; };
-  }, [initial, initialSha]);
+    })().catch(e => { if (!request.signal.aborted) setError((e as Error).message); })
+      .finally(() => { if (!request.signal.aborted) setSearching(false); });
+    return () => request.abort();
+  }, [ready, initial, initialSha]);
   useEffect(() => {
     if (job?.state !== 'running') return;
-    let active = true;
-    const timer = window.setInterval(() => {
-      void api.archiveDownload().then(({ job }) => {
-        if (!active) return;
+    const request = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const { job } = await api.archiveDownload(AbortSignal.any([request.signal, AbortSignal.timeout(8000)]));
+        if (request.signal.aborted) return;
         setJob(job);
         if (job?.state === 'done') { setConfirm(false); onImported(); }
-      }, () => { /* A temporary disconnect does not cancel the transfer. */ });
-    }, 900);
-    return () => { active = false; window.clearInterval(timer); };
+      } catch { /* A temporary disconnect does not cancel the transfer. */ }
+      if (!request.signal.aborted) timer = setTimeout(poll, 900);
+    };
+    timer = setTimeout(poll, 900);
+    return () => { request.abort(); clearTimeout(timer); };
   }, [job?.state, onImported]);
 
   const act = async (action: () => Promise<void>) => {
@@ -108,6 +128,12 @@ export function ArchiveBrowser({ onClose, onImported, onPlay, initial, initialSh
   const sourceLink = detail?.build.collection.toLowerCase().includes('mini') ? 'https://archive.org/details/96x65pixels_j2me_mini' : 'https://archive.org/details/96x65pixels_j2me';
 
   return <Modal title={t('Find games in J2ME Archive')} onClose={onClose} wide>
+    {!status && <div className="archive-unavailable">
+      {connectionError ? <>
+        <p role="alert">{t(connectionError)}</p>
+        <button className="btn sm primary" type="button" onClick={() => { setConnectionError(''); setAttempt(n => n + 1); }}>{t('Retry')}</button>
+      </> : <p role="status">{t('Connecting to J2ME Archive…')}</p>}
+    </div>}
     {status && !status.index && <div className="archive-unavailable">
       <p>{t('Install the archive index to search and match games locally.')}</p>
       <button type="button" className="btn sm primary" onClick={showSetup}><Icon name="sliders" />{t('Archive settings')}</button>
@@ -116,8 +142,9 @@ export function ArchiveBrowser({ onClose, onImported, onPlay, initial, initialSh
       <form className="archive-search" onSubmit={submit}>
         <label className="field"><span className="label-caps">{t('Title, filename, vendor or hash')}</span><input className="input" type="search" aria-label={t('Search the archive')} value={q} onChange={e => setQ(e.target.value)} maxLength={160} required /></label>
         <label className="field"><span className="label-caps">{t('Refine results')}</span><input className="input" type="search" value={within} onChange={e => setWithin(e.target.value)} maxLength={100} /></label>
-        <button className="btn primary" type="submit" disabled={busy || q.trim().length < 2}><Icon name="search" />{t('Search')}</button>
+        <button className="btn primary" type="submit" disabled={busy || searching || q.trim().length < 2}><Icon name="search" />{t('Search')}</button>
       </form>
+      {(searching || busy) && <p className="muted" role="status">{t(searching ? 'Searching the index…' : 'Working…')}</p>}
 
       {detail ? <section className="archive-detail">
         {results && <button className="btn ghost sm" type="button" onClick={() => { setDetail(null); setConfirm(false); }}><Icon name="back" />{t('Search results')}</button>}

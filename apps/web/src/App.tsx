@@ -72,6 +72,7 @@ export function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [query, setQuery] = useState('');
   const [ready, setReady] = useState(false);
+  const [bootError, setBootError] = useState('');
   const [wizard, setWizard] = useState(false);
 
   const toast = useCallback((kind: Toast['kind'], text: string) => {
@@ -86,14 +87,21 @@ export function App() {
 
   // after sign-in: load the server-side defaults first (so the player starts with them), then offer the wizard once
   const boot = useCallback(async () => {
-    await loadServerSettings();
-    setReady(true);
+    setBootError('');
+    try {
+      await loadServerSettings();
+      setReady(true);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) setNeedLogin(true);
+      else setBootError((e as Error).message);
+      return;
+    }
     try { if ((await api.setup()).needsWizard) setWizard(true); } catch { /* an older server has no wizard */ }
   }, []);
 
   useEffect(() => {
     void refreshHealth();
-    api.games().then(() => void boot(), (e) => { if (e instanceof ApiError && e.status === 401) setNeedLogin(true); else void boot(); });
+    void boot();
     const t = window.setInterval(() => { api.health().then(setHealth, () => undefined); }, 15000);
     window.addEventListener('mgo:kemulator-changed', refreshHealth);
     return () => { window.clearInterval(t); window.removeEventListener('mgo:kemulator-changed', refreshHealth); };
@@ -116,7 +124,12 @@ export function App() {
   useEffect(() => { if (ready && !needLogin && !knownPath) go('/', true); }, [ready, needLogin, knownPath, go]);
 
   if (needLogin) return <Login onDone={() => { setNeedLogin(false); void refreshHealth(); void boot(); }} />;
-  if (!ready) return null;
+  if (!ready) return <main className="boot-status">
+    {bootError ? <>
+      <p role="alert">{translateUI(bootError)}</p>
+      <button className="btn primary" type="button" onClick={() => { void boot(); void refreshHealth(); }}>{translateUI('Retry')}</button>
+    </> : <p role="status">{translateUI('Connecting to MGO…')}</p>}
+  </main>;
 
   const play = /^\/play\/([0-9a-f]{16})\/?$/.exec(path);
   const phones = path === '/phones' || path === '/phones/';

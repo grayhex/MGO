@@ -15,7 +15,7 @@ import { archiveMatchLabel } from './ArchiveSettings';
 import { Icon } from './Icon';
 import { PlatformTag } from './PlatformTag';
 import { Seg } from './ui';
-import { JavaCover } from './JavaCover';
+import { JavaLibraryThumbnail } from './JavaCover';
 
 type Filter = 'all' | 'favorites' | 'recent';
 type GenreFilter = 'all' | 'unclassified' | (typeof GENRES)[number];
@@ -55,7 +55,7 @@ function Cover({ g, compact = false }: { g: GameMeta; compact?: boolean }) {
   const [broken, setBroken] = useState(false);
   const art = !!(g.ngageInfo?.hasCover || g.info?.hasCover) && !broken; // a MobyGames cover, served by this server
   const hue = 170 + (parseInt(g.groupKey.slice(0, 4), 16) % 46); // teal to blue: the palette has one signal colour, cyan
-  if ((g.platform ?? 'j2me') === 'j2me') return <JavaCover game={g} compact={compact} />;
+  if ((g.platform ?? 'j2me') === 'j2me') return <JavaLibraryThumbnail key={g.id} game={g} compact={compact} />;
   return (
     <div className={`cover ${art ? 'art' : ''}`} style={{ ['--hue' as string]: hue }}>
       {art ? <img src={g.ngageInfo?.hasCover ? `/api/games/${g.id}/ngage-cover` : api.coverUrl(g.id)} alt="" loading="lazy" onError={() => setBroken(true)} /> : g.hasIcon && !broken ? <img src={api.iconUrl(g.id)} alt="" onError={() => setBroken(true)} /> : <span className="initials">{g.name.slice(0, 2).toUpperCase()}</span>}

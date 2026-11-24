@@ -78,4 +78,9 @@ describe('parseJar', () => {
     const j = jar({ 'a/G.class': classOf(46), 'i.png': strToU8('notpng') }, 'MIDlet-Name: x\nMIDlet-Icon: /i.png\nMIDlet-1: x,,a.G\n');
     assert.equal(parseJar(j).icon, null);
   });
+
+  it('uses the embedded MIDlet icon when an old JAD points at a missing icon', () => {
+    const j = jar({ 'a/G.class': classOf(46), 'art/Icon.PNG': png }, 'MIDlet-1: x, /art/icon.png, a.G\n');
+    assert.equal(parseJar(j, { 'MIDlet-Icon': '/missing.png', 'MIDlet-1': 'x,,a.G' }).icon?.path, 'art/Icon.PNG');
+  });
 });

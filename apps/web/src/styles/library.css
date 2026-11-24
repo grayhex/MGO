@@ -45,6 +45,8 @@
   background-color: var(--surface-soft);
 }
 .java-cover-media img { width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.java-library-thumbnail img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.java-library-thumbnail.embedded:not(.compact) img { width: 40%; height: 65%; image-rendering: pixelated; }
 .java-cover-fallback {
   --genre-accent: #a6a6a6;
   position: relative; container-type: inline-size;

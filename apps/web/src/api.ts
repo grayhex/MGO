@@ -16,14 +16,21 @@ export class ApiError extends Error {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const interrupted = () => init?.signal?.reason?.name === 'TimeoutError'
+    ? new ApiError(0, 'timeout', 'The server took too long to respond')
+    : new ApiError(0, 'network', 'Cannot reach the server');
   let r: Response;
   try {
     r = await fetch(path, { credentials: 'same-origin', ...init });
   } catch {
-    throw new ApiError(0, 'network', 'Cannot reach the server');
+    throw interrupted();
   }
   if (r.status === 204) return undefined as T;
-  const body = await r.json().catch(() => ({}));
+  const body = await r.json().catch(() => {
+    if (init?.signal?.aborted) throw interrupted();
+    if (r.ok) throw new ApiError(r.status, 'invalid_response', 'The server returned an unreadable response');
+    return {};
+  });
   if (!r.ok) throw new ApiError(r.status, body.error ?? 'error', body.message ?? `HTTP ${r.status}`, body.details);
   return body as T;
 }
@@ -49,7 +56,7 @@ const jsonInit = (method: string, body: unknown): RequestInit => ({ method, head
 
 export const api = {
   logout: () => req<{ ok: boolean }>('/api/auth/logout', jsonInit('POST', {})),
-  health: () => req<HealthStatus>('/api/health'),
+  health: () => req<HealthStatus>('/api/health', { signal: AbortSignal.timeout(5000) }),
   kemulatorRuntime: () => req<KemulatorUpdateStatus>('/api/kemulator/runtime'),
   checkKemulatorUpdate: () => req<{ release: KemulatorRelease | null }>('/api/kemulator/check-update', jsonInit('POST', {})),
   installKemulatorUpdate: (release: KemulatorRelease) => req<KemulatorUpdateStatus>('/api/kemulator/install-update', jsonInit('POST', { version: release.version, sha256: release.sha256 })),
@@ -59,7 +66,7 @@ export const api = {
   curatedPreview: () => req<{ titles: CuratedTitle[] }>('/api/archive/curated/preview'),
   curatedImport: (selection: { title: string; sha256: string }[]) => req<CuratedImport>('/api/archive/curated', jsonInit('POST', { selection, confirmed: true })),
   curatedCancel: () => req<{ cancelled: boolean }>('/api/archive/curated', { method: 'DELETE' }),
-  archiveStatus: () => req<ArchiveStatus>('/api/archive'),
+  archiveStatus: (signal?: AbortSignal) => req<ArchiveStatus>('/api/archive', signal ? { signal } : undefined),
   archiveIndex: () => req<ArchiveTransfer>('/api/archive/index', { method: 'POST' }),
   archiveCancelIndex: () => req<{ cancelled: boolean }>('/api/archive/index/job', { method: 'DELETE' }),
   archiveRemoveIndex: () => req<void>('/api/archive/index', { method: 'DELETE' }),
@@ -68,9 +75,9 @@ export const api = {
   archiveApply: () => req<ArchiveMatchJob>('/api/archive/match/apply', { method: 'POST' }),
   archiveReview: (preview: boolean, page: number) => req<{ rows: ArchiveReviewItem[]; more: boolean }>(`/api/archive/match/results?preview=${preview ? '1' : '0'}&page=${page}`),
   archiveConfirm: (id: string, sha256: string | null) => req<ArchiveMatch>(`/api/archive/match/${id}`, jsonInit('PUT', { sha256 })),
-  archiveSearch: (q: string, within: string, page: number) => req<{ builds: ArchiveSearchItem[]; more: boolean }>('/api/archive/search?' + new URLSearchParams({ q, within, page: String(page) })),
-  archiveBuild: (sha: string) => req<{ build: ArchiveSearchItem; alternatives: ArchiveSearchItem[]; indexVersion: string }>(`/api/archive/builds/${sha}`),
-  archiveDownload: () => req<{ job: ArchiveDownload | null }>('/api/archive/download'),
+  archiveSearch: (q: string, within: string, page: number, signal = AbortSignal.timeout(10000)) => req<{ builds: ArchiveSearchItem[]; more: boolean }>('/api/archive/search?' + new URLSearchParams({ q, within, page: String(page) }), { signal }),
+  archiveBuild: (sha: string, signal = AbortSignal.timeout(10000)) => req<{ build: ArchiveSearchItem; alternatives: ArchiveSearchItem[]; indexVersion: string }>(`/api/archive/builds/${sha}`, { signal }),
+  archiveDownload: (signal = AbortSignal.timeout(8000)) => req<{ job: ArchiveDownload | null }>('/api/archive/download', { signal }),
   archiveStartDownload: (sha256: string, root: string, folder: string) => req<ArchiveDownload>('/api/archive/download', jsonInit('POST', { sha256, root, folder })),
   archiveCancelDownload: () => req<{ cancelled: boolean }>('/api/archive/download', { method: 'DELETE' }),
   games: () => req<GameMeta[]>('/api/games'),
@@ -130,12 +137,12 @@ export const api = {
   },
   iconUrl: (id: string) => `/api/games/${id}/icon`,
   startSession: (gameId: string, settings?: GameSettingsPatch) => req<SessionStatus>('/api/sessions', jsonInit('POST', { gameId, settings })),
-  devices: () => req<{ presets: DevicePreset[]; defaultName: string | null }>('/api/devices'),
+  devices: (signal?: AbortSignal) => req<{ presets: DevicePreset[]; defaultName: string | null }>('/api/devices', signal ? { signal } : undefined),
   phones: () => req<import('@mgo/protocol').PhoneCatalog>('/api/phones'),
   phonePlan: (id: string) => req<{ status: SymbianStatus; plan: import('@mgo/protocol').NativePhonePlan }>(`/api/games/${id}/phone`),
   analysis: (id: string) => req<{ analysis: JarAnalysisView; recommendedDevice: string | null }>(`/api/games/${id}/analysis`),
-  sessions: () => req<SessionStatus[]>('/api/sessions'),
-  session: (id: string) => req<SessionStatus>(`/api/sessions/${id}`),
+  sessions: (signal?: AbortSignal) => req<SessionStatus[]>('/api/sessions', signal ? { signal } : undefined),
+  session: (id: string, signal?: AbortSignal) => req<SessionStatus>(`/api/sessions/${id}`, signal ? { signal } : undefined),
   /** Plain-text report of a session (settings, log, JVM heap and threads) to attach to a bug report. */
   diagnostics: async (id: string): Promise<Blob> => {
     const r = await fetch(`/api/sessions/${id}/diagnostics`, { credentials: 'same-origin' });
@@ -153,9 +160,9 @@ export const api = {
   stopSession: (id: string) => req<SessionStatus>(`/api/sessions/${id}`, { method: 'DELETE' }),
 
   // first run, settings, system
-  setup: () => req<SetupState>('/api/setup'),
+  setup: () => req<SetupState>('/api/setup', { signal: AbortSignal.timeout(8000) }),
   setupAction: (a: 'complete' | 'skip' | 'reset') => req<unknown>(`/api/setup/${a}`, { method: 'POST' }),
-  settings: () => req<SettingsResponse>('/api/settings'),
+  settings: (signal?: AbortSignal) => req<SettingsResponse>('/api/settings', signal ? { signal } : undefined),
   patchSettings: (patch: DeepPartial<PublicSettings>) => req<SettingsResponse>('/api/settings', jsonInit('PATCH', patch)),
   setMobyKey: (key: string) => req<SettingsResponse['secrets']>('/api/settings/mobygames-key', jsonInit('PUT', { key })),
   deleteMobyKey: () => req<SettingsResponse['secrets']>('/api/settings/mobygames-key', { method: 'DELETE' }),
@@ -167,7 +174,7 @@ export const api = {
   selectSoundfont: (id: string | null) => req<SettingsResponse>('/api/settings/soundfont', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }),
   deleteSoundfont: (id?: string) => req<SettingsResponse>(`/api/settings/soundfont${id ? `?id=${encodeURIComponent(id)}` : ''}`, { method: 'DELETE' }),
   testMoby: () => req<{ ok: true; platformId: number }>('/api/mobygames/test', { method: 'POST' }),
-  systemResources: () => req<import('@mgo/protocol').SystemResources>('/api/system/resources'),
+  systemResources: (signal?: AbortSignal) => req<import('@mgo/protocol').SystemResources>('/api/system/resources', signal ? { signal } : undefined),
   systemStatus: () => req<SystemStatus>('/api/system/status'),
 
   // library directory and import
@@ -195,7 +202,7 @@ export const api = {
   metaCancel: () => req<{ cancelled: boolean }>('/api/metadata/job', { method: 'DELETE' }),
   metaReview: () => req<{ groupKey: string; gameId: string; name: string; vendor: string; candidates: MobyCandidate[] }[]>('/api/metadata/review'),
   metaClear: () => req<void>('/api/metadata', { method: 'DELETE' }),
-  gameMeta: (id: string) => req<GameMeta>(`/api/games/${id}`),
+  gameMeta: (id: string, signal?: AbortSignal) => req<GameMeta>(`/api/games/${id}`, signal ? { signal } : undefined),
   gameChecksums: (id: string) => req<{ sha1: string; crc32: string }>(`/api/games/${id}/checksums`),
   gameInfo: (id: string) => req<GameInfo>(`/api/games/${id}/info`),
   javaCatalogInfo: (id: string) => req<{ info: JavaCatalogInfo | null }>(`/api/games/${id}/java-catalog`),

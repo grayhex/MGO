@@ -43,14 +43,14 @@ export function loadSkin(id: string): Promise<LoadedSkin> {
   if (!p) {
     p = (async () => {
       const base = skinBase(id);
-      const res = await fetch(`${base}config.json`);
+      const res = await fetch(`${base}config.json`, { signal: AbortSignal.timeout(8000) });
       if (!res.ok) throw new Error(`${id}: config.json HTTP ${res.status}`);
       const config = (await res.json()) as SkinConfig;
       const warnings: string[] = [];
       check(config, warnings);
       let polys = config.buttons.map((b) => ({ id: b.id, label: b.label, points: b.polygon }));
       try {
-        const svg = await fetch(`${base}${config.assets.hitboxes ?? 'hitboxes.svg'}`);
+        const svg = await fetch(`${base}${config.assets.hitboxes ?? 'hitboxes.svg'}`, { signal: AbortSignal.timeout(2000) });
         if (!svg.ok) throw new Error(`HTTP ${svg.status}`);
         const parsed = parseHitboxSvg(await svg.text(), warnings);
         if (parsed.length) polys = parsed;
@@ -70,15 +70,21 @@ export function loadSkin(id: string): Promise<LoadedSkin> {
   return p;
 }
 
-export function useSkin(id: string): { skin: LoadedSkin | null; error: string | null } {
-  const [state, setState] = useState<{ id: string; skin: LoadedSkin | null; error: string | null }>({ id, skin: null, error: null });
+export function useSkin(id: string | null): { skin: LoadedSkin | null; error: string | null; retry: () => void } {
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<{ id: string | null; skin: LoadedSkin | null; error: string | null }>({ id, skin: null, error: null });
   useEffect(() => {
+    if (!id) return;
     let dead = false;
     loadSkin(id).then((skin) => { if (!dead) setState({ id, skin, error: null }); }, (e: Error) => { if (!dead) setState({ id, skin: null, error: e.message }); });
     return () => { dead = true; };
-  }, [id]);
+  }, [id, attempt]);
   // keep showing the previous model until the next one has arrived, but never report it as the new one
-  return state.id === id ? { skin: state.skin, error: state.error } : { skin: null, error: null };
+  return {
+    skin: state.id === id ? state.skin : null,
+    error: state.id === id ? state.error : null,
+    retry: () => { if (id) setState({ id, skin: null, error: null }); setAttempt(n => n + 1); },
+  };
 }
 
 /** Preferences are presentation only: they never touch the emulated device or its resolution. */
@@ -111,12 +117,13 @@ export function usePrefs(): [SkinPrefs, (patch: Partial<SkinPrefs>) => void] {
 }
 
 /** All models (config + hitboxes), for the picker and /phones. Null until every file has arrived. */
-export function useCatalog(): { skins: LoadedSkin[] | null; error: string | null } {
+export function useCatalog(enabled = true): { skins: LoadedSkin[] | null; error: string | null } {
   const [state, setState] = useState<{ skins: LoadedSkin[] | null; error: string | null }>({ skins: null, error: null });
   useEffect(() => {
+    if (!enabled) return;
     let dead = false;
     Promise.all(SKIN_IDS.map(loadSkin)).then((skins) => { if (!dead) setState({ skins, error: null }); }, (e: Error) => { if (!dead) setState({ skins: null, error: e.message }); });
     return () => { dead = true; };
-  }, []);
+  }, [enabled]);
   return state;
 }

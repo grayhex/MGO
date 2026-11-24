@@ -79,11 +79,31 @@ try {
   assert.notEqual(app.library.get(probable.id).archiveMatch.matchedSha256, probable.sha256);
 
   await page.goto(base);
+  let releaseStatus;
+  const statusGate = new Promise(resolve => { releaseStatus = resolve; });
+  await page.route('**/api/archive', async route => {
+    await statusGate;
+    await route.fulfill({ status: 503, contentType: 'application/json', body: '{"message":"Temporary archive connection failure"}' });
+  });
+  let releaseDownloadStatus;
+  const downloadGate = new Promise(resolve => { releaseDownloadStatus = resolve; });
+  const pauseDownloadStatus = async route => {
+    await downloadGate;
+    await route.continue().catch(() => { /* Retrying the connection aborts the original request. */ });
+  };
+  await page.route('**/api/archive/download', pauseDownloadStatus);
   await page.getByRole('button', { name: 'Find games in J2ME Archive' }).click();
   const dialog = page.getByRole('dialog');
+  await dialog.getByText('Connecting to J2ME Archive…', { exact: true }).waitFor();
+  releaseStatus();
+  await dialog.getByText('Temporary archive connection failure', { exact: true }).waitFor();
+  await page.unroute('**/api/archive');
+  await dialog.getByRole('button', { name: 'Retry', exact: true }).click();
   await dialog.getByRole('searchbox', { name: 'Search the archive' }).fill('Archive Racer');
   await dialog.getByRole('button', { name: 'Search', exact: true }).click();
   await dialog.getByText('Already in library', { exact: true }).waitFor();
+  releaseDownloadStatus();
+  await page.unroute('**/api/archive/download', pauseDownloadStatus);
   await dialog.getByRole('button', { name: /Racer v2.jar/ }).click();
   await dialog.getByText(builds[1].sha256, { exact: true }).waitFor();
   assert.equal(await job(), null, 'search and preview never start a transfer');

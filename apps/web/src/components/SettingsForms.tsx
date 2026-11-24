@@ -1,5 +1,5 @@
 import { t as translateUI } from '../i18n';
-import { KEY_LAYOUTS, SCREEN_PRESETS, type DevicePreset, type LayoutId, type PublicSettings, type SettingsResponse, type SystemStatus } from '@mgo/protocol';
+import { KEY_LAYOUTS, SCREEN_PRESETS, SOUNDFONT_MAX_BYTES, SOUNDFONT_MAX_MB, type DevicePreset, type LayoutId, type PublicSettings, type SettingsResponse, type SystemStatus } from '@mgo/protocol';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { setServerSettings, useServerSettings } from '../serverSettings';
@@ -7,6 +7,7 @@ import { useCatalog } from '../skin/registry';
 import { Icon } from './Icon';
 import { SkinPicker } from './SkinPicker';
 import { Seg, Switch } from './ui';
+import { VolumeSlider } from './VolumeSlider';
 
 type Toaster = (kind: 'info' | 'error', text: string) => void;
 
@@ -120,8 +121,18 @@ function SoundfontField({ toast }: { toast: Toaster }) {
         </select>
       </label>
       <div className="btn-row">
-        <input ref={input} type="file" accept=".sf2" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void run(() => api.uploadSoundfont(f), 'SoundFont installed. It is used by games started from now on.'); }} />
-        <button className="btn sm" disabled={busy} onClick={() => input.current?.click()}>{translateUI("Add .sf2…")}</button>
+        <input ref={input} type="file" accept=".sf2" hidden onChange={event => {
+          const file = event.currentTarget.files?.[0];
+          if (!file) return;
+          if (file.size > SOUNDFONT_MAX_BYTES) {
+            toast('error', translateUI('SoundFont files can be up to {limit} MB', { limit: SOUNDFONT_MAX_MB }));
+            event.currentTarget.value = '';
+            return;
+          }
+          void run(() => api.uploadSoundfont(file), 'SoundFont installed. It is used by games started from now on.');
+        }} />
+        <button className="btn sm" disabled={busy} onClick={() => input.current?.click()}>{translateUI(busy ? 'Working…' : 'Add .sf2…')}</button>
+        <span className="muted small">{translateUI('Up to {limit} MB', { limit: SOUNDFONT_MAX_MB })}</span>
         {sf && <button className="btn ghost sm" disabled={busy} onClick={() => void run(() => api.deleteSoundfont(sf.id), 'Back to the built-in bank.')}>{translateUI("Remove")}</button>}
       </div>
       <p className="muted small">{translateUI("Choose the built-in bank to turn off custom SoundFonts. Changes apply at the next launch.")}</p>
@@ -138,7 +149,7 @@ export function SoundControlsForm({ toast, auto }: { toast: Toaster; auto?: bool
       <section className="stack sound-controls-section" aria-labelledby="sound-preferences-heading">
       <h3 id="sound-preferences-heading"><Icon name="volume" /> {translateUI("Sound")}</h3>
       <Switch checked={a.draft.enabled} onChange={(v) => a.set({ enabled: v })}>{translateUI("Play game sound (otherwise games start muted)")}</Switch>
-      <label className="field"><span className="label-caps">{translateUI("Starting volume —")} {a.draft.volume}%</span><input type="range" min={0} max={100} value={a.draft.volume} onChange={(e) => a.set({ volume: Number(e.target.value) })} aria-label={translateUI("Volume")} /></label>
+      <VolumeSlider label={translateUI('Starting volume')} value={a.draft.volume} onChange={volume => a.set({ volume })} />
       <SoundfontField toast={toast} />
       <SaveBar auto={auto} dirty={a.dirty} busy={a.busy} onSave={() => void a.save('Sound settings saved')} note="Browsers only start sound after a click: pressing Start in the player does that." />
       </section>

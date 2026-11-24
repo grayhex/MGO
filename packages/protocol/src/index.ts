@@ -84,6 +84,8 @@ export interface GameMeta {
   /** Default `j2me`. */
   platform?: Platform;
   hasIcon: boolean;
+  /** Older libraries can still extract the icon from the stored JAR on demand. */
+  iconPending?: boolean;
   hasJad: boolean;
   favorite: boolean;
   createdAt: string;
@@ -244,6 +246,9 @@ export interface PublicSettings {
   controls: { keypad: 'auto' | 'always' | 'never'; haptics: boolean; gamepad: boolean };
   server: { maxSessions: number; sessionMaxMinutes: number; sessionIdleMinutes: number; libraryQuotaMb: number; frameEncoding: 'raw' | 'deflate' };
 }
+
+export const SOUNDFONT_MAX_MB = 300;
+export const SOUNDFONT_MAX_BYTES = SOUNDFONT_MAX_MB * 1024 * 1024;
 
 /** The MIDI SoundFont (SF2) the games' MIDI music is rendered with, instead of the emulator's built-in bank. */
 export interface SoundfontInfo {

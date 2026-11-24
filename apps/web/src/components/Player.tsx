@@ -20,7 +20,7 @@ import { api, ApiError, type JarAnalysisView } from '../api';
 import type { Toast } from '../App';
 import { PcmAudio } from '../audio';
 import { InputController } from '../input';
-import { isSkinId, useCatalog, usePrefs } from '../skin/registry';
+import { isSkinId, useCatalog, usePrefs, useSkin } from '../skin/registry';
 import { keypadCrops } from '../skin/hitboxes';
 import { PhoneSkin } from '../skin/PhoneSkin';
 import type { LoadedSkin } from '../skin/types';
@@ -35,6 +35,7 @@ import { audioSettings, buzz, controlSettings, getServerSettings, useServerSetti
 import { betterPhone, type PhoneOption } from '../betterPhone';
 import { nextRotation, unrotatePoint, type Rotation } from '../skin/geometry';
 import { useRotation } from '../skin/rotation';
+import { VolumeSlider } from './VolumeSlider';
 
 type Conn = 'connecting' | 'open' | 'reconnecting' | 'closed' | 'idle';
 
@@ -103,6 +104,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const [advanced, setAdvanced] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [sessionsChecked, setSessionsChecked] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadErrors, setLoadErrors] = useState<Partial<Record<'game' | 'sessions' | 'devices', string>>>({});
   const autoStarted = useRef(false);
   const [padMenu, setPadMenu] = useState(false);
   const padMenuOpen = useRef(false); padMenuOpen.current = padMenu;
@@ -114,8 +117,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const [touchControls, setTouchControls] = useState(false);
   const wakeTimer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(()=>()=>clearTimeout(wakeTimer.current),[]);
-  const { skins } = useCatalog();
-  const skin: LoadedSkin | null = useMemo(() => skins?.find((s) => s.config.id === prefs.skinId) ?? null, [skins, prefs.skinId]);
+  const { skin, error: skinError, retry: retrySkin } = useSkin(loaded ? prefs.skinId : null);
   // A touch-screen monoblock (Nokia 5800, Samsung S5230) is only a display: a "screen only" view means nothing there.
   const monoblock = skin?.config.input?.kind === 'touchscreen';
   const view: 'full' | 'screen' = monoblock && skin?.config.id !== 'nokia-n8' ? 'full' : prefs.view;
@@ -145,6 +147,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const canvasEl = useRef<HTMLCanvasElement | null>(null);
   const lastFrame = useRef<ImageData | null>(null);
   const card = useRef<HTMLElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
   const streamRef = useRef<SessionStream | null>(null);
   const sessionRef = useRef<SessionStatus | null>(null);
   const input = useMemo(() => new InputController(() => undefined), []);
@@ -164,29 +167,6 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     const f = lastFrame.current;
     if (el && f && el.width === f.width && el.height === f.height) el.getContext('2d')!.putImageData(f, 0, 0);
   }, [frameSize.w, frameSize.h, view, prefs.skinId]);
-
-  // ---- game + attach to an already running session (page reload / reconnect)
-  useEffect(() => {
-    let dead = false;
-    (async () => {
-      try {
-        const g = (await api.games()).find((x) => x.id === gameId);
-        if (!g) { toast('error', 'Game not found'); if (getLastGame()?.id === gameId) setLastGame(null); onExit(); return; }
-        if (dead) return;
-        setGame(g); setLastGame({ id: g.id, name: g.name }); setLayout(g.settings.layout); setRes({ width: g.settings.width, height: g.settings.height }); setDevice(g.settings.device ?? ''); setHeapMb(g.settings.heapMb); setTweaks(g.settings.emulation ?? {}); setAdvanced(g.settings.profileMode === 'advanced'); if (g.settings.skinId && isSkinId(g.settings.skinId)) setPrefs({skinId:g.settings.skinId}); else if ((g.platform ?? 'j2me') === 'j2me') { const d = getServerSettings()?.settings.phone.skinId; if (isSkinId(d)) setPrefs({ skinId: d }); } setLoaded(true);
-        // only a JAR has an analysis (a Symbian / N-Gage package answers 404: no error in the console for nothing)
-        if ((g.platform ?? 'j2me') === 'j2me') api.analysis(gameId).then((a) => { if (!dead) setAnalysis(a); }, () => undefined);
-        const running = (await api.sessions()).find((s) => s.gameId === gameId && (s.state === 'running' || s.state === 'starting'));
-        if (!dead) {
-          if (running) attach(running);
-          setSessionsChecked(true);
-        }
-      } catch (e) { toast('error', (e as Error).message); }
-    })();
-    api.devices().then((d) => { if (!dead) setDevices(d.presets); }, () => undefined);
-    return () => { dead = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameId]);
 
   const sendRaw = useCallback((ev: Parameters<SessionStream['send']>[0]) => streamRef.current?.send(ev), []);
   /** Everything the player does goes through here, so a recording sees it. */
@@ -253,16 +233,73 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         c.getContext('2d')!.putImageData(img, 0, 0);
       },
       onAudio: (pcm) => audio.push(pcm),
-      onConnection: (cs) => {
+      onConnection: (cs, closeCode) => {
         setConn(cs);
         if(cs !== 'open') { input.releaseAll(); gamepad.current?.stopRumble(); }
-        if(cs === 'closed') api.session(s.id).then(actual=>setState(actual.state),()=>{setState('exited');toast('info','The previous session ended or the service restarted. Start the game again; only game-written RMS can be restored.');});
+        if (closeCode === 4404) {
+          // The stream endpoint only sends 4404 for a missing or ended session.
+          setState(current => current === 'failed' ? current : 'exited');
+          void api.session(s.id, AbortSignal.timeout(5000)).then(actual => {
+            if (streamRef.current === st && actual.state === 'failed') setState(actual.state);
+          }, () => undefined);
+        }
       },
     });
     streamRef.current = st;
     input.setSend((ev) => { recorder.push(ev as never); st.send(ev as never); });
     st.connect();
   }, [input, onEvent, audio]);
+
+  // Reopen an existing session on reload. Neither artwork nor analysis is needed to do this.
+  useEffect(() => {
+    const request = new AbortController();
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(8000)]);
+    const report = (part: keyof typeof loadErrors, error: Error) => {
+      if (!request.signal.aborted) setLoadErrors(current => ({ ...current, [part]: error.message }));
+    };
+    if (!loaded) void api.gameMeta(gameId, signal).then(g => {
+      if (request.signal.aborted) return;
+      setGame(g);
+      setLastGame({ id: g.id, name: g.name, platform: g.platform ?? 'j2me' });
+      const settings = g.settings;
+      setLayout(settings.layout);
+      setRes({ width: settings.width, height: settings.height });
+      setDevice(settings.device ?? '');
+      setHeapMb(settings.heapMb);
+      setTweaks(settings.emulation ?? {});
+      setAdvanced(settings.profileMode === 'advanced');
+      const skinId = settings.skinId ?? ((g.platform ?? 'j2me') === 'j2me' ? getServerSettings()?.settings.phone.skinId : null);
+      if (isSkinId(skinId)) setPrefs({ skinId });
+      setLoaded(true);
+    }, (error: ApiError) => {
+      if (request.signal.aborted) return;
+      if (error.code === 'not_found') {
+        if (getLastGame()?.id === gameId) setLastGame(null);
+        toast('error', error.message);
+        onExit();
+      } else report('game', error);
+    });
+    if (!sessionsChecked) void api.sessions(signal).then(sessions => {
+      if (request.signal.aborted) return;
+      const existing = sessions.find(s => s.gameId === gameId && (s.state === 'running' || s.state === 'starting'));
+      if (existing) attach(existing);
+      setSessionsChecked(true);
+    }, error => report('sessions', error));
+    if (!devices.length) void api.devices(signal).then(result => {
+      if (!request.signal.aborted) setDevices(result.presets);
+    }, error => report('devices', error));
+    return () => request.abort();
+    // Preserve a game and any attached session when retrying a failed part of startup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId, loadAttempt]);
+
+  const javaGameId = loaded && j2me ? gameId : null;
+  useEffect(() => {
+    if (!javaGameId) return;
+    let disposed = false;
+    void api.analysis(javaGameId).then(a => { if (!disposed) setAnalysis(a); }, () => undefined);
+    return () => { disposed = true; };
+  }, [javaGameId]);
 
   // audio: needs a user gesture, so resume on the first interaction as well as on Start
   useEffect(() => {
@@ -301,16 +338,28 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     return () => document.removeEventListener('visibilitychange', sync);
   }, [live, conn, send]);
   useEffect(() => {
-    if (!sessionRef.current || !(state === 'running' || state === 'starting')) return;
-    const t = window.setInterval(() => {
-      const id = sessionRef.current?.id; if (!id) return;
-      api.session(id).then((s) => { sessionRef.current = s; setSession(s); if (s.resources) setCpuHist((h) => [...h.slice(-39), s.resources!.cpuPercentNow]); }, () => undefined);
-    }, 2000);
-    return () => window.clearInterval(t);
+    const id = session?.id;
+    if (!id || !(state === 'running' || state === 'starting')) return;
+    const request = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => { timer = setTimeout(sample, 2000); };
+    const sample = async () => {
+      try {
+        const s = await api.session(id, AbortSignal.any([request.signal, AbortSignal.timeout(5000)]));
+        if (!request.signal.aborted && sessionRef.current?.id === id) {
+          sessionRef.current = s;
+          setSession(s);
+          if (s.resources) setCpuHist(h => [...h.slice(-39), s.resources!.cpuPercentNow]);
+        }
+      } catch { /* A temporarily unavailable status endpoint does not change the session. */ }
+      if (!request.signal.aborted) schedule();
+    };
+    schedule();
+    return () => { request.abort(); clearTimeout(timer); };
   }, [state, session?.id]);
 
   // ---- input wiring: keyboard, focus loss, gamepad
-  useEffect(() => { input.enabled = live && conn === 'open' && !keymap && !menu && !perm && !padMenu; if (!input.enabled) input.releaseAll(); }, [input, live, conn, keymap, menu, perm, padMenu]);
+  useEffect(() => { input.enabled = live && conn === 'open' && !keymap && !menu && !perm; if (!input.enabled) input.releaseAll(); }, [input, live, conn, keymap, menu, perm]);
   useEffect(() => {
     window.addEventListener('keydown', input.onKeyDown);
     window.addEventListener('keyup', input.onKeyUp);
@@ -332,10 +381,18 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     };
   }, [input, gameId, controls.gamepad]);
   const uiRef = useRef<(action: PadAction) => void>(() => undefined);
+  const closePadSettings = () => {
+    setPadMenu(false);
+    if (live) stage.current?.focus({ preventScroll: true });
+  };
   uiRef.current = (action) => {
     wake();
-    if(action==='ui:menu'){input.releaseAll();setLights(false);setPadMenu(v=>!v);return;}
-    if(action==='ui:back'){if(perm){send({t:'perm',id:perm.id,allow:false});setPerm(null);}setMenu(null);setKeymap(false);setPadMenu(false);setLights(false);return;}
+    if (action === 'ui:menu') {
+      if (padMenu) closePadSettings();
+      else if (!live) { setLights(false); setPadMenu(true); }
+      return;
+    }
+    if(action==='ui:back'){if(perm){send({t:'perm',id:perm.id,allow:false});setPerm(null);}setMenu(null);setKeymap(false);closePadSettings();setLights(false);return;}
     if(action==='ui:lights'){setPrefs({view:'screen'});setLights(v=>!v);return;}
     if(action==='ui:fullscreen'){fullscreen();return;}
     if(action==='up'||action==='down'||action==='left'||action==='right'){
@@ -347,7 +404,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
       controls[(at+delta+controls.length)%controls.length]?.focus();
     } else if(action==='fire') (document.activeElement as HTMLElement)?.click();
   };
-  useEffect(()=>{if(gamepad.current)gamepad.current.uiMode=padMenu || !live || !!menu || !!perm || keymap;},[padMenu,live,menu,perm,keymap]);
+  useEffect(()=>{if(gamepad.current)gamepad.current.uiMode=!live || !!menu || !!perm || keymap;},[controls.gamepad,live,menu,perm,keymap]);
   // the held-key state is shared by every control surface: changing the picture or the view lets go of everything
   useEffect(() => { input.releaseAll(); }, [input, prefs.skinId, view]);
 
@@ -514,6 +571,10 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const displayProfile = live && session ? { width: session.width, height: session.height } : res;
   const mismatch = j2me && actualGameSize && displayProfile &&
     (actualGameSize.width !== displayProfile.width || actualGameSize.height !== displayProfile.height);
+  const physicalScreen = skin?.config.screen;
+  const skinMismatch = actualGameSize && physicalScreen &&
+    (actualGameSize.width !== physicalScreen.width || actualGameSize.height !== physicalScreen.height);
+  const { skins } = useCatalog(j2me ? !!skinMismatch : !!phoneCatalog);
   const suggestion = useMemo(() => {
     if (!game || !skins) return null;
     const mine = getServerSettings()?.settings.myPhones;
@@ -536,7 +597,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     hintApplied.current = gameId;
     setAdvanced(true); setDevice(''); setRes({ width: sizeHint.width, height: sizeHint.height });
   }, [loaded, j2me, running, advanced, sizeHint?.width, sizeHint?.height, gameId, game?.nativeResolution?.source]);
-  const canStart = !!game && loaded && !running && !busy && (j2me ? health?.ok !== false && (advanced || !!matched) : native.data?.plan.ready === true);
+  const canStart = !!game && loaded && sessionsChecked && !running && !busy && (j2me ? health?.ok !== false && (advanced || !!matched) : native.data?.plan.ready === true);
   useEffect(() => {
     if (!autoStart || autoStarted.current || !sessionsChecked) return;
     if (!running) {
@@ -558,7 +619,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     && (view === 'screen' || skin?.config.input?.externalKeypad === true || matchMedia('(pointer: coarse)').matches));
   const showKeypad = keypadOverride ?? keypadDefault;
   const external = lightsActive ? touchControls : showKeypad;
-  const keypadReady = loaded && skin !== null && (j2me || !!native.data || !!native.error);
+  const keypadReady = loaded && (skin !== null || !!skinError) && (j2me || !!native.data || !!native.error);
   const crops = useMemo(() => skin ? keypadCrops(skin) : [], [skin]);
   const skinViews = skin?.config.views;
   const screenView = skinViews?.screen;
@@ -571,7 +632,13 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   } as CSSProperties;
   const skinScreen = skin?.config.screen;
 
-  const overlay = !running ? (
+  const loadError = loadErrors.game || loadErrors.sessions || (j2me && !advanced ? loadErrors.devices : null);
+  const checking = !loaded || !sessionsChecked || (j2me && !advanced && !devices.length && health?.ok !== false);
+  const loadFeedback = loadError ? <>
+    <p className="error" role="alert">{translateUI(loadError)}</p>
+    <button className="btn" type="button" onClick={() => { setLoadErrors({}); setLoadAttempt(n => n + 1); }}>{translateUI('Retry')}</button>
+  </> : checking ? <p role="status">{translateUI('Connecting to the player…')}</p> : null;
+  const overlay = !running ? loadFeedback ?? (
     <>
       {game && <h2>{game.name}</h2>}
       {state === 'failed' && <p className="error">{translateUI("The emulator stopped unexpectedly. See the log.")}</p>}
@@ -626,7 +693,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
                 : <Keypad input={input} softLeft={softkeys.left} softRight={softkeys.right} />}
             </div>
           )}
-          <div className={`stage ${view === 'screen' ? 'stage-screen' : ''} ${skin?.config.input?.kind === 'touchscreen' ? 'stage-touchscreen' : ''}`}>
+          <div ref={stage} tabIndex={-1} className={`stage ${view === 'screen' ? 'stage-screen' : ''} ${skin?.config.input?.kind === 'touchscreen' ? 'stage-touchscreen' : ''}`}>
             {shownSkin.current ? (
               <PhoneSkin
                 skin={shownSkin.current}
@@ -638,11 +705,21 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
                 integer={prefs.integer}
                 smooth={smooth}
                 input={input}
-                interactive={live}
+                interactive={live && shownSkin.current === skin}
                 lcdOverlay={overlay}
               lcdBadge={live && showFps ? <span className="fps-badge" data-testid="fps-badge">{fps}</span> : undefined}
               />
-            ) : <p className="muted center">{translateUI("Loading the phone…")}</p>}
+            ) : <div className="player-bare-screen">
+              <canvas ref={setCanvas} width={frameSize.w} height={frameSize.h}
+                className={smooth ? undefined : 'pixelated'}
+                style={{ transform: `rotate(${rotation}deg)` }}
+                onPointerDown={pointer('D')} onPointerMove={pointer('M')} onPointerUp={pointer('U')} onPointerCancel={pointer('U')} />
+              {overlay && <div className="player-bare-controls">{overlay}</div>}
+            </div>}
+            {loaded && !skin && <div className="phone-load-status" role="status">
+              <span>{translateUI(skinError ? 'Could not load the phone skin' : 'Loading the phone…')}</span>
+              {skinError && <button className="btn sm" type="button" onClick={retrySkin}>{translateUI('Retry phone skin')}</button>}
+            </div>}
           </div>
         </div>
 
@@ -659,6 +736,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
             {running && <button className="btn sm" disabled={busy || state === 'stopping' || (!j2me && !native.data?.plan.ready && native.data?.plan.code !== 'symbian_busy')} onClick={async () => { if (await stop()) setTimeout(start, 400); }}><Icon name="restart" /> {translateUI("Restart")}</button>}
           {session && <button className="btn ghost sm icon" onClick={() => api.diagnostics(session.id).then((b) => downloadBlob(b, `mgo-diagnostics-${fileSafe(game?.name ?? 'game')}.txt`), (e) => toast('error', (e as Error).message))} title={translateUI("A text report with the settings, the emulator log and the JVM state: attach it to a bug report")} aria-label={translateUI("Download diagnostics")} data-testid="diagnostics"><Icon name="log" /></button>}
           </div>
+          {running && loadFeedback && <div className="field note">{loadFeedback}</div>}
           {game && j2me && health?.ok !== false && <div className="control-line">
             <span className="label-caps" title={translateUI('Maximum rendering rate. Games with their own frame timing can run below this limit.')}>{translateUI('FPS limit')}</span>
             <Seg className="player-seg" label="Frame limit (fps)" value={String(tweaks.frameRate ?? 'default')}
@@ -697,7 +775,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         )}
         <Panel icon="volume" title={translateUI("Audio")}>
           <div className="control-line audio-controls">
-          <label className="field"><input type="range" min={0} max={100} value={vol} onChange={(e) => setVol(Number(e.target.value))} aria-label={translateUI("Volume")} /></label>
+          <VolumeSlider value={vol} onChange={setVol} />
           <Switch checked={muted} onChange={setMuted}>{translateUI("Mute")}</Switch>
           </div>
           {audioInfo.state !== 'running' && running && <div className="note">{translateUI("Sound is waiting for a click or key press (browser autoplay policy).")}</div>}
@@ -771,7 +849,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
             <div className="btn-row">
               <Hint text={`${translateUI("Arrows · Enter = OK · Q/W = soft keys · 0–9 · X = * · Z = #.")}${pad ? ` ${pad.slice(0, 28)}` : ''}`} />
               <button className="btn sm icon" type="button" title={translateUI("Remap keyboard")} aria-label={translateUI("Remap keyboard")} onClick={() => setKeymap(true)}><Icon name="keypad" /></button>
-              <button className="btn sm icon" type="button" title={translateUI("Gamepad settings / UI navigation")} aria-label={translateUI("Gamepad settings / UI navigation")} aria-expanded={padMenu} onClick={() => { input.releaseAll(); setPadMenu(v => !v); }}><Icon name="gamepad" /></button>
+              <button className="btn sm icon" type="button" title={translateUI("Gamepad settings / UI navigation")} aria-label={translateUI("Gamepad settings / UI navigation")} aria-expanded={padMenu} onClick={() => { if (padMenu) closePadSettings(); else setPadMenu(true); }}><Icon name="gamepad" /></button>
             </div>
           </div>
           {showKeypad && <div className="control-line">
