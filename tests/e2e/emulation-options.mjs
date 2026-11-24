@@ -34,7 +34,7 @@ try {
   // ---- options are saved for the game and reach it ----
   const props = await upload('tests/fixtures/labgames/build/kemprops.jar');
   await p.goto(base + '/play/' + props.id);
-  await p.getByText('Game compatibility options', { exact: true }).click();
+  await p.getByText('Game compatibility options', { exact: true }).waitFor();
   await p.getByLabel('Language of the phone').fill('ru-RU');
   await p.getByLabel('Font size medium').fill('30');
   await p.getByLabel('Font size small').fill('20');
@@ -53,7 +53,7 @@ try {
   await wait(async () => !(await running()), 'stopped');
 
   await p.reload();
-  await p.getByText('Game compatibility options', { exact: true }).click();
+  await p.getByText('Game compatibility options', { exact: true }).waitFor();
   await wait(async () => (await p.getByLabel('Language of the phone').inputValue()) === 'ru-RU', 'saved options are shown after a reload');
   await p.getByRole('button', { name: 'Reset options' }).click();
   await wait(async () => { const g = (await (await fetch(base + '/api/games')).json()).find((x) => x.id === props.id); return g.settings.emulation === undefined; }, 'defaults restored');

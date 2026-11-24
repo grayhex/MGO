@@ -246,6 +246,7 @@ export interface PublicSettings {
 
 /** The MIDI SoundFont (SF2) the games' MIDI music is rendered with, instead of the emulator's built-in bank. */
 export interface SoundfontInfo {
+  id: string;
   name: string;
   size: number;
   updatedAt: string;
@@ -255,6 +256,7 @@ export interface SettingsResponse {
   settings: PublicSettings;
   /** The installed custom SoundFont, or null for the built-in bank. */
   soundfont: SoundfontInfo | null;
+  soundfonts?: SoundfontInfo[];
   /** Secrets are never returned: only whether they are set. */
   secrets: { mobygames: { configured: boolean; hint: string | null } };
   /** Values that come from /etc/mgo/mgo.env and cannot be changed from the web UI. */

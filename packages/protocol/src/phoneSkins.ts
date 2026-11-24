@@ -14,6 +14,7 @@ export const phoneHasTouch = (id?: PhoneSkinId): boolean => id === 'nokia-5800' 
 export interface SkinRect { x: number; y: number; width: number; height: number }
 export interface PhoneSkinView {
   body: string;
+  legends?: string;
   glass?: string;
   width: number;
   height: number;

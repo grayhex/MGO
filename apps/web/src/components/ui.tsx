@@ -83,7 +83,7 @@ export function Hint({ text }: { text: string }) {
   const shown = translateUI(text);
   return <>
     <span className="hint-mark" ref={trigger} tabIndex={0} role="img" aria-label={shown} aria-describedby={anchor ? id : undefined}
-      onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide} onKeyDown={event => { if (event.key === 'Escape') hide(); }}>i</span>
+      onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide} onKeyDown={event => { if (event.key === 'Escape') hide(); }}><Icon name="info" /></span>
     {anchor && createPortal(
       <span className="hint-popover" id={id} role="tooltip" style={{ left: anchor.left, ...(anchor.below ? { top: anchor.edge } : { bottom: anchor.edge }) }}>{shown}</span>,
       document.body

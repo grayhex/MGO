@@ -1083,7 +1083,12 @@
   "Which firmware archive do I need?": "Какой архив прошивки нужен?",
   "Use the phone model and product code to identify the firmware. Keep the original filenames inside the archive.": "Ищите прошивку по модели и коду устройства. Сохраните исходные имена файлов внутри архива.",
   "Device ROM dump (e.g. SYM.ROM)": "Дамп ROM устройства (например, SYM.ROM)",
+  "ROM dump and matching RPKG if requested": "Дамп ROM, при запросе — соответствующий RPKG",
   "ROM + RPKG, or a factory VPL with its FPSX files": "ROM + RPKG или заводской VPL с его файлами FPSX",
   "EKA2L1 firmware guide": "Руководство EKA2L1 по прошивкам",
-  "N-Gage ROM guide": "Руководство по ROM для N‑Gage"
+  "N-Gage ROM guide": "Руководство по ROM для N‑Gage",
+  "Add .sf2…": "Добавить .sf2…",
+  "SoundFont selected for the next launch.": "SoundFont выбран для следующего запуска.",
+  "Choose the built-in bank to turn off custom SoundFonts. Changes apply at the next launch.": "Выберите встроенный банк, чтобы отключить загруженные SoundFont. Настройка применяется при следующем запуске.",
+  "Stop the Java ME session before deleting a SoundFont": "Перед удалением SoundFont остановите игру Java ME"
 }

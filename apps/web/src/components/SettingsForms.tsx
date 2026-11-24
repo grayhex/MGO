@@ -102,22 +102,29 @@ function SoundfontField({ toast }: { toast: Toaster }) {
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const sf = server?.soundfont ?? null;
+  const banks = server?.soundfonts ?? (sf ? [sf] : []);
   const run = async (job: () => Promise<SettingsResponse>, done: string) => {
     setBusy(true);
     try { setServerSettings(await job()); toast('info', done); } catch (e) { toast('error', (e as Error).message); } finally { setBusy(false); if (input.current) input.current.value = ''; }
   };
   return (
     <div className="field">
-      <span className="label-caps">{translateUI("MIDI SoundFont")}</span>
-      <div className="field-row">
-        <span className="muted">{sf ? `${sf.name} · ${(sf.size / (1024 * 1024)).toFixed(1)} MB` : translateUI("Built-in bank")}</span>
-        <span>
-          <input ref={input} type="file" accept=".sf2" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void run(() => api.uploadSoundfont(f), 'SoundFont installed. It is used by games started from now on.'); }} />
-          <button className="btn sm" disabled={busy} onClick={() => input.current?.click()}>{translateUI(sf ? "Replace…" : "Choose .sf2…")}</button>
-          {sf && <button className="btn ghost sm" disabled={busy} onClick={() => void run(() => api.deleteSoundfont(), 'Back to the built-in bank.')}>{translateUI("Remove")}</button>}
-        </span>
+      <label className="field">
+        <span className="label-caps">{translateUI("MIDI SoundFont")}</span>
+        <select className="select" value={sf?.id ?? ''} disabled={busy} onChange={event => {
+          const id = event.currentTarget.value || null;
+          void run(() => api.selectSoundfont(id), id ? 'SoundFont selected for the next launch.' : 'Back to the built-in bank.');
+        }}>
+          <option value="">{translateUI("Built-in bank")}</option>
+          {banks.map(bank => <option key={bank.id} value={bank.id}>{bank.name} · {(bank.size / 1048576).toFixed(1)} MB</option>)}
+        </select>
+      </label>
+      <div className="btn-row">
+        <input ref={input} type="file" accept=".sf2" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void run(() => api.uploadSoundfont(f), 'SoundFont installed. It is used by games started from now on.'); }} />
+        <button className="btn sm" disabled={busy} onClick={() => input.current?.click()}>{translateUI("Add .sf2…")}</button>
+        {sf && <button className="btn ghost sm" disabled={busy} onClick={() => void run(() => api.deleteSoundfont(sf.id), 'Back to the built-in bank.')}>{translateUI("Remove")}</button>}
       </div>
-      <p className="muted small">{translateUI("Replaces the emulator's built-in bank for MIDI music (SoundFont 2 only, up to 256 MB). Games that are already running keep the old one.")}</p>
+      <p className="muted small">{translateUI("Choose the built-in bank to turn off custom SoundFonts. Changes apply at the next launch.")}</p>
     </div>
   );
 }
@@ -127,18 +134,22 @@ export function SoundControlsForm({ toast, auto }: { toast: Toaster; auto?: bool
   const c = useSection('controls', toast, auto);
   if (!a.draft || !c.draft) return <p className="muted">{translateUI("Loading…")}</p>;
   return (
-    <div className="stack">
-      <h3><Icon name="volume" /> {translateUI("Sound")}</h3>
+    <div className="sound-control-grid">
+      <section className="stack sound-controls-section" aria-labelledby="sound-preferences-heading">
+      <h3 id="sound-preferences-heading"><Icon name="volume" /> {translateUI("Sound")}</h3>
       <Switch checked={a.draft.enabled} onChange={(v) => a.set({ enabled: v })}>{translateUI("Play game sound (otherwise games start muted)")}</Switch>
       <label className="field"><span className="label-caps">{translateUI("Starting volume —")} {a.draft.volume}%</span><input type="range" min={0} max={100} value={a.draft.volume} onChange={(e) => a.set({ volume: Number(e.target.value) })} aria-label={translateUI("Volume")} /></label>
       <SoundfontField toast={toast} />
       <SaveBar auto={auto} dirty={a.dirty} busy={a.busy} onSave={() => void a.save('Sound settings saved')} note="Browsers only start sound after a click: pressing Start in the player does that." />
-      <h3><Icon name="gamepad" /> {translateUI("Controls")}</h3>
+      </section>
+      <section className="stack sound-controls-section" aria-labelledby="control-preferences-heading">
+      <h3 id="control-preferences-heading"><Icon name="gamepad" /> {translateUI("Controls")}</h3>
       <div className="field"><span className="label-caps">{translateUI("On-screen keypad")}</span><Seg<'auto' | 'always' | 'never'> label={translateUI("On-screen keypad")} value={c.draft.keypad} onChange={(v) => c.set({ keypad: v })} options={[{ value: 'auto', label: 'Touch devices only' }, { value: 'always', label: 'Always' }, { value: 'never', label: 'Never' }]} /></div>
       <Switch checked={c.draft.haptics} onChange={(v) => c.set({ haptics: v })}>{translateUI("Vibration feedback on touch keys and when the game vibrates")}</Switch>
       <Switch checked={c.draft.gamepad} onChange={(v) => c.set({ gamepad: v })}>{translateUI("Use a connected gamepad")}</Switch>
       <p className="muted small">{translateUI("The keyboard keys of each phone button can be changed per player (“Keys…” in the Controls panel). That is stored in this browser.")}</p>
       <SaveBar auto={auto} dirty={c.dirty} busy={c.busy} onSave={() => void c.save('Control settings saved')} />
+      </section>
     </div>
   );
 }

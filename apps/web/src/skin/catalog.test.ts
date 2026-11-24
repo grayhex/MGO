@@ -25,3 +25,15 @@ it('touchscreen phones preserve their physical controls and use an external game
     assert.deepEqual(c.views.screen.buttons, []);
   }
 });
+
+it('Nokia E71 uses the printed numeric layer for clickable digits, star and pound', () => {
+  const base = new URL('../../public/phones/nokia-e71/', import.meta.url);
+  const config = JSON.parse(readFileSync(new URL('config.json', base), 'utf8'));
+  assert.equal(config.keyMappings['key-U'], 'star');
+  assert.equal(config.keyMappings['key-J'], 'pound');
+  for (const [digit, key] of Array.from('MRTYFGHVBN').entries()) {
+    assert.equal(config.keyMappings[`key-${key}`], `d${digit}`);
+    assert.equal(config.buttons.find((b: { id: string }) => b.id === `key-${key}`).label, `${key} / ${digit}`);
+  }
+  assert.ok(readFileSync(new URL(config.views.full.legends, base)).length > 0);
+});

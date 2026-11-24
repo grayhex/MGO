@@ -68,6 +68,11 @@ try{
   assert.equal(await p.getByRole('tabpanel').count(),1,'only active tab is accessible');
   await p.waitForTimeout(5200);
   assert.ok(await p.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), 'the compact system overview fits the desktop viewport');
+  const fullSize = p.viewportSize();
+  await p.setViewportSize({ width: 1280, height: 720 });
+  const compactHeight = await p.evaluate(() => document.documentElement.scrollHeight);
+  assert.ok(compactHeight <= 721, `the system overview fits a 720p viewport (height ${compactHeight})`);
+  await p.setViewportSize(fullSize);
   await p.getByText('Server checks', { exact: true }).click();
   await p.getByTestId('system-checks').waitFor({ state: 'visible' });
   await p.getByText('Server checks', { exact: true }).click();

@@ -534,6 +534,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const res_ = session?.resources ?? null;
   const keypadRequired = view === 'screen' || skin?.config.input?.externalKeypad === true;
   const external = keypadRequired || showKeypad;
+  const keypadReady = loaded && skin !== null;
   const crop = skin && external ? keypadCut(skin) : undefined;
   const skinScreen = skin?.config.screen;
 
@@ -584,8 +585,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           </div>
         </div>
 
-        <div className={`stage-row${external ? ' with-keypad' : ''}`}>
-          {external && (
+        <div className={`stage-row${external && keypadReady ? ' with-keypad' : ''}`}>
+          {external && keypadReady && (
             <div className="stage-foot side">
               {skin && crop !== undefined
                 ? <PhoneSkin skin={skin} view="full" keypadCrop={crop} frame={frameSize} input={input} interactive={live} className="physical-keypad" />
@@ -711,7 +712,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         )}
 
         {j2me && (
-        <Panel icon="sliders" title={translateUI("Game compatibility options")} open={false}>
+        <Panel icon="sliders" title={translateUI("Game compatibility options")}>
           <EmulationTweaksForm pointerDefault={phoneHasTouch(prefs.skinId)} value={tweaks} onChange={setTweaks} />
         </Panel>
         )}
@@ -743,11 +744,11 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           {padMenu && <GamepadSettings gameId={gameId} poller={gamepad.current} state={padState} />}
         </Panel>
 
-        <Panel icon="log" title={translateUI("Input recording")} open={false}>
+        <Panel icon="log" title={translateUI("Input recording")}>
           <RecordingPanel gameId={gameId} gameName={game?.name ?? gameId} frame={frameSize} live={live} recorder={recorder} replayer={replayer} sendRaw={sendRaw} toast={toast} />
         </Panel>
 
-        {developer && <Panel icon="pulse" title={translateUI("Telemetry")} open={false}>
+        {developer && <Panel icon="pulse" title={translateUI("Telemetry")}>
           <div className="metric"><div className="metric-head"><span className="label-caps">{translateUI("Display FPS")}</span><span className="metric-value">{client.fps.toFixed(1)}</span></div><Spark values={fpsHist} label={translateUI("Display frames per second")} /></div>
           <div className="metric"><div className="metric-head"><span className="label-caps">{translateUI("Emulator CPU")}</span><span className="metric-value">{translateUI(res_ ? `${res_.cpuPercentNow.toFixed(0)}%` : '—')}</span></div><Spark values={cpuHist} max={Math.max(100, ...cpuHist)} label={translateUI("CPU use")} /></div>
           <div className="metric"><div className="metric-head"><span className="label-caps">{translateUI("Memory")}</span><span className="small mono">{translateUI(res_ ? `${res_.rssMb.toFixed(0)} MB (peak ${res_.peakRssMb.toFixed(0)})` : '—')}</span></div><Meter value={res_?.rssMb ?? 0} max={Math.max(512, heapMb * 2)} label={translateUI("Memory use")} /></div>
@@ -767,7 +768,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         </Panel>}
 
         {developer && analysis && (
-          <Panel icon="shield" title={translateUI("Compatibility")} open={false} right={<span className={`badge ${analysis.analysis.risk === 'low' ? 'prod' : analysis.analysis.risk === 'medium' ? 'mock' : 'danger'}`}>{analysis.analysis.risk} {translateUI("risk")}</span>}>
+          <Panel icon="shield" title={translateUI("Compatibility")} right={<span className={`badge ${analysis.analysis.risk === 'low' ? 'prod' : analysis.analysis.risk === 'medium' ? 'mock' : 'danger'}`}>{analysis.analysis.risk} {translateUI("risk")}</span>}>
             <dl className="kv"><dt>{translateUI("Platform")}</dt><dd>{analysis.analysis.platform.family}</dd><dt>{translateUI("3D (M3G / Mascot)")}</dt><dd>{translateUI(analysis.analysis.needs3d ? 'yes' : 'no')}</dd><dt>{translateUI("Classes")}</dt><dd>{analysis.analysis.classCount}</dd></dl>
             {analysis.analysis.apis.length > 0 && (
               <div className="table-wrap"><table className="table compact"><thead><tr><th>{translateUI("API")}</th><th>{translateUI("Classes")}</th><th>{translateUI("Missing")}</th></tr></thead>
@@ -778,7 +779,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           </Panel>
         )}
 
-        {(developer || state === 'failed') && <Panel icon="log" title={translateUI(`Emulator log (${log.length})`)} open={false}>
+        {(developer || state === 'failed') && <Panel icon="log" title={translateUI(`Emulator log (${log.length})`)}>
           <pre className="log" tabIndex={0}>{log.slice(-120).join('\n') || '—'}</pre>
         </Panel>}
       </aside>

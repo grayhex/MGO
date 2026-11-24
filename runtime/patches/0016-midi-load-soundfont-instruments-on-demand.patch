@@ -1,0 +1,132 @@
+diff --git a/src/media/emulator/media/EmulatorMIDI.java b/src/media/emulator/media/EmulatorMIDI.java
+index 9e5a88e..26b0140 100644
+--- a/src/media/emulator/media/EmulatorMIDI.java
++++ b/src/media/emulator/media/EmulatorMIDI.java
+@@ -4,6 +4,7 @@ Copyright (c) 2024-2026 Arman Jussupgaliyev
+ package emulator.media;
+ 
+ import com.sun.media.sound.AudioSynthesizer;
++import com.sun.media.sound.ModelPatch;
+ import emulator.Settings;
+ 
+ import javax.microedition.media.Player;
+@@ -12,6 +13,8 @@ import javax.sound.midi.*;
+ import javax.sound.sampled.SourceDataLine;
+ import java.io.File;
+ import java.util.HashMap;
++import java.util.HashSet;
++import java.util.Set;
+ import java.util.Map;
+ 
+ public class EmulatorMIDI {
+@@ -22,26 +25,25 @@ public class EmulatorMIDI {
+ 	private static MidiDevice device;
+ 	private static Receiver receiver;
+ 	public static Soundbank soundbank;
++	private static boolean soundbankChecked;
+ 
+-	public static boolean useCustomSoundfont() {
+-		if (Settings.soundfontPath == null || Settings.soundfontPath.isEmpty()) {
+-			return false;
+-		}
+-		File file = new File(Settings.soundfontPath);
+-		if (!file.exists()) {
+-			return false;
+-		}
+-		if (soundbank == null) {
+-			try {
+-				soundbank = MidiSystem.getSoundbank(file);
+-			} catch (Exception e) {
+-				return false;
++	public static synchronized boolean useCustomSoundfont() {
++		if (!soundbankChecked) {
++			soundbankChecked = true;
++			if (Settings.soundfontPath != null && !Settings.soundfontPath.isEmpty()) {
++				try {
++					soundbank = MidiSystem.getSoundbank(new File(Settings.soundfontPath));
++					if (soundbank == null) System.err.println("MGO: custom SoundFont unavailable; using the built-in bank.");
++				} catch (Exception | OutOfMemoryError e) {
++					System.err.println("MGO: custom SoundFont unavailable; using the built-in bank.");
++				}
+ 			}
+ 		}
+-		return true;
++		return soundbank != null;
+ 	}
+ 
+ 	public static boolean useExternalReceiver() {
++		if (!Settings.searchVms) return false;
+ 		try {
+ 			EmulatorMIDI.initDevice();
+ 			return Settings.searchVms && receiver != null && synthesizer == null;
+@@ -73,7 +75,7 @@ public class EmulatorMIDI {
+ 		}
+ 		if (receiver == null) {
+ 			synthesizer = openSynthesizer(null);
+-			receiver = synthesizer.getReceiver();
++			receiver = getReceiver(synthesizer);
+ 		}
+ 		if (sequencer == null) {
+ 			sequencer = MidiSystem.getSequencer(false);
+@@ -104,10 +106,47 @@ public class EmulatorMIDI {
+ 			} catch (Exception ignored) {}
+ 			synthesizer.open();
+ 		}
+-		synthesizer.loadAllInstruments(useCustomSoundfont() ? soundbank : synthesizer.getDefaultSoundbank());
+ 		return synthesizer;
+ 	}
+ 
++	/** Keep the default patches available and load custom instruments only as a MIDI player uses them. */
++	public static Receiver getReceiver(Synthesizer synth) throws MidiUnavailableException {
++		Receiver output = synth.getReceiver();
++		if (!useCustomSoundfont()) return output;
++		Soundbank bank = soundbank;
++		MidiChannel[] channels = synth.getChannels();
++		return new Receiver() {
++			private final Set<Integer> checked = new HashSet<>();
++			private boolean customAvailable = true;
++
++			public synchronized void send(MidiMessage message, long timestamp) {
++				int status = message.getStatus();
++				byte[] data = message.getMessage();
++				int channel = status & 15;
++				if (customAvailable && (status & 0xf0) == ShortMessage.NOTE_ON && data.length >= 3 && data[2] != 0
++						&& channel < channels.length && channels[channel] != null) {
++					MidiChannel voice = channels[channel];
++					int patchBank = voice.getController(0) * 128 + voice.getController(32);
++					int program = voice.getProgram();
++					boolean percussion = channel == 9;
++					int key = (patchBank * 128 + program) * 2 + (percussion ? 1 : 0);
++					if (checked.add(key)) {
++						try {
++							Instrument instrument = bank.getInstrument(new ModelPatch(patchBank, program, percussion));
++							if (instrument != null) synth.loadInstrument(instrument);
++						} catch (RuntimeException | OutOfMemoryError e) {
++							customAvailable = false;
++							System.err.println("MGO: custom MIDI instrument unavailable; using the built-in bank for remaining patches.");
++						}
++					}
++				}
++				output.send(message, timestamp);
++			}
++
++			public void close() { output.close(); }
++		};
++	}
++
+ 	public static void setSequence(Sequence sequence) throws InvalidMidiDataException, MidiUnavailableException {
+ 		initDevice();
+ 		sequencer.setSequence(sequence);
+diff --git a/src/media/javax/microedition/media/PlayerImpl.java b/src/media/javax/microedition/media/PlayerImpl.java
+index 9666ad6..0a56d4c 100644
+--- a/src/media/javax/microedition/media/PlayerImpl.java
++++ b/src/media/javax/microedition/media/PlayerImpl.java
+@@ -1015,7 +1015,7 @@ public class PlayerImpl implements Player, Runnable, LineListener, MetaEventList
+ 				midiOutput = source;
+ 			} catch (Exception ignored) {}
+ 			midiSynthesizer = EmulatorMIDI.openSynthesizer(source);
+-			midiSequencer.getTransmitter().setReceiver(midiSynthesizer.getReceiver());
++			midiSequencer.getTransmitter().setReceiver(EmulatorMIDI.getReceiver(midiSynthesizer));
+ 		}
+ 		midiSequencer.open();
+ 		midiSequencer.addMetaEventListener(this);

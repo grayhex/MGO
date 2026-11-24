@@ -64,7 +64,7 @@ try {
   assert.deepEqual(pngSize(png), [240, 320], 'the screenshot has the game frame size');
 
   const fires = async () => ((await logOf()).match(/GAME_FIRE/g) ?? []).length;
-  await p.getByText('Input recording', { exact: true }).click();
+  await p.getByText('Input recording', { exact: true }).waitFor();
   await p.getByRole('button', { name: /Record/ }).click();
   await p.keyboard.down('Enter'); await sleep(300); await p.keyboard.up('Enter');
   await sleep(200);

@@ -48,6 +48,7 @@ export function registerAdminRoutes(app: FastifyInstance, c: AdminContext): void
     return {
       settings: store.get(),
       soundfont: soundfont.info(),
+      soundfonts: soundfont.list(),
       secrets: { mobygames: { configured: m.configured, hint: m.hint } },
       readonly: { host: cfg.host, port: cfg.port, auth: cfg.authToken ? 'token' : 'none', dataDirName: 'data directory' },
       envDefaults: store.envDefaults,
@@ -96,7 +97,7 @@ export function registerAdminRoutes(app: FastifyInstance, c: AdminContext): void
     return settingsResponse().secrets;
   });
 
-  // --- MIDI SoundFont: one SF2 file, streamed to disk; sessions pick it up when they start ---
+  // MIDI banks are streamed to disk and selected for the next Java ME session.
   app.put('/api/settings/soundfont', async (req) => {
     if (!req.isMultipart()) throw new UploadError('bad_request', 'Expected multipart/form-data with an .sf2 file');
     const part = await req.file({ limits: { fileSize: SOUNDFONT_MAX_BYTES } });
@@ -104,8 +105,15 @@ export function registerAdminRoutes(app: FastifyInstance, c: AdminContext): void
     await soundfont.save(part.file, part.filename ?? '');
     return settingsResponse();
   });
-  app.delete('/api/settings/soundfont', async () => {
-    soundfont.remove();
+  app.patch<{ Body: { id?: string | null } }>('/api/settings/soundfont', async req => {
+    soundfont.select(req.body?.id);
+    return settingsResponse();
+  });
+  app.delete<{ Querystring: { id?: string } }>('/api/settings/soundfont', async req => {
+    if (c.sessions?.active().some(session => session.adapter.kind === 'kemulator')) {
+      throw new UploadError('soundfont_in_use', 'Stop the Java ME session before deleting a SoundFont', 409);
+    }
+    soundfont.remove(req.query.id);
     return settingsResponse();
   });
 

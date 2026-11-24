@@ -31,7 +31,7 @@ const PLATFORM_HELP: Record<DefaultPlatform, { title: string; hint: string }> = 
 /** The catalog entry of an installed firmware, by its product code (null for firmware MGO does not know). */
 const catalogOf = (code: string): Native | null => EMULATED_DEVICES.flatMap(d => (d.engine === 'eka2l1' && d.firmware.product.toLowerCase() === code.toLowerCase() ? [d] : []))[0] ?? null;
 const skinOf = (device: Native | null): string | null => (device ? (Object.entries(PHONE_COMPATIBILITY).find(([, ids]) => ids.includes(device.id))?.[0] ?? null) : null);
-const romOnly = new Set(['NEM-4', 'RH-29', 'RM-84']);
+const romOnly = new Set(['NEM-4', 'RH-29']);
 
 /**
  * Settings → Symbian (experimental): the optional mgo-symbian service and the user's own firmware. One way to add firmware: a firmware
@@ -66,7 +66,7 @@ export function SymbianPanel({ toast }: { toast: Toaster }) {
           {st.reachable
             ? <span className="badge ok">{translateUI('Service connected')}</span>
             : <span className={`badge ${st.configured ? 'mock' : 'plain'}`}>{translateUI(st.configured ? 'Service not answering' : 'Service not set up')}</span>}
-          {st.emulator && <span className="muted small">EKA2L1 <code>{st.emulator}</code></span>}
+          {st.emulator && <span className="muted small">EKA2L1 <code>{st.emulator.replace(/^EKA2L1\s+/i, '')}</code></span>}
           {st.busy && <span className="badge plain">{translateUI('busy')}</span>}
           <span className="spacer" />
           <button className="btn sm" onClick={load}><Icon name="restart" /> {translateUI('Refresh status')}</button>
@@ -151,7 +151,7 @@ export function SymbianPanel({ toast }: { toast: Toaster }) {
                 <li key={device.id}>
                   <strong>{device.name}</strong>
                   <code>{device.firmware.product}</code>
-                  <span className="muted small">{romOnly.has(device.firmware.product) ? translateUI('Device ROM dump (e.g. SYM.ROM)') : translateUI('ROM + RPKG, or a factory VPL with its FPSX files')}</span>
+                  <span className="muted small">{translateUI(romOnly.has(device.firmware.product) ? 'Device ROM dump (e.g. SYM.ROM)' : device.firmware.product === 'RM-84' ? 'ROM dump and matching RPKG if requested' : 'ROM + RPKG, or a factory VPL with its FPSX files')}</span>
                 </li>
               ))}
             </ul>

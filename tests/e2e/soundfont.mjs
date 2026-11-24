@@ -24,18 +24,31 @@ try {
   p.on('pageerror', (e) => errors.push(e.message));
   await p.goto(base + '/settings#sound');
   await p.getByText('MIDI SoundFont', { exact: true }).waitFor();
-  await p.getByText('Built-in bank', { exact: true }).waitFor();
+  assert.equal(await p.getByLabel('MIDI SoundFont').inputValue(), '');
 
   await p.locator('input[type=file][accept=".sf2"]').setInputFiles({ name: 'room.sf2', mimeType: 'application/octet-stream', buffer: sf2 });
-  await p.getByText(/room\.sf2 · 0\.0 MB/).waitFor();
+  await p.getByLabel('MIDI SoundFont').locator('option', { hasText: /room\.sf2/ }).waitFor({ state: 'attached' });
   assert.equal((await (await fetch(base + '/api/settings')).json()).soundfont.name, 'room.sf2');
 
   await p.locator('input[type=file][accept=".sf2"]').setInputFiles({ name: 'broken.sf2', mimeType: 'application/octet-stream', buffer: Buffer.from('nope') });
   await p.getByText(/too small to be a SoundFont/i).waitFor();
   assert.equal((await (await fetch(base + '/api/settings')).json()).soundfont.name, 'room.sf2', 'a rejected file keeps the installed bank');
 
+  const bank = p.getByLabel('MIDI SoundFont');
+  await p.locator('input[type=file][accept=".sf2"]').setInputFiles({ name: 'hall.sf2', mimeType: 'application/octet-stream', buffer: sf2 });
+  await bank.locator('option', { hasText: /hall\.sf2/ }).waitFor({ state: 'attached' });
+  assert.equal(await bank.locator('option').count(), 3, 'both custom banks are available');
+  await bank.selectOption({ label: 'room.sf2 · 0.0 MB' });
+  await p.getByText('SoundFont selected for the next launch.', { exact: true }).waitFor();
+  assert.equal((await (await fetch(base + '/api/settings')).json()).soundfont.name, 'room.sf2');
+  await bank.selectOption('');
+  await p.getByText('Back to the built-in bank.', { exact: true }).waitFor();
+  assert.equal((await (await fetch(base + '/api/settings')).json()).soundfont, null);
+  assert.equal(await bank.locator('option').count(), 3);
+  await bank.selectOption({ label: 'room.sf2 · 0.0 MB' });
   await p.getByRole('button', { name: 'Remove', exact: true }).click();
-  await p.getByText('Built-in bank', { exact: true }).waitFor();
+  await p.getByLabel('MIDI SoundFont').locator('option', { hasText: /room\.sf2/ }).waitFor({ state: 'detached' });
+  assert.equal(await p.getByLabel('MIDI SoundFont').inputValue(), '');
   assert.equal((await (await fetch(base + '/api/settings')).json()).soundfont, null);
   assert.deepEqual(errors, []);
   console.log('soundfont e2e OK');

@@ -71,6 +71,7 @@ export function PhoneSkin({ skin, view, frame, keypadCrop, rotation = 0, canvasR
   const dim = useMemo(() => fitBox(outer, v.width / (v.height * (1 - cut))), [outer.w, outer.h, v.width, v.height, cut]); // eslint-disable-line react-hooks/exhaustive-deps
   const place = useMemo(() => placeRotated(v, dim, frame, integer, rotation), [v, dim, frame, integer, rotation]);
   const physical = (view === 'full' || keypad) && v.controls === 'buttons';
+  const bodyPosition = keypad ? { top: -dim.h * cut / (1 - cut), height: dim.h / (1 - cut) } : undefined;
 
   // --- hitboxes: pointer id -> hitbox id; every pointer is its own input source
   const tracked = useRef(new Map<number, { id: string; label: string; action: string | null; source: string }>());
@@ -189,7 +190,8 @@ export function PhoneSkin({ skin, view, frame, keypadCrop, rotation = 0, canvasR
             {lcdOverlay && <div className="skin-lcd-overlay">{lcdOverlay}</div>}
             {lcdBadge && <div className="skin-lcd-badge">{lcdBadge}</div>}
           </div>}
-          <img className="skin-body" style={keypad ? { top: -dim.h * cut / (1 - cut), height: dim.h / (1 - cut) } : undefined} src={url(v.body)} alt="" draggable={false} decoding="async" />
+          <img className="skin-body" style={bodyPosition} src={url(v.body)} alt="" draggable={false} decoding="async" />
+          {v.legends && <img className="skin-legends" style={bodyPosition} src={url(v.legends)} alt="" draggable={false} />}
           {!keypad && glass && v.glass && <img className="skin-glass" src={url(v.glass)} alt="" draggable={false} decoding="async" />}
           {physical && (
             <svg className="skin-hit" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">

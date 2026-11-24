@@ -223,6 +223,7 @@ try {
   await mp.click('button:has-text("Sign in")');
   await mp.waitForSelector('article.game-card');
   await mp.goto(base + '/settings');
+  await mp.getByText('Server checks', { exact: true }).click();
   await mp.waitForSelector('#system .check');
   ok('Settings fits a phone screen without horizontal scroll', await mp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
   await mp.screenshot({ path: path.join(outDir, 'setup-09-mobile.png') });
