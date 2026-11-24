@@ -634,10 +634,11 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
 
   const loadError = loadErrors.game || loadErrors.sessions || (j2me && !advanced ? loadErrors.devices : null);
   const checking = !loaded || !sessionsChecked || (j2me && !advanced && !devices.length && health?.ok !== false);
-  const overlay = loadError ? <>
+  const loadFeedback = loadError ? <>
     <p className="error" role="alert">{translateUI(loadError)}</p>
     <button className="btn" type="button" onClick={() => { setLoadErrors({}); setLoadAttempt(n => n + 1); }}>{translateUI('Retry')}</button>
-  </> : checking ? <p role="status">{translateUI('Connecting to the player…')}</p> : !running ? (
+  </> : checking ? <p role="status">{translateUI('Connecting to the player…')}</p> : null;
+  const overlay = !running ? loadFeedback ?? (
     <>
       {game && <h2>{game.name}</h2>}
       {state === 'failed' && <p className="error">{translateUI("The emulator stopped unexpectedly. See the log.")}</p>}
@@ -735,6 +736,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
             {running && <button className="btn sm" disabled={busy || state === 'stopping' || (!j2me && !native.data?.plan.ready && native.data?.plan.code !== 'symbian_busy')} onClick={async () => { if (await stop()) setTimeout(start, 400); }}><Icon name="restart" /> {translateUI("Restart")}</button>}
           {session && <button className="btn ghost sm icon" onClick={() => api.diagnostics(session.id).then((b) => downloadBlob(b, `mgo-diagnostics-${fileSafe(game?.name ?? 'game')}.txt`), (e) => toast('error', (e as Error).message))} title={translateUI("A text report with the settings, the emulator log and the JVM state: attach it to a bug report")} aria-label={translateUI("Download diagnostics")} data-testid="diagnostics"><Icon name="log" /></button>}
           </div>
+          {running && loadFeedback && <div className="field note">{loadFeedback}</div>}
           {game && j2me && health?.ok !== false && <div className="control-line">
             <span className="label-caps" title={translateUI('Maximum rendering rate. Games with their own frame timing can run below this limit.')}>{translateUI('FPS limit')}</span>
             <Seg className="player-seg" label="Frame limit (fps)" value={String(tweaks.frameRate ?? 'default')}

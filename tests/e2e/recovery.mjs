@@ -46,7 +46,15 @@ try{
  await p.waitForFunction(()=>document.querySelector('[data-testid=state-badge]')?.textContent.includes('running'));
  const active=async()=>(await(await fetch(base+'/api/sessions')).json()).find(s=>s.state==='running');
  const original=await active();
- await p.reload();await p.waitForFunction(()=>{const c=document.querySelector('canvas');return c&&c.getContext('2d').getImageData(0,0,1,1).data[1]===170;});assert.equal((await active()).id,original.id);
+ await p.route('**/api/devices', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"message":"Temporary preset lookup failure"}' }));
+ await p.reload();
+ await p.waitForFunction(()=>{const c=document.querySelector('canvas');return c&&c.getContext('2d').getImageData(0,0,1,1).data[1]===170;});
+ await p.locator('.ctrl-col').getByText('Temporary preset lookup failure', { exact: true }).waitFor();
+ assert.equal(await p.locator('.skin-lcd-overlay').count(), 0, 'missing presets cannot cover a reattached game');
+ assert.equal((await active()).id, original.id);
+ await p.unroute('**/api/devices');
+ await p.locator('.ctrl-col').getByRole('button', { name: 'Retry', exact: true }).click();
+ await p.locator('.ctrl-col').getByText('Temporary preset lookup failure', { exact: true }).waitFor({ state: 'detached' });
  await context.setOffline(true);await wait(async()=>await p.locator('[data-testid=state-badge]').textContent().then(t=>t.includes('reconnecting')),20000);
  await context.setOffline(false);await wait(async()=>!(await p.locator('[data-testid=state-badge]').textContent()).includes('reconnecting'));
  assert.equal((await active()).id,original.id);
