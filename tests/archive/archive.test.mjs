@@ -226,3 +226,51 @@ test('free metadata uses Java ME screenshots and only a verified build for displ
   assert.deepEqual(await service.screenshot(game, 1), { bytes: validPng, type: 'image/png' });
   assert.equal(await service.screenshot(game, 2), null);
 });
+
+test('an unavailable metadata provider keeps index facts and the next lookup can be cancelled and retried', async t => {
+  const dir = tmpDir();
+  const library = new Library(dir);
+  const game = library.add(makeJar('Example Puzzle'), null, 1000000).game;
+  const fetching = Promise.withResolvers();
+  let mode = 'denied';
+  const service = new JavaCatalog(library, () => null, async (url, init) => {
+    if (url.hostname === 'raw.githubusercontent.com') return new Response(null, { status: 502 });
+    if (url.hostname === 'wakkatobakka.github.io') return Response.json({ entries: [
+      { id: 'ma:example-puzzle-demo', title: 'Example Puzzle', genres: ['Puzzle'], listed_year: '2008' },
+    ] });
+    if (mode === 'denied') return new Response(null, { status: 403 });
+    if (mode === 'waiting') {
+      fetching.resolve();
+      return new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true }));
+    }
+    return new Response('<meta name="description" content="A J2ME puzzle game">');
+  });
+  library.enrich = item => service.enrich(item);
+  t.after(async () => { await service.close(); library.close(); rmSync(dir, { recursive: true, force: true }); });
+  const wait = async () => {
+    for (let i = 0; service.status()?.state === 'running' && i < 200; i++) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    // Give the job's own finally callback time to release the worker.
+    await new Promise(resolve => setImmediate(resolve));
+    return service.status();
+  };
+  service.start();
+  const partial = await wait();
+  assert.equal(partial.state, 'done');
+  assert.equal(partial.partial, 1);
+  assert.equal(partial.error, 'My Abandonware · HTTP 403');
+  assert.equal(service.info(game).partial, true);
+  assert.deepEqual(service.info(game).genres, ['Puzzle']);
+  mode = 'waiting';
+  service.start();
+  await fetching.promise;
+  assert.equal(service.cancel(), true);
+  assert.equal((await wait()).state, 'cancelled');
+  assert.equal(service.info(game).partial, true);
+  mode = 'working';
+  service.start();
+  assert.equal((await wait()).matched, 1);
+  assert.equal(service.info(game).partial, undefined);
+  assert.equal(service.info(game).description, 'A J2ME puzzle game');
+});

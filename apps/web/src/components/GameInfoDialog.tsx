@@ -66,11 +66,13 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
   const shotUrl = (index: number) => mobyShots ? api.shotUrl(game.id, index) : api.javaCatalogShotUrl(game.id, index);
   const visible = shots.includes(selected) ? selected : shots[0];
   const ngage = game.ngageInfo;
+  const played = game.playedResolution;
   const fields: [string, string | undefined][] = [
     ['Name', game.name],
     ['File name', filename],
     ['Size', archiveSize(game.sizeBytes)],
-    ['Resolution', resolution ? `${resolution.width}×${resolution.height}` : undefined],
+    ['Resolution', resolution ? `${resolution.width}×${resolution.height}` : played ?
+      `${played.source === 'saved-profile' ? '≈' : ''}${played.width}×${played.height} · ${t(played.source === 'played' ? 'Emulator output on the last run' : 'Estimated from the saved emulator profile')}` : undefined],
     ['Version', game.version],
     ['Genre', (!game.classification?.unconfirmed && game.classification?.primaryGenre) || ngage?.genre || info?.genres.join(', ') || catalog?.genres.map(t_ => t(t_)).join(', ') || undefined],
     ['Publisher', game.vendor !== 'Unknown' ? game.vendor : ngage?.publisher || info?.publishers.join(', ')],
@@ -103,9 +105,10 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
     </div>
     {((has && info?.description) || catalog?.description) && <p className="desc">{(has && info?.description) || catalog?.description}</p>}
     {catalog && <p className="attrib small"><a href={catalog.sourceUrl} target="_blank" rel="noreferrer">My Abandonware ↗</a></p>}
-    {java && !catalog && <div className="btn-row">
-      <button className="btn sm" disabled={catalogBusy} onClick={() => void lookupCatalog()}><Icon name="search" /> {t(catalogBusy ? 'Looking up Java ME metadata…' : 'Find on My Abandonware')}</button>
+    {java && (!catalog || catalog.partial) && <div className="btn-row">
+      <button className="btn sm" disabled={catalogBusy} onClick={() => void lookupCatalog()}><Icon name="search" /> {t(catalogBusy ? 'Looking up Java ME metadata…' : catalog?.partial ? 'Retry missing descriptions and screenshots' : 'Find on My Abandonware')}</button>
       {catalogEmpty && <span className="small muted" role="status">{t('No unique Java ME title found.')}</span>}
+      {catalog?.partial && <span className="small muted" role="status">{t('Title and genre saved. The game page is temporarily unavailable.')}</span>}
     </div>}
     {(ngage || archive || has || hasKey) && <details className="more game-info-sources">
       <summary>{t('Metadata sources')}</summary>

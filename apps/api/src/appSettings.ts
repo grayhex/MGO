@@ -40,6 +40,8 @@ export function renderMidletsIni(i: AppSettingsInput): string {
   }
   // Game speed (the Y command) also scales Thread.sleep; at normal speed this key changes nothing.
   kv.push(['ApplySpeedToSleep', 'true']);
+  // Yield loops waiting for a game tick should suspend briefly instead of occupying a CPU core.
+  kv.push(['PatchYield', 'true']);
   const t = i.tweaks;
   if (t?.frameRate !== undefined) kv.push(['FrameRate', String(t.frameRate)]);
   if (t?.preloadResources !== undefined) kv.push(['PreloadResources', String(t.preloadResources)]);

@@ -26,3 +26,21 @@ test('target resolution comes from package evidence and survives a database upgr
   assert.deepEqual(changed?.nativeResolution, declared.nativeResolution);
   assert.equal(library.list().find(game => game.id === unknown.id)?.nativeResolution, undefined);
 });
+
+test('last output resolution remains separate from the target and from old profile estimates', t => {
+  const dir = tmpDir();
+  let library = new Library(dir);
+  t.after(() => { library.close(); rmSync(dir, { recursive: true, force: true }); });
+  const game = library.add(makeJar('Display test'), null, 1 << 20, { defaults: { width: 240, height: 320 } }).game;
+  assert.equal(game.playedResolution, undefined);
+  library.touchPlayed(game.id);
+  library.addPlayTime(game.id, 15);
+  assert.deepEqual(library.get(game.id)?.playedResolution, { width: 240, height: 320, source: 'saved-profile' });
+  library.recordPlayedResolution(game.id, 176, 208);
+  library.recordGameResolution(game.id, { width: 128, height: 160, source: 'frame' });
+  library.close();
+  library = new Library(dir);
+  const saved = library.update(game.id, { settings: { width: 360, height: 640 } });
+  assert.deepEqual(saved?.playedResolution, { width: 176, height: 208, source: 'played' });
+  assert.deepEqual(saved?.nativeResolution, { width: 128, height: 160, source: 'frame' });
+});

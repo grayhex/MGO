@@ -67,7 +67,17 @@ try{
   await p.locator('.system-metrics .metric strong').first().waitFor();
   assert.equal(await p.getByRole('tabpanel').count(),1,'only active tab is accessible');
   await p.waitForTimeout(5200);
+  assert.ok(await p.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), 'the compact system overview fits the desktop viewport');
+  await p.getByText('Server checks', { exact: true }).click();
+  await p.getByTestId('system-checks').waitFor({ state: 'visible' });
+  await p.getByText('Server checks', { exact: true }).click();
   await p.screenshot({path:'test-results/mgo-settings-system.png',fullPage:true,animations:'disabled'});
+  await p.getByRole('tab',{name:'Game metadata',exact:true}).click();
+  for (const title of ['Build index and matching', 'Descriptions and screenshots', 'N-Gage', 'Symbian']) await p.getByRole('heading', {name:title, exact:true}).waitFor();
+  await p.getByRole('tab',{name:'Firmware',exact:true}).click();
+  await p.getByText('Which firmware archive do I need?', {exact:true}).click();
+  await p.locator('.firmware-reference').getByText('NEM-4', {exact:true}).waitFor();
+  await p.locator('.firmware-reference').getByText('RM-320', {exact:true}).waitFor();
   await p.getByRole('tab',{name:'Game library',exact:true}).click();
   for(const [kind,label] of [['j2me','java'],['ngage','ngage'],['symbian','sis']]){
     await p.getByTestId(`choose-${kind}`).click();

@@ -44,7 +44,10 @@ function ResolutionTag({ resolution }: { resolution: GameMeta['nativeResolution'
   const label = `${resolution.width}×${resolution.height}`;
   const tone = { '240×320': 'blue', '176×208': 'green', '176×220': 'green', '128×128': 'red', '128×160': 'red' }[label] ?? 'neutral';
   const source = resolution.source === 'frame' ? translateUI('Estimated from game frames') : resolution.source.startsWith('attribute ') ? resolution.source.slice(10) : translateUI(resolution.source);
-  return <span className={`resolution-tag ${tone}`} title={translateUI('Native resolution: {source}', { source })}>{label}</span>;
+  const hint = resolution.source === 'played' ? translateUI('Emulator output on the last run')
+    : resolution.source === 'saved-profile' ? translateUI('Estimated from the saved emulator profile')
+    : translateUI('Native resolution: {source}', { source });
+  return <span className={`resolution-tag ${tone}`} title={hint} aria-label={`${label} · ${hint}`}>{resolution.source === 'saved-profile' ? '≈' : ''}{label}</span>;
 }
 
 function Cover({ g }: { g: GameMeta }) {
@@ -356,7 +359,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
               <span className="cell c-vendor muted" title={sel.vendor}>{translateUI(sel.info?.year ? `${sel.vendor} · ${sel.info.year}` : sel.vendor)}</span>
               <span className="cell c-genre">{genreButton}</span>
               <span className="cell c-version">{versionControl}</span>
-              <span className="cell c-resolution"><ResolutionTag resolution={sel.nativeResolution} /></span>
+              <span className="cell c-resolution"><ResolutionTag resolution={sel.nativeResolution ?? sel.playedResolution} /></span>
               <span className="cell c-time">{time}</span>
               <span className="cell actions">{actions}</span>
             </article>
@@ -369,7 +372,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
                   <h3>{sel.name} {archiveMark}</h3>
                   <p className="muted">{translateUI(sel.info?.year ? `${sel.vendor} · ${sel.info.year}` : sel.vendor)}</p>
                   {sel.ngageInfo && <p className="ngage-card-facts">{[sel.ngageInfo.publisher, sel.ngageInfo.year, sel.ngageInfo.rating !== null ? `${sel.ngageInfo.rating}%` : null].filter(Boolean).join(' · ')}</p>}
-                  <p className="card-resolution"><ResolutionTag resolution={sel.nativeResolution} />{time}</p>
+                  <p className="card-resolution"><ResolutionTag resolution={sel.nativeResolution ?? sel.playedResolution} />{time}</p>
                 </div>
               </button>
               {sel.ngageInfo && <div className="ngage-attribution"><span>{sel.ngageInfo.multiplayer ?? sel.ngageInfo.developer}</span><a href={sel.ngageInfo.sourceUrl} target="_blank" rel="noreferrer">{sel.ngageInfo.attribution} ↗</a>{sel.ngageInfo.coverSourceUrl && <a href={sel.ngageInfo.coverSourceUrl} target="_blank" rel="noreferrer">LaunchBox ↗</a>}</div>}

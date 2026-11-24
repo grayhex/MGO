@@ -70,9 +70,22 @@
 .curated-rows .select { min-width: 0; }
 @media (max-width: 600px) { .curated-rows .field { grid-template-columns: 1fr; } }
 .metadata-sources { display: grid; gap: 14px; }
-.metadata-sources h3 { margin: 0 0 8px; }
+.metadata-platform, .metadata-sources .catalog-source {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  border: 1px solid var(--outline);
+  border-radius: var(--r-md);
+  padding: 14px;
+  margin: 0;
+}
+.metadata-platform > section { display: grid; gap: 6px; }
+.metadata-platform > section + section { margin-block-start: 4px; }
+.metadata-sources h3, .metadata-sources h4 { margin: 0; }
+.metadata-sources h4 { color: var(--muted); font-size: .875rem; }
 .metadata-source-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
 .metadata-source-grid > * { align-self: start; }
+.metadata-source-grid.native > * { align-self: stretch; }
 
 .curated-destination { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px 8px; }
 .curated-destination p { grid-column: 1 / -1; overflow-wrap: anywhere; }

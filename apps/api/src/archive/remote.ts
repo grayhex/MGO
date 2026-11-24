@@ -7,6 +7,10 @@ export function javaSourceFetch(gateway?: string): typeof fetch {
   };
 }
 
+export class RemoteResponseError extends Error {
+  constructor(readonly status: number) { super(`Unexpected remote response (HTTP ${status})`); }
+}
+
 /** Read a bounded public response. Redirects must stay within the provider's allowed HTTPS hosts. */
 export async function readRemote(fetcher: typeof fetch, url: URL, allowed: (url: URL) => boolean, maxBytes: number, signal: AbortSignal) {
   for (let redirects = 0; redirects <= 4; redirects++) {
@@ -19,9 +23,13 @@ export async function readRemote(fetcher: typeof fetch, url: URL, allowed: (url:
       url = new URL(location, url);
       continue;
     }
-    if (!response.ok || !response.body || Number(response.headers.get('content-length')) > maxBytes) {
+    if (!response.ok) {
       await response.body?.cancel();
-      throw new Error(`Unexpected remote response (HTTP ${response.status})`);
+      throw new RemoteResponseError(response.status);
+    }
+    if (!response.body || Number(response.headers.get('content-length')) > maxBytes) {
+      await response.body?.cancel();
+      throw new Error('Invalid remote response size');
     }
     const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];

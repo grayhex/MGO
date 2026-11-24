@@ -547,6 +547,7 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
   };
   app.get('/api/catalog/java', () => ({ job: javaCatalog.status() }));
   app.post('/api/catalog/java', (_req, reply) => reply.code(202).send(javaCatalog.start()));
+  app.delete('/api/catalog/java', () => ({ cancelled: javaCatalog.cancel() }));
   app.get<{ Params: { id: string } }>('/api/games/:id/java-catalog', req => ({ info: javaCatalog.info(catalogGame(req.params.id)) }));
   app.post<{ Params: { id: string } }>('/api/games/:id/java-catalog', async req => {
     const game = catalogGame(req.params.id);

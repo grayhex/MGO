@@ -626,12 +626,12 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           {session && <button className="btn ghost sm icon" onClick={() => api.diagnostics(session.id).then((b) => downloadBlob(b, `mgo-diagnostics-${fileSafe(game?.name ?? 'game')}.txt`), (e) => toast('error', (e as Error).message))} title={translateUI("A text report with the settings, the emulator log and the JVM state: attach it to a bug report")} aria-label={translateUI("Download diagnostics")} data-testid="diagnostics"><Icon name="log" /></button>}
           </div>
           {game && j2me && health?.ok !== false && <div className="control-line">
-            <span className="label-caps" title={translateUI('Frame limit (fps)')}>{translateUI('FPS limit')}</span>
+            <span className="label-caps" title={translateUI('Maximum rendering rate. Games with their own frame timing can run below this limit.')}>{translateUI('FPS limit')}</span>
             <Seg className="player-seg" label="Frame limit (fps)" value={String(tweaks.frameRate ?? 'default')}
               options={[
                 { value: 'default', label: 'Default' },
-                { value: '30', label: '30', ariaLabel: 'Force 30 FPS', title: 'Force 30 FPS' },
-                { value: '60', label: '60', ariaLabel: 'Force 60 FPS', title: 'Force 60 FPS' },
+                { value: '30', label: '30', ariaLabel: '30 FPS limit', title: '30 FPS limit' },
+                { value: '60', label: '60', ariaLabel: '60 FPS limit', title: '60 FPS limit' },
                 ...(tweaks.frameRate !== undefined && ![30, 60].includes(tweaks.frameRate) ? [{ value: String(tweaks.frameRate), label: `${tweaks.frameRate} FPS` }] : []),
               ]}
               onChange={value => setTweaks(previous => {

@@ -64,7 +64,7 @@ export function SettingsPage({ toast, onRunWizard, onLibraryChanged }: { toast: 
           setTab(target.id); history.replaceState(null, '', `#${target.id}`); document.getElementById(`tab-${target.id}`)?.focus();
         }}><Icon name={s.icon} /> {translateUI(s.label)}</button>)}
       </nav>
-      <div role="tabpanel" id="panel-system" aria-labelledby="tab-system" hidden={tab !== 'system'}><Section id="system" icon="cpu" title={translateUI("System")} hint={translateUI("Is everything MGO needs installed and working?")}>{tab === 'system' && <SystemDashboard toast={toast} />}</Section></div>
+      <div role="tabpanel" id="panel-system" aria-labelledby="tab-system" hidden={tab !== 'system'}><Section id="system" icon="cpu" title={translateUI("System")}>{tab === 'system' && <SystemDashboard toast={toast} />}</Section></div>
       <div role="tabpanel" id="panel-library" aria-labelledby="tab-library" hidden={tab !== 'library'}><Section id="library" icon="library" title={translateUI("Game library")} hint={translateUI("One folder for each kind of games. MGO only reads them; you can also add games from the browser.")}>
         <LibraryFolders toast={toast} onChanged={onLibraryChanged} />
         <details className="more lib-more" open><summary>{translateUI('Curated Java ME library')}</summary>{tab === 'library' && <CuratedSetup />}</details>
@@ -78,17 +78,28 @@ export function SettingsPage({ toast, onRunWizard, onLibraryChanged }: { toast: 
       <div role="tabpanel" id="panel-mobygames" aria-labelledby="tab-mobygames" hidden={tab !== 'mobygames'}>
         <Section id="mobygames" icon="info" title={translateUI("Game metadata")}>
           {tab === 'mobygames' && <div className="metadata-sources">
-            <section aria-labelledby="java-sources">
+            <section className="metadata-platform" aria-labelledby="java-sources">
               <h3 id="java-sources">Java ME</h3>
-              <div className="metadata-source-grid">
+              <section aria-labelledby="java-index-title">
+                <h4 id="java-index-title">{translateUI('Build index and matching')}</h4>
                 <ArchiveSettings onChanged={onLibraryChanged} />
-                <MobyPanel toast={toast} />
-              </div>
-              <JavaCatalogPanel onChanged={onLibraryChanged} />
+              </section>
+              <section aria-labelledby="java-provider-title">
+                <h4 id="java-provider-title">{translateUI('Descriptions and screenshots')}</h4>
+                <div className="metadata-source-grid">
+                  <JavaCatalogPanel onChanged={onLibraryChanged} />
+                  <MobyPanel toast={toast} />
+                </div>
+              </section>
             </section>
-            <section aria-label="N-Gage">
+            <div className="metadata-source-grid native">
               <NgageCatalogPanel toast={toast} onChanged={onLibraryChanged} />
-            </section>
+              <section className="metadata-platform" aria-labelledby="symbian-sources">
+                <h3 id="symbian-sources">Symbian</h3>
+                <p className="small muted">{translateUI('MGO reads the package type and S60 generation from SIS and SISX files.')}</p>
+                <a className="small" href="#symbian">{translateUI('Symbian and N-Gage firmware')}</a>
+              </section>
+            </div>
           </div>}
         </Section>
       </div>

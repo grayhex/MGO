@@ -39,6 +39,7 @@ interface Row {
   package_ext?: string | null;
   package_format?: string | null;
   native_resolution_json?: string | null;
+  played_resolution_json?: string | null;
 }
 
 export interface DownloadedJar {
@@ -207,6 +208,7 @@ export class Library {
     if (!cols.includes('file_name')) this.db.exec('ALTER TABLE games ADD COLUMN file_name TEXT');
     if (!cols.includes('download_json')) this.db.exec('ALTER TABLE games ADD COLUMN download_json TEXT');
     if (!cols.includes('native_resolution_json')) this.db.exec('ALTER TABLE games ADD COLUMN native_resolution_json TEXT');
+    if (!cols.includes('played_resolution_json')) this.db.exec('ALTER TABLE games ADD COLUMN played_resolution_json TEXT');
     this.dropStaleNativeSkins();
     this.fillPackageFormats();
     this.db.exec(`
@@ -328,6 +330,11 @@ export class Library {
       .run(JSON.stringify(resolution), id);
   }
 
+  recordPlayedResolution(id: string, width: number, height: number): void {
+    this.db.prepare('UPDATE games SET played_resolution_json = ? WHERE id = ?')
+      .run(JSON.stringify({ width, height, source: 'played' }), id);
+  }
+
   /** Cache the result for games already on disk, including games with no usable hint. */
   private fillNativeResolutions(): void {
     const rows = this.db.prepare(`
@@ -364,6 +371,12 @@ export class Library {
   }
 
   private toMeta(r: Row): GameMeta {
+    const settings: GameSettings = JSON.parse(r.settings_json);
+    const playedResolution: GameMeta['playedResolution'] = r.played_resolution_json
+      ? JSON.parse(r.played_resolution_json)
+      : r.last_played_at && r.play_seconds && (!r.platform || r.platform === 'j2me') && settings.width && settings.height
+        ? { width: settings.width, height: settings.height, source: 'saved-profile' }
+        : undefined;
     return {
       id: r.id,
       sha256: r.sha256,
@@ -381,12 +394,13 @@ export class Library {
       lastPlayedAt: r.last_played_at,
       playSeconds: r.play_seconds ?? 0,
       groupKey: r.group_key,
-      settings: JSON.parse(r.settings_json),
+      settings,
       warnings: JSON.parse(r.warnings_json),
       origin: r.origin === 'import' ? 'import' : 'upload',
       ...(r.download_json ? { downloadedFrom: (JSON.parse(r.download_json) as DownloadedJar).provider } : {}),
       platform: isPlatform(r.platform) ? r.platform : 'j2me',
       ...(r.native_resolution_json && r.native_resolution_json !== 'null' ? { nativeResolution: JSON.parse(r.native_resolution_json) } : {}),
+      ...(playedResolution ? { playedResolution } : {}),
       ...(r.package_format ? { packageFormat: r.package_format as PackageFormat } : {}),
     };
   }

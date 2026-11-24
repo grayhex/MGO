@@ -92,6 +92,8 @@ export interface GameMeta {
   playSeconds?: number;
   /** Known target display size, independent of the selected emulator profile. */
   nativeResolution?: { width: number; height: number; source: string };
+  /** Emulator output when no target resolution is known. Older Java sessions have a saved-profile estimate. */
+  playedResolution?: { width: number; height: number; source: 'played' | 'saved-profile' };
   /** Other uploaded versions of the same (vendor, name). */
   groupKey: string;
   settings: GameSettings;
@@ -101,7 +103,7 @@ export interface GameMeta {
   /** 'upload' (web upload) or 'import' (scanned from the library directory). */
   origin?: 'upload' | 'import';
   downloadedFrom?: import('./j2meArchive.js').DownloadProvider;
-  javaCatalog?: { genres: string[]; year: number | null };
+  javaCatalog?: { genres: string[]; year: number | null; partial?: boolean };
   /** True when every file this game was imported from has disappeared from the library directory (the game itself is kept). */
   sourceMissing?: boolean;
   /** Short MobyGames summary, when the game has been matched. */
@@ -413,6 +415,7 @@ export interface SessionStatus {
   heapMb: number;
   id: string;
   gameId: string;
+  gameName?: string;
   state: SessionState;
   width: number;
   height: number;

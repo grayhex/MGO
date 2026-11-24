@@ -98,8 +98,9 @@ export function MobyPanel({ toast }: { toast: Toaster }) {
 
   const wait = job?.job.waitingUntil ? Math.max(0, Math.round((job.job.waitingUntil - Date.now()) / 1000)) : 0;
   return (
-    <div className="stack">
-      <p className="muted">{translateUI("MobyGames adds covers, descriptions, genres, publishers, years, ratings and screenshots. It is optional: without it the library uses the information inside the JAR files. You need your own API key from your MobyGames account; check which plan and terms apply to it. Only information and pictures are fetched, never games.")}</p>
+    <div className="archive-settings">
+      <h3>MobyGames</h3>
+      <p className="muted small">{translateUI("Covers, descriptions, genres, ratings and screenshots. Requires a MobyGames API key.")}</p>
       <label className="field">
         <span className="label-caps">{translateUI("API key")} {configured && <span className="badge prod">{translateUI("saved")} {translateUI(hint)}</span>}</span>
         <div className="btn-row">

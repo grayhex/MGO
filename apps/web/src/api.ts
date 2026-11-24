@@ -201,6 +201,7 @@ export const api = {
   javaCatalogLookup: (id: string) => req<{ info: JavaCatalogInfo | null; resolution: GameMeta['nativeResolution'] | null }>(`/api/games/${id}/java-catalog`, { method: 'POST' }),
   javaCatalogStatus: () => req<{ job: JavaCatalogJob | null }>('/api/catalog/java'),
   javaCatalogStart: () => req<JavaCatalogJob>('/api/catalog/java', { method: 'POST' }),
+  javaCatalogCancel: () => req<{ cancelled: boolean }>('/api/catalog/java', { method: 'DELETE' }),
   javaCatalogShotUrl: (id: string, n: number) => `/api/games/${id}/java-catalog/shot/${n}`,
   infoRefresh: (id: string) => req<GameInfo>(`/api/games/${id}/info/refresh`, { method: 'POST' }),
   infoSearch: (id: string, query: string) => req<GameInfo>(`/api/games/${id}/info/search`, jsonInit('POST', { query })),
