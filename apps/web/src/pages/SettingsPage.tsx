@@ -14,6 +14,7 @@ import { SystemDashboard } from '../components/SystemDashboard';
 import { CuratedSetup } from '../components/CuratedSetup';
 import { ArchiveSettings } from '../components/ArchiveSettings';
 import { NgageCatalogPanel } from '../components/NgageCatalogPanel';
+import { JavaCatalogPanel } from '../components/JavaCatalogPanel';
 
 type Toaster = (kind: 'info' | 'error', text: string) => void;
 
@@ -83,6 +84,7 @@ export function SettingsPage({ toast, onRunWizard, onLibraryChanged }: { toast: 
                 <ArchiveSettings onChanged={onLibraryChanged} />
                 <MobyPanel toast={toast} />
               </div>
+              <JavaCatalogPanel onChanged={onLibraryChanged} />
             </section>
             <section aria-label="N-Gage">
               <NgageCatalogPanel toast={toast} onChanged={onLibraryChanged} />

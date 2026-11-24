@@ -47,13 +47,14 @@ export function CuratedSetup() {
     setTitles(titles);
     setSelected(Object.fromEntries(titles.flatMap(row => {
       const proposed = row.builds.find(b => b.sha256 === row.suggested);
-      return proposed && !proposed.gameId && !proposed.otherBuildsInLibrary ? [[row.title, proposed.sha256]] : [];
+      return proposed && !row.installedGameId && !proposed.gameId && !proposed.otherBuildsInLibrary ? [[row.title, proposed.sha256]] : [];
     })));
   });
   const selection = Object.entries(selected).filter(([, sha256]) => sha256).map(([title, sha256]) => ({ title, sha256 }));
   const selectedBytes = selection.reduce((sum, b) => sum + (titles?.find(row => row.title === b.title)?.builds.find(build => build.sha256 === b.sha256)?.size ?? 0), 0);
-  const needsReview = titles?.filter(row => !row.suggested && row.builds.length).length ?? 0;
-  const missing = titles?.filter(row => !row.builds.length).length ?? 0;
+  const installed = titles?.filter(row => row.installedGameId).length ?? 0;
+  const needsReview = titles?.filter(row => !row.installedGameId && !row.suggested && row.builds.length).length ?? 0;
+  const missing = titles?.filter(row => !row.installedGameId && !row.builds.length).length ?? 0;
 
   return <section className="archive-settings" aria-label={t('Curated Java ME library')}>
     <div className="archive-settings-head"><div>
@@ -85,6 +86,7 @@ export function CuratedSetup() {
     {titles && !running && <>
       <div className="btn-row">
         <span className="chip">{t('{n} selected', { n: selection.length })} · {archiveSize(selectedBytes)}</span>
+        <span className="chip">{t('{n} already in library', { n: installed })}</span>
         <span className="chip">{t('{n} to review', { n: needsReview })}</span>
         <span className="chip">{t('{n} not found', { n: missing })}</span>
         <button className="btn sm ghost" type="button" onClick={() => setReviewAll(value => !value)}>{t(reviewAll ? 'Show selected builds' : 'Review all titles')}</button>
@@ -93,14 +95,14 @@ export function CuratedSetup() {
         {titles.filter(row => reviewAll || selected[row.title]).map(row => <li key={row.title}>
           <label className="field">
             <span>{row.title}</span>
-            {row.builds.length ? <select className="select" value={selected[row.title] ?? ''} onChange={e => setSelected(previous => ({ ...previous, [row.title]: e.target.value }))}>
+            {row.installedGameId ? <small className="muted">{t('Already in library')}</small> : row.builds.length ? <select className="select" value={selected[row.title] ?? ''} onChange={e => setSelected(previous => ({ ...previous, [row.title]: e.target.value }))}>
               <option value="">{t('Skip')}</option>
-              {row.builds.map(build => <option key={build.sha256} value={build.sha256}>{build.title || build.filename} · {build.vendor || t('Unknown')} · {build.version || '—'} · {build.sha256.slice(0, 8)}{build.gameId ? ' · ' + t('Already in library') : ''}</option>)}
+              {row.builds.map(build => <option key={build.sha256} value={build.sha256} disabled={!!build.gameId}>{build.title || build.filename} · {build.vendor || t('Unknown')} · {build.version || '—'} · {build.sha256.slice(0, 8)}{build.gameId ? ' · ' + t('Already in library') : build.direct ? ' · J2ME Vault' : ''}</option>)}
             </select> : <small className="muted">{t('No archive builds found.')}</small>}
           </label>
         </li>)}
       </ul>
-      <p className="hint">{t('Some builds are stored in shared 7z blocks. Retrieving one small JAR may require downloading and unpacking a much larger block.')}</p>
+      <p className="hint">{t('MGO tries direct JARs first and skips archive blocks that exceed the download or unpacking limit.')}</p>
       <div><button className="btn sm primary" type="button" disabled={busy || !selection.length || !destination?.writable || folder.trim() !== savedFolder} onClick={() => void act(async () => { setJob(await api.curatedImport(selection)); setTitles(null); })}>{t('Download {n} selected games', { n: selection.length })}</button></div>
     </>}
     {job && <div className="archive-progress">
@@ -109,7 +111,7 @@ export function CuratedSetup() {
         {running && <button className="btn sm" type="button" disabled={busy} onClick={() => void act(async () => { await api.curatedCancel(); await refresh(); })}>{t('Cancel download')}</button>}
       </div>
       {running && <><progress aria-label={t('Download progress')} max={job.total} value={job.imported + job.duplicates + job.failed.length} /><p className="small"><strong>{job.current}</strong>{job.currentBytes ? ` · ${archiveSize(job.currentBytes)} JAR` : ''}</p>
-        <p className="hint">{blockProgress(job.progress)}</p></>}
+        <p className="hint">{job.source && `${job.source} · `}{blockProgress(job.progress)}</p></>}
       {job.destination && <p className="small muted">{t('Destination')} <code>{job.destination}</code></p>}
       {!!job.failed.length && <details className="more"><summary>{t('Errors')} ({job.failed.length})</summary><ul>{job.failed.map(failure => <li key={failure.title}>{failure.title} · {t(failure.message)}</li>)}</ul></details>}
     </div>}
@@ -119,6 +121,7 @@ export function CuratedSetup() {
 
 
 function blockProgress(line: string | null): string {
+  if (line === 'Looking for a direct JAR…' || line === 'Checking the archive fallback…') return t(line);
   const values = line && /^Decoded\s+([\d.]+)%\s*\|\s*([\d.]+)\/([\d.]+) MiB \| downloaded ([\d.]+) MiB \| cached ([\d.]+) MiB/.exec(line);
   return values ? t('Unpacked {done}/{total} MiB · downloaded {received} MiB · reused {cached} MiB', {
     done: values[2]!, total: values[3]!, received: values[4]!, cached: values[5]!,

@@ -23,8 +23,11 @@ export function GameSettingsDialog({ game, toast, onClose, onChanged }: { game: 
     try { await api.patchGame(game.id, { settings: s }); toast('info', 'Settings saved'); onChanged(); } catch (e) { toast('error', (e as Error).message); }
   };
   const del = async () => {
-    if (!confirm(`Delete “${game.name}” from the library${delSaves ? ' together with its saved data' : ''}?`)) return;
-    try { await api.deleteGame(game.id, delSaves); if (getLastGame()?.id === game.id) setLastGame(null); onChanged(); } catch (e) { toast('error', (e as Error).message); }
+    const message = game.downloadedFrom
+      ? translateUI(delSaves ? 'Delete the downloaded JAR and saves for “{name}”?' : 'Delete the downloaded JAR for “{name}”?', { name: game.name })
+      : `Delete “${game.name}” from the library${delSaves ? ' together with its saved data' : ''}?`;
+    if (!confirm(message)) return;
+    try { await api.deleteGame(game.id, delSaves, !!game.downloadedFrom); if (getLastGame()?.id === game.id) setLastGame(null); onChanged(); } catch (e) { toast('error', (e as Error).message); }
   };
   return (
     <Modal title={translateUI(game.name)} onClose={onClose}>
@@ -38,6 +41,7 @@ export function GameSettingsDialog({ game, toast, onClose, onChanged }: { game: 
         <span className="hint">{translateUI("The title applies to every version of the game.")}</span>
       </div>
       <dl className="facts">
+        {game.downloadedFrom && <><dt>{translateUI('Downloaded by MGO')}</dt><dd>{game.downloadedFrom}</dd></>}
         <dt>{translateUI("Game platform")}</dt><dd><PlatformTag platform={game.platform ?? 'j2me'} /></dd>
         <dt>{translateUI("Vendor")}</dt><dd>{game.vendor}</dd>
         <dt>{translateUI("Version")}</dt><dd>{game.version || '—'}</dd>
@@ -82,7 +86,7 @@ export function GameSettingsDialog({ game, toast, onClose, onChanged }: { game: 
       </> : <p className="note">{translateUI('Native games use their own firmware and framebuffer. Choose the device and check readiness in the player.')}</p>}
       <div className="modal-actions">
         <Switch checked={delSaves} onChange={setDelSaves}>{translateUI("also delete saves")}</Switch>
-        <button className="btn danger" onClick={del}>{translateUI("Delete")}</button>
+        <button className="btn danger" onClick={del}>{translateUI(game.downloadedFrom ? "Delete downloaded JAR" : "Delete")}</button>
         <span className="spacer" />
         <button className="btn" onClick={onClose}>{translateUI("Cancel")}</button>
         <button className="btn primary" onClick={save}>{translateUI("Save")}</button>

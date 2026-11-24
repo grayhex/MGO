@@ -1,5 +1,5 @@
 import { t } from '../i18n';
-import type { GameInfo, GameMeta } from '@mgo/protocol';
+import type { GameInfo, GameMeta, JavaCatalogInfo } from '@mgo/protocol';
 import { Fragment, useEffect, useState } from 'react';
 import { api } from '../api';
 import { useServerSettings } from '../serverSettings';
@@ -16,6 +16,11 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
 }) {
   const hasKey = useServerSettings()?.secrets.mobygames.configured ?? false;
   const [info, setInfo] = useState<GameInfo | null>(null);
+  const java = (game.platform ?? 'j2me') === 'j2me';
+  const [catalog, setCatalog] = useState<JavaCatalogInfo | null>(null);
+  const [resolution, setResolution] = useState(game.nativeResolution);
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const [catalogEmpty, setCatalogEmpty] = useState(false);
   const [filename, setFilename] = useState(game.fileName);
   const [checksums, setChecksums] = useState<{ sha1: string; crc32: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -26,9 +31,21 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
   useEffect(() => {
     let alive = true;
     void api.gameInfo(game.id).then(result => { if (alive) setInfo(result); }, () => undefined);
+    if (java) void api.javaCatalogInfo(game.id).then(result => { if (alive) setCatalog(result.info); }, () => undefined);
     if (!game.fileName) void api.gameMeta(game.id).then(meta => { if (alive) setFilename(meta.fileName); }, () => undefined);
     return () => { alive = false; };
-  }, [game.id, game.fileName]);
+  }, [game.id, game.fileName, java]);
+
+  const lookupCatalog = async () => {
+    setCatalogBusy(true); setCatalogEmpty(false);
+    try {
+      const { info: result, resolution: knownResolution } = await api.javaCatalogLookup(game.id);
+      if (knownResolution) setResolution(knownResolution);
+      if (result) { setCatalog(result); setSelected(0); setBroken([]); onChanged(); }
+      else setCatalogEmpty(true);
+    } catch (error) { toast('error', t((error as Error).message)); }
+    finally { setCatalogBusy(false); }
+  };
 
   const act = async (f: () => Promise<GameInfo>) => {
     setBusy(true);
@@ -44,31 +61,35 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
   if (showArchive && archive?.build) return <ArchiveBrowser initialSha={archive.build.sha256} onClose={() => setShowArchive(false)} onImported={onChanged} onPlay={onPlay} />;
 
   const has = info?.status === 'matched' || info?.status === 'manual';
-  const shots = Array.from({ length: has ? info?.screenshots ?? 0 : 0 }, (_, index) => index + 1).filter(index => !broken.includes(index));
+  const mobyShots = has ? info?.screenshots ?? 0 : 0;
+  const shots = Array.from({ length: mobyShots || catalog?.screenshots || 0 }, (_, index) => index + 1).filter(index => !broken.includes(index));
+  const shotUrl = (index: number) => mobyShots ? api.shotUrl(game.id, index) : api.javaCatalogShotUrl(game.id, index);
   const visible = shots.includes(selected) ? selected : shots[0];
   const ngage = game.ngageInfo;
   const fields: [string, string | undefined][] = [
     ['Name', game.name],
     ['File name', filename],
     ['Size', archiveSize(game.sizeBytes)],
-    ['Resolution', game.nativeResolution ? `${game.nativeResolution.width}×${game.nativeResolution.height}` : undefined],
+    ['Resolution', resolution ? `${resolution.width}×${resolution.height}` : undefined],
     ['Version', game.version],
-    ['Genre', game.classification?.unconfirmed ? ngage?.genre || info?.genres.join(', ') : game.classification?.primaryGenre || ngage?.genre || info?.genres.join(', ')],
+    ['Genre', (!game.classification?.unconfirmed && game.classification?.primaryGenre) || ngage?.genre || info?.genres.join(', ') || catalog?.genres.map(t_ => t(t_)).join(', ') || undefined],
     ['Publisher', game.vendor !== 'Unknown' ? game.vendor : ngage?.publisher || info?.publishers.join(', ')],
+    ['Released', catalog?.year?.toString() || info?.year?.toString()],
   ];
   return <Modal title={game.name} onClose={onClose} wide className="game-info-dialog">
     <div className="game-info-layout">
       <section className="game-media" aria-label={t('Screenshots')}>
         <div className="game-shot">
-          {visible ? <a href={api.shotUrl(game.id, visible)} target="_blank" rel="noreferrer"><img src={api.shotUrl(game.id, visible)} alt={t('Screenshot {n}', { n: visible })} onError={() => setBroken(failed => [...failed, visible])} /></a>
+          {visible ? <a href={shotUrl(visible)} target="_blank" rel="noreferrer"><img src={shotUrl(visible)} alt={t('Screenshot {n}', { n: visible })} onError={() => setBroken(failed => [...failed, visible])} /></a>
             : <img className="game-shot-placeholder" src="/graphics/brand/mark.svg" alt={t('No screenshots yet')} />}
         </div>
         {shots.length > 1 && <div className="game-shot-strip">{shots.map(index => <button type="button" key={index} aria-label={t('Screenshot {n}', { n: index })} aria-pressed={visible === index} onClick={() => setSelected(index)}>
-          <img src={api.shotUrl(game.id, index)} alt="" loading="lazy" onError={() => setBroken(failed => [...failed, index])} />
+          <img src={shotUrl(index)} alt="" loading="lazy" onError={() => setBroken(failed => [...failed, index])} />
         </button>)}</div>}
       </section>
       <section className="game-info-fields">
         <PlatformTag platform={game.platform ?? 'j2me'} />
+        {game.downloadedFrom && <span className="chip"><Icon name="download" /> {t('Downloaded by MGO · {source}', { source: game.downloadedFrom })}</span>}
         <dl className="game-facts">{fields.map(([name, value]) => <Fragment key={name}><dt>{t(name)}</dt><dd>{value || '—'}</dd></Fragment>)}</dl>
         <details className="more game-checksums" onToggle={event => {
           if (event.currentTarget.open && !checksums) void api.gameChecksums(game.id).then(setChecksums, () => undefined);
@@ -80,7 +101,12 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
         </details>
       </section>
     </div>
-    {has && info?.description && <p className="desc">{info.description}</p>}
+    {((has && info?.description) || catalog?.description) && <p className="desc">{(has && info?.description) || catalog?.description}</p>}
+    {catalog && <p className="attrib small"><a href={catalog.sourceUrl} target="_blank" rel="noreferrer">My Abandonware ↗</a></p>}
+    {java && !catalog && <div className="btn-row">
+      <button className="btn sm" disabled={catalogBusy} onClick={() => void lookupCatalog()}><Icon name="search" /> {t(catalogBusy ? 'Looking up Java ME metadata…' : 'Find on My Abandonware')}</button>
+      {catalogEmpty && <span className="small muted" role="status">{t('No unique Java ME title found.')}</span>}
+    </div>}
     {(ngage || archive || has || hasKey) && <details className="more game-info-sources">
       <summary>{t('Metadata sources')}</summary>
       {ngage && <div className="stack">

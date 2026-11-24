@@ -229,6 +229,17 @@ export class ScanManager {
     return this.addJarSource({ rel, size: bytes.length, mtimeMs }, null, bytes, null, sha, defaults);
   }
 
+  /** Reverse the scanner's source prefixes for JARs published by an earlier version of MGO. */
+  archiveLocation(source: string): { root: string; relative: string } | null {
+    const settings = this.hooks.settings();
+    const roots = [settings.libraryPaths?.j2me, path.join(this.cfg.dataDir, 'import'), this.cfg.archiveWritableRoot];
+    for (const root of roots) {
+      if (root && source.startsWith(prefixFor(root, 'j2me'))) return { root, relative: source.slice(prefixFor(root, 'j2me').length) };
+    }
+    const legacy = settings.libraryPath;
+    return legacy && !/^j2me\/[a-f0-9]{8}\//.test(source) ? { root: legacy, relative: source } : null;
+  }
+
   private addJarSource(jar: Pick<WalkEntry, 'rel' | 'size' | 'mtimeMs'>, jad: WalkEntry | null, bytes: Buffer, jadBytes: Buffer | null, sha: string, defaults: Partial<GameSettings>) {
     const result = this.library.add(bytes, jadBytes, this.cfg.libraryQuotaBytes, { origin: 'import', fileName: path.basename(jar.rel), defaults });
     this.library.upsertSource({ rel_path: jar.rel, jad_rel_path: jad?.rel ?? null, game_id: result.game.id, size: jar.size, mtime_ms: jar.mtimeMs, jad_size: jad?.size ?? 0, jad_mtime_ms: jad?.mtimeMs ?? 0, sha256: sha });

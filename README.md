@@ -32,7 +32,7 @@ Screenshots use demonstration MIDlets from the project’s test fixtures.
 - **Controls:** handset keys, on-screen keypad, PC keyboard, gamepad, multi-touch.
 - **Text input** in `TextField`/`TextBox`, **pause**, game **speed**, screenshots, **input recording and playback**, **game files** (JSR-75), a custom MIDI **SoundFont**.
 - **Display:** picture rotation, "Lights Out" landscape mode, full screen, the phone as tall as the window, dark WattVision theme, English and Russian UI (switch in the sidebar).
-- **Library:** drag-and-drop JAR/JAD or import a whole folder; duplicate detection; tiles or an even table; search, sorting (name, added, last played, time played, genre) and filters; **play time** on every card; renaming games; optional [MobyGames](https://www.mobygames.com) metadata.
+- **Library:** drag-and-drop JAR/JAD or import a folder, detect duplicates, and browse tiles or a compact table. Get Java ME screenshots and descriptions from [My Abandonware](https://www.myabandonware.com/) without an API key, or connect [MobyGames](https://www.mobygames.com).
 - **Genres:** a genre belongs to the game, not to a folder. It comes from a `mgo_catalog.json` catalog (matched by SHA-256, with a preview), from folder names (`…/Racing/…`) or by hand; a genre you choose is never overwritten. Titles are cleaned of release-group and site tags.
 - **Tidy-up:** games whose files are gone, or the whole library, can be removed in one go (saves are kept unless you say otherwise).
 - **Easy install:** a ready-made Docker image for NAS (Synology, UGREEN, QNAP) and servers; additionally a Proxmox VE LXC container with the `mgo` command for updates and backups.
@@ -51,7 +51,7 @@ Use the setup wizard to choose existing Java ME, N-Gage and Symbian folders.
 For a starting collection, choose **Curated Java ME library** in the wizard,
 install the J2ME Archive index and review the proposed builds before confirming.
 Downloads default to a configurable subfolder of the Java ME library. Without a configured Java ME folder, MGO uses its managed import folder. **Settings → Game metadata**
-groups J2ME Archive and MobyGames under Java ME and All About Symbian and LaunchBox Games Database under N-Gage.
+groups J2ME Archive, My Abandonware and MobyGames under Java ME and All About Symbian and LaunchBox Games Database under N-Gage.
 [Library guide](docs/LIBRARY.md)
 
 ## Quick start

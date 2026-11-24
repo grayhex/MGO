@@ -106,6 +106,13 @@ button.genre-badge.unconfirmed { color: var(--muted); font-weight: 500; font-sty
 .lib-grid.list { grid-template-columns: 1fr; gap: 6px; }
 .lib-grid.list .game-row { padding: 6px 12px; border-radius: var(--r-md); min-height: 52px; }
 .lib-grid.list .game-row:hover { transform: none; background: var(--surface-soft); }
+.lib-grid .game-card[data-returned="true"] {
+  background: var(--primary-tint);
+  border-color: var(--primary);
+  box-shadow: inset 4px 0 0 var(--primary);
+}
+.game-card .archive-mark.downloaded { color: var(--primary); }
+.lib-toolbar .btn[aria-pressed="true"] { background: var(--primary-tint); border-color: var(--primary); }
 .lib-grid.list .row-cover { all: unset; cursor: pointer; display: block; width: 40px; height: 40px; }
 .lib-grid.list .row-cover .cover, .lib-grid.list .row-cover .cover.art { width: 40px; height: 40px; aspect-ratio: 1; border-radius: var(--r-sm); }
 .lib-grid.list .row-cover .cover img { width: 28px; height: 28px; }

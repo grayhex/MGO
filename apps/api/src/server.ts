@@ -1,5 +1,8 @@
 import { ArchiveService, type ArchiveWorker } from './archive/service.js';
 import { registerArchiveRoutes } from './archive/routes.js';
+import { JavaCatalog } from './archive/catalog.js';
+import { JarMirror } from './archive/mirror.js';
+import { javaSourceFetch } from './archive/remote.js';
 import { KemulatorUpdates } from './kemulator/updates.js';
 import { NgageCatalog } from './ngageCatalog.js';
 import { isGenre, isPlatform, platformOfFile, resolvePhone } from '@mgo/protocol';
@@ -114,8 +117,10 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
       }
     },
   });
-  const archive = new ArchiveService(cfg, library, scan, options.archiveWorker, () => settings.get());
-  library.enrich = game => archive.matching.enrich(ngageCatalog.enrich(game));
+  const javaFetch = javaSourceFetch(metadataGateway);
+  const archive = new ArchiveService(cfg, library, scan, options.archiveWorker, () => settings.get(), options.archiveWorker ? null : new JarMirror(javaFetch));
+  const javaCatalog = new JavaCatalog(library, sha => archive.exactBuild(sha), javaFetch);
+  library.enrich = game => javaCatalog.enrich(archive.matching.enrich(ngageCatalog.enrich(game)));
   let emuClasses: { dir: string; classes: Set<string> } | null = null;
   const devicePresets = () => {
     try {
@@ -444,10 +449,11 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
     return { removed, skipped, deletedSaves: saves };
   });
 
-  app.delete<{ Params: { id: string }; Querystring: { saves?: string } }>('/api/games/:id', async (req, reply) => {
+  app.delete<{ Params: { id: string }; Querystring: { saves?: string; downloaded?: string } }>('/api/games/:id', async (req, reply) => {
     const id = req.params.id;
     if (sessions.active().some((s) => s.game.id === id)) throw new SessionError('in_use', 'Stop the running session first', 409);
     const game = library.get(id);
+    if (game && req.query.downloaded === '1') archive.removeDownload(game);
     if (!library.remove(id)) throw new UploadError('not_found', 'Game not found', 404);
     if (req.query.saves === '1') {
       library.removeSaves(owner, id);
@@ -534,6 +540,30 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
   registerAdminRoutes(app, { cfg, sessions, library, store: settings, soundfont, scan, metadata, moby, version: VERSION, java });
   registerSymbianRoutes(app, { cfg, sessions });
   registerArchiveRoutes(app, archive);
+  const catalogGame = (id: string) => {
+    const game = library.get(id);
+    if (!game || (game.platform ?? 'j2me') !== 'j2me') throw new UploadError('not_found', 'Java ME game not found', 404);
+    return game;
+  };
+  app.get('/api/catalog/java', () => ({ job: javaCatalog.status() }));
+  app.post('/api/catalog/java', (_req, reply) => reply.code(202).send(javaCatalog.start()));
+  app.get<{ Params: { id: string } }>('/api/games/:id/java-catalog', req => ({ info: javaCatalog.info(catalogGame(req.params.id)) }));
+  app.post<{ Params: { id: string } }>('/api/games/:id/java-catalog', async req => {
+    const game = catalogGame(req.params.id);
+    try {
+      const info = await javaCatalog.lookup(game);
+      return { info, resolution: library.get(game.id)?.nativeResolution ?? null };
+    } catch {
+      throw new UploadError('java_catalog_unavailable', 'My Abandonware or the Java ME metadata index is temporarily unavailable', 502);
+    }
+  });
+  app.get<{ Params: { id: string; number: string } }>('/api/games/:id/java-catalog/shot/:number', async (req, reply) => {
+    const game = catalogGame(req.params.id);
+    if (!/^[1-8]$/.test(req.params.number)) return reply.code(404).send({ error: 'not_found' });
+    const shot = await javaCatalog.screenshot(game, Number(req.params.number)).catch(() => null);
+    if (!shot) return reply.code(404).send({ error: 'not_found' });
+    return reply.header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=86400').type(shot.type).send(shot.bytes);
+  });
 
   // --- static web UI (production) ---
   if (cfg.webDir) {
@@ -559,7 +589,7 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
       return closing ??= (async()=>{
         scan.cancel();metadata.cancel();ngageCatalog.stop();
         // Save MIDlet RMS promptly even if a cancelled metadata request is slow to finish.
-        await Promise.all([sessions.stopAll(),Promise.allSettled([scan.idle(),metadata.idle(),ngageCatalog.idle(),archive.close()])]);
+        await Promise.all([sessions.stopAll(),Promise.allSettled([scan.idle(),metadata.idle(),ngageCatalog.idle(),archive.close(),javaCatalog.close()])]);
         await app.close();library.close();
       })();
     },

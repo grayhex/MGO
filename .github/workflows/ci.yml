@@ -314,6 +314,9 @@ jobs:
             ['/j2me-archive/raw/toca-1/new-j2me-software-archive-search/d0775dcca7061a5e64584f03ae18b21a3ca3546f/data/manifest.json', 'unique_files'],
             ['/n-gage-games/original/', 'game-card'],
             ['/mgo-launchbox/platforms/games/213-nokia-n-gage', 'Pathway to Glory'],
+            ['/java-sources/raw.githubusercontent.com/wakkatobakka/j2me-archive/main/data/catalog.json', 'catalog_entries'],
+            ['/java-sources/huggingface.co/api/datasets/M5-Dev/j2me-vault/tree/251c5e6409242e1f36585e4c86823b98cf1683d8/Games?limit=3', 'Games/'],
+            ['/java-sources/www.myabandonware.com/game/asphalt-3-3d-street-rules-vx0', 'platformGalleries'],
           ];
           for (const [path, marker] of paths) {
             try {
@@ -324,6 +327,14 @@ jobs:
             } catch (error) {
               console.log(`::warning::Metadata source ${path} did not answer: ${error.message}`);
             }
+          }
+          for (const path of [
+            '/java-sources/example.org/game/test',
+            '/java-sources/huggingface.co/api/datasets/unrelated/tree/main',
+            '/java-sources/www.myabandonware.com/download/test',
+          ]) {
+            const response = await fetch(root + path);
+            if (response.status !== 404) throw new Error(`Gateway accepted an unexpected Java source route ${path}`);
           }
           JS
       - name: NAS style - a folder owned by another user (PUID/PGID), restart keeps the data

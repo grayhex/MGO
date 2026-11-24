@@ -127,7 +127,7 @@ textarea.text-editor-field { resize: vertical; min-height: 84px; }
 .player-grid .stage.stage-screen,
 .player-grid .stage-screen.stage-touchscreen { --stage-h: clamp(420px, calc(100dvh - var(--header-h) - 74px), 1600px); padding: 6px 10px; }
 .stage-card:fullscreen .stage { --stage-h: calc(100dvh - 60px); }
-.stage-foot.side { width: 176px; flex: none; padding: 10px 8px; border-top: 0; border-right: 1px solid var(--outline); align-content: center; gap: 8px; }
+.stage-foot.side { width: clamp(208px, 24vw, 264px); flex: none; padding: 10px 8px; border-top: 0; border-right: 1px solid var(--outline); align-content: center; gap: 8px; }
 @media (min-width: 981px) and (min-height: 600px) {
   .player-grid:not(.lights-out) .stage-card:not(:fullscreen) {
     height: calc(100dvh - var(--header-h) - 24px);
@@ -144,7 +144,7 @@ textarea.text-editor-field { resize: vertical; min-height: 84px; }
 /* Lights Out: the keys are a narrow column on the left, the screen is never covered */
 .lights-out .stage-row { flex: 1; min-height: 0; }
 .lights-out .stage-foot.side { display: none; background: #010203; border: 0; }
-.lights-out.touch-controls .stage-foot.side { display: grid; position: static; opacity: .9; max-height: none; width: 156px; }
+.lights-out.touch-controls .stage-foot.side { display: grid; position: static; opacity: .9; max-height: 95dvh; width: clamp(196px, 24vw, 234px); }
 .lights-out .stage-foot { position: static; }
 /* the frame rate: small green digits in the corner of the screen */
 .skin-lcd-badge { position: absolute; top: 2px; left: 4px; z-index: 3; pointer-events: none; font: 700 clamp(9px, 4cqw, 15px)/1 var(--mono); color: #39ff6a; text-shadow: 0 0 2px #000, 0 0 3px #000, 1px 1px 0 #000; }
@@ -160,6 +160,10 @@ button.chip-link:hover { border-color: var(--primary-warm); }
 .lights-menu { color: #f1f5f9; }
 .lights-menu .btn { color: #f1f5f9; }
 
-.stage-foot .physical-keypad { height: clamp(140px, 35dvh, 290px); }
+.stage-foot .physical-keypad { height: clamp(190px, 52dvh, 435px); }
 .view-keypad { overflow: hidden; border-radius: var(--r-sm); }
-@media (max-width: 760px) { .stage-row.with-keypad > .stage { order: -1; } .stage-foot .physical-keypad { height: clamp(150px, 30dvh, 240px); } }
+@media (max-width: 760px) {
+  .stage-row.with-keypad > .stage { order: -1; }
+  .stage-foot .physical-keypad { height: clamp(210px, 45dvh, 360px); }
+  .lights-out.touch-controls .stage-foot.side { width: 100%; max-height: 45dvh; }
+}

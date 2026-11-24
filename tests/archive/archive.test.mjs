@@ -5,6 +5,8 @@ import test from 'node:test';
 import { ArchiveIndex, normalized } from '../../apps/api/src/archive/index.ts';
 import { folderSegments, publishJar, withDestination, writable } from '../../apps/api/src/archive/destination.ts';
 import { ArchiveMatching } from '../../apps/api/src/archive/matching.ts';
+import { JarMirror } from '../../apps/api/src/archive/mirror.ts';
+import { JavaCatalog } from '../../apps/api/src/archive/catalog.ts';
 import { Library } from '../../apps/api/src/library.ts';
 import { makeJar, tmpDir } from '../../apps/api/src/dev/testing.ts';
 import { archiveBuild, writeArchiveFixture } from '../fixtures/archive-fixture.mjs';
@@ -107,10 +109,24 @@ test('curated downloads publish into the configured Java subfolder and are recog
   mkdirSync(java, { recursive: true });
   const bytes = makeJar('3D Bomberman');
   const build = archiveBuild(bytes, { title: '3D Bomberman', filename: 'Bomberman.jar' });
+  const existing = makeJar('Arkanoid', { vendor: 'TAITO' });
+  const alternate = makeJar('Arkanoid', { vendor: 'Electronic Arts', version: '1.8.6' });
+  const arkanoid = archiveBuild(alternate, { title: 'Arkanoid', vendor: 'Electronic Arts' });
+  const bejeweledJar = makeJar('Bejeweled', { vendor: 'Electronic Arts' });
+  const bejeweled = archiveBuild(bejeweledJar, { title: 'Bejeweled', vendor: 'Electronic Arts' });
+  const worker = archiveFixtureWorker([build, arkanoid, bejeweled], new Map([[build.sha256, bytes], [arkanoid.sha256, alternate], [bejeweled.sha256, bejeweledJar]]));
+  const transferring = Promise.withResolvers();
+  const canFinish = Promise.withResolvers();
   const app = await buildApp(testConfig({ dataDir: path.join(dir, 'data'), runDir: path.join(dir, 'run'), roots: [java] }), {
-    archiveWorker: archiveFixtureWorker([build], new Map([[build.sha256, bytes]])),
+    archiveWorker: async (...args) => {
+      if (args[0][0] === 'download' && args[0][1] === bejeweled.sha256) {
+        transferring.resolve();
+        await canFinish.promise;
+      }
+      return worker(...args);
+    },
   });
-  t.after(async () => { await app.close(); rmSync(dir, { recursive: true, force: true }); });
+  t.after(async () => { canFinish.resolve(); await app.close(); rmSync(dir, { recursive: true, force: true }); });
 
   const patch = payload => app.fastify.inject({ url: '/api/settings', method: 'PATCH', payload });
   assert.equal((await patch({ archiveDownloadFolder: '../escape' })).statusCode, 400);
@@ -125,18 +141,88 @@ test('curated downloads publish into the configured Java subfolder and are recog
     assert.fail('Timed out waiting for the archive job');
   };
   await waitFor(async () => !!(await app.fastify.inject('/api/archive')).json().index);
-  const selection = [{ title: build.title, sha256: build.sha256 }];
+  const before = (await app.fastify.inject('/api/archive/curated/preview')).json().titles;
+  assert.equal(before.find(row => row.title === 'Arkanoid').installedGameId, undefined);
+  const local = app.library.add(existing, null, 1000000).game;
+  const after = (await app.fastify.inject('/api/archive/curated/preview')).json().titles;
+  assert.equal(after.find(row => row.title === 'Arkanoid').installedGameId, local.id);
+  const selection = [build, arkanoid, bejeweled].map(({ title, sha256 }) => ({ title, sha256 }));
   const start = await app.fastify.inject({ url: '/api/archive/curated', method: 'POST', payload: { confirmed: true, selection } });
   assert.equal(start.statusCode, 202, start.body);
+  await transferring.promise;
+  app.library.add(makeJar('Bejeweled', { vendor: 'PopCap' }), null, 1000000);
+  canFinish.resolve();
   await waitFor(async () => (await app.fastify.inject('/api/archive/curated')).json().job?.state === 'done');
   const job = (await app.fastify.inject('/api/archive/curated')).json().job;
   assert.equal(job.imported, 1, JSON.stringify(job.failed));
+  assert.equal(job.duplicates, 2);
   const destination = path.join(java, 'Downloads/Curated');
   const [file] = readdirSync(destination);
   assert.deepEqual(readFileSync(path.join(destination, file)), Buffer.from(bytes));
-  assert.equal(app.library.get(app.library.findBySha(build.sha256).id).fileName, file);
+  const downloaded = app.library.findBySha(build.sha256);
+  assert.equal(app.library.get(downloaded.id).fileName, file);
+  assert.equal(downloaded.downloadedFrom, 'J2ME Archive');
   app.scan.start('update');
   await app.scan.idle();
-  assert.equal(app.library.count(), 1);
+  assert.equal(app.library.count(), 3);
   assert.equal(app.library.sourcesOf(app.library.findBySha(build.sha256).id)[0].missing, 0);
+  const remove = id => app.fastify.inject({ method: 'DELETE', url: `/api/games/${id}?downloaded=1` });
+  assert.equal((await remove(local.id)).statusCode, 409);
+  writeFileSync(path.join(destination, file), 'replaced by the owner');
+  assert.equal((await remove(downloaded.id)).statusCode, 409);
+  assert.equal(readFileSync(path.join(destination, file), 'utf8'), 'replaced by the owner');
+  writeFileSync(path.join(destination, file), bytes);
+  assert.equal((await remove(downloaded.id)).statusCode, 204);
+  app.scan.start('full');
+  await app.scan.idle();
+  assert.equal(app.library.count(), 2);
+  assert.deepEqual(readdirSync(destination), []);
+});
+
+test('the direct mirror retrieves only the indexed JAR and verifies it across permitted redirects', async () => {
+  const jar = Buffer.from(makeJar('Example'));
+  const build = archiveBuild(jar, { title: 'Example', filename: 'Example.jar' });
+  const requests = [];
+  let wrong = false;
+  const mirror = new JarMirror(async url => {
+    requests.push(url.href);
+    if (url.pathname.startsWith('/api/datasets/')) {
+      return Response.json([{ type: 'file', size: jar.length, path: 'Games/Example.jar', lfs: { oid: build.sha256, size: jar.length } }]);
+    }
+    if (url.hostname === 'huggingface.co') return Response.redirect('https://us.aws.cdn.hf.co/xet-bridge-us/fixture/fixture?signature');
+    return new Response(wrong ? Buffer.alloc(jar.length) : jar);
+  });
+  assert.deepEqual(await mirror.download(build, new AbortController().signal), jar);
+  assert.equal(requests.length, 3);
+  wrong = true;
+  assert.equal(await mirror.download(build, new AbortController().signal), null);
+  assert.equal(requests.length, 5, 'the listing is shared across transfers');
+});
+
+test('free metadata uses Java ME screenshots and only a verified build for display size', async t => {
+  const dir = tmpDir();
+  const library = new Library(dir);
+  t.after(() => { library.close(); rmSync(dir, { recursive: true, force: true }); });
+  const bytes = makeJar('Asphalt3');
+  const game = library.add(bytes, null, 1000000).game;
+  const entry = archiveBuild(bytes, { title: 'Asphalt 3: Street Rules', filename: 'Street Rules 240x320.jar' });
+  const shot = '/media/screenshots/a/street-rules/demo.png';
+  const validPng = Buffer.from('89504e470d0a1a0a0000000d', 'hex');
+  const service = new JavaCatalog(library, sha => sha === entry.sha256 ? entry : null, async url => {
+    if (url.hostname === 'raw.githubusercontent.com') return Response.json({ entries: [
+      { id: 'ma:asphalt-3-street-rules-w1t', title: 'Asphalt 3: Street Rules', genres: ['Racing'], listed_year: '2007', resolutions_as_labeled: ['128x160'] },
+      { id: 'ma:asphalt-3-3d-street-rules-vx0', title: 'Asphalt 3 3D: Street Rules' },
+    ] });
+    if (url.pathname === shot) return new Response(validPng);
+    assert.equal(url.pathname, '/game/asphalt-3-street-rules-w1t');
+    return new Response(`<meta name="description" content="A J2ME racing game &amp; sequel">
+      <script>const platformGalleries = ${JSON.stringify({ DOS: { items: [{ src: '/media/screenshots/a/pc.png' }] },
+        J2ME: { items: [{ src: shot }, { src: 'https://outside.invalid/unsafe.png' }] } })};</script>`);
+  });
+  t.after(() => service.close());
+  assert.deepEqual(await service.lookup(game), { title: 'Asphalt 3: Street Rules',
+    sourceUrl: 'https://www.myabandonware.com/game/asphalt-3-street-rules-w1t', genres: ['Racing'], description: 'A J2ME racing game & sequel', year: 2007, screenshots: 1 });
+  assert.deepEqual(library.get(game.id).nativeResolution, { width: 240, height: 320, source: 'J2ME Archive' });
+  assert.deepEqual(await service.screenshot(game, 1), { bytes: validPng, type: 'image/png' });
+  assert.equal(await service.screenshot(game, 2), null);
 });
