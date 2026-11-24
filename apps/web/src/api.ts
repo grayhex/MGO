@@ -164,7 +164,8 @@ export const api = {
     fd.append('file', file, file.name);
     return req<SettingsResponse>('/api/settings/soundfont', { method: 'PUT', body: fd });
   },
-  deleteSoundfont: () => req<SettingsResponse>('/api/settings/soundfont', { method: 'DELETE' }),
+  selectSoundfont: (id: string | null) => req<SettingsResponse>('/api/settings/soundfont', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }),
+  deleteSoundfont: (id?: string) => req<SettingsResponse>(`/api/settings/soundfont${id ? `?id=${encodeURIComponent(id)}` : ''}`, { method: 'DELETE' }),
   testMoby: () => req<{ ok: true; platformId: number }>('/api/mobygames/test', { method: 'POST' }),
   systemResources: () => req<import('@mgo/protocol').SystemResources>('/api/system/resources'),
   systemStatus: () => req<SystemStatus>('/api/system/status'),
@@ -201,6 +202,7 @@ export const api = {
   javaCatalogLookup: (id: string) => req<{ info: JavaCatalogInfo | null; resolution: GameMeta['nativeResolution'] | null }>(`/api/games/${id}/java-catalog`, { method: 'POST' }),
   javaCatalogStatus: () => req<{ job: JavaCatalogJob | null }>('/api/catalog/java'),
   javaCatalogStart: () => req<JavaCatalogJob>('/api/catalog/java', { method: 'POST' }),
+  javaCatalogCancel: () => req<{ cancelled: boolean }>('/api/catalog/java', { method: 'DELETE' }),
   javaCatalogShotUrl: (id: string, n: number) => `/api/games/${id}/java-catalog/shot/${n}`,
   infoRefresh: (id: string) => req<GameInfo>(`/api/games/${id}/info/refresh`, { method: 'POST' }),
   infoSearch: (id: string, query: string) => req<GameInfo>(`/api/games/${id}/info/search`, jsonInit('POST', { query })),

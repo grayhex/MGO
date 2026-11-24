@@ -111,6 +111,7 @@ export class Session {
     logFile: string,
     private cfg: Config,
     private onEnded: (s: Session) => void,
+    private onPlayedResolution?: (width: number, height: number) => void,
     private onGameResolution?: (resolution: NonNullable<GameMeta['nativeResolution']>) => void,
   ) {
     this.logFile = logFile;
@@ -138,6 +139,7 @@ export class Session {
     return {
       id: this.id,
       gameId: this.game.id,
+      gameName: this.game.name,
       state: this.state,
       backend: this.adapter.kind,
       ...(this.adapter.kind === 'kemulator' ? { frameRateLimit: this.settings.emulation?.frameRate ?? null } : {}),
@@ -189,9 +191,15 @@ export class Session {
 
   private onFrame(f: FrameMsg): void {
     this.latencyMs = Math.max(0, Date.now() - f.tsUs / 1000);
-    if (f.width && f.height) this.picture = { width: f.width, height: f.height };
+    const width = f.width ?? this.settings.width;
+    const height = f.height ?? this.settings.height;
+    if (width > 0 && height > 0 && (this.picture?.width !== width || this.picture.height !== height)) {
+      this.picture = { width, height };
+      try { this.onPlayedResolution?.(width, height); }
+      catch { this.pushLog('[session] Could not save the last played resolution in the library.'); }
+    }
     if (this.resolutionDetector && this.state === 'running' && this.displayable === 'canvas' && Date.now() - this.createdAt > 1200) {
-      const detected = this.resolutionDetector.sample(f, f.width ?? this.settings.width, f.height ?? this.settings.height, performance.now());
+      const detected = this.resolutionDetector.sample(f, width, height, performance.now());
       if (detected) {
         this.game.nativeResolution = detected;
         try { this.onGameResolution?.(detected); }
@@ -199,7 +207,7 @@ export class Session {
         this.broadcastText({ t: 'game-resolution', resolution: detected });
       }
     }
-    const hdr = encodeFrameHeader(f.seq, f.enc, f.width ?? this.settings.width, f.height ?? this.settings.height, Date.now() & 0xffffffff);
+    const hdr = encodeFrameHeader(f.seq, f.enc, width, height, Date.now() & 0xffffffff);
     const packed = Buffer.concat([hdr, f.data]);
     this.lastPacked = packed;
     for (const { c } of this.clients.values()) if (!c.sendFrame(packed)) this.framesDropped++;
@@ -583,7 +591,8 @@ export class SessionManager {
       jvmExtraArgs: this.cfg.jvmExtraArgs,
       launchWrapper: this.cfg.launchWrapper,
     });
-    const session = new Session(sid, game, overrides, owner, adapter, bridgeDir, this.lib.sessionLogPath(sid), this.cfg, (s) => this.onEnded(s), resolution => this.lib.recordGameResolution(game.id, resolution));
+    const session = new Session(sid, game, overrides, owner, adapter, bridgeDir, this.lib.sessionLogPath(sid), this.cfg, (s) => this.onEnded(s),
+      (w, h) => this.lib.recordPlayedResolution(game.id, w, h), resolution => this.lib.recordGameResolution(game.id, resolution));
     this.sessions.set(session.id, session);
     this.lib.touchPlayed(game.id);
     try {
@@ -638,7 +647,8 @@ export class SessionManager {
       fileName: `${game.name.replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 60) || 'game'}.${path.extname(file).slice(1)}`,
       frameEncoding: this.cfg.frameEncoding,
     });
-    const session = new Session(sid, game, overrides, owner, adapter, bridgeDir, this.lib.sessionLogPath(sid), this.cfg, (s) => this.onEnded(s));
+    const session = new Session(sid, game, overrides, owner, adapter, bridgeDir, this.lib.sessionLogPath(sid), this.cfg, (s) => this.onEnded(s),
+      (w, h) => this.lib.recordPlayedResolution(game.id, w, h));
     this.sessions.set(session.id, session);
     this.lib.touchPlayed(game.id);
     try {

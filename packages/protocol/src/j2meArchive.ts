@@ -109,12 +109,15 @@ export interface JavaCatalogInfo {
   description: string;
   screenshots: number;
   year: number | null;
+  partial?: boolean;
 }
 
 export interface JavaCatalogJob {
-  state: 'running' | 'done' | 'failed';
+  state: 'running' | 'done' | 'failed' | 'cancelled';
   total: number;
   processed: number;
   matched: number;
   errors: number;
+  partial?: number;
+  error?: string;
 }

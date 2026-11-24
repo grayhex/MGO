@@ -5,7 +5,7 @@
 .skin-canvas { position: absolute; display: block; touch-action: none; user-select: none; }
 .skin-canvas.crisp { image-rendering: pixelated; image-rendering: crisp-edges; }
 .skin-canvas.smooth { image-rendering: auto; }
-.skin-body, .skin-glass { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+.skin-body, .skin-legends, .skin-glass { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; user-select: none; -webkit-user-drag: none; }
 .skin-hit { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .skin-hit polygon { fill: transparent; stroke: none; transition: fill 80ms linear; }
 .skin-hit polygon.pressed { fill: color-mix(in srgb, var(--accent) 45%, transparent); stroke: rgba(255, 255, 255, 0.85); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }

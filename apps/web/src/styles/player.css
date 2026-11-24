@@ -72,7 +72,8 @@
 .lights-out .ctrl-col,.lights-out .skin-picker { display:none; }
 .lights-out .stage-bar { position:absolute;top:0;z-index:20;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s; }
 .lights-out .stage { height:100%;flex:1;min-height:0;padding:12px;background:#010203; }
-.lights-out .skin-body { opacity:.16;transition:opacity .3s; }
+.lights-out :is(.skin-body,.skin-legends) { opacity:.16;transition:opacity .3s; }
+.lights-out .physical-keypad :is(.skin-body,.skin-legends) { opacity: 1; }
 .lights-out .skin-glass { opacity:.04;transition:opacity .3s; }
 .lights-out .skin-lcd { background:#000;box-shadow:none; }
 .lights-out .stage-foot { display:none;background:#010203;border:0; }
@@ -129,10 +130,12 @@ textarea.text-editor-field { resize: vertical; min-height: 84px; }
 .stage-card:fullscreen .stage { --stage-h: calc(100dvh - 60px); }
 .stage-foot.side { width: clamp(208px, 24vw, 264px); flex: none; padding: 10px 8px; border-top: 0; border-right: 1px solid var(--outline); align-content: center; gap: 8px; }
 @media (min-width: 981px) and (min-height: 600px) {
+  .player-grid .ctrl-col { max-height: calc(100dvh - var(--header-h) - 24px); overflow: auto; align-content: start; }
   .player-grid:not(.lights-out) .stage-card:not(:fullscreen) {
     height: calc(100dvh - var(--header-h) - 24px);
     grid-template-rows: auto minmax(0, 1fr) auto;
   }
+  .player-grid:not(.lights-out) .stage-card:not(:fullscreen) .stage-row { container-type: size; }
   .player-grid:not(.lights-out) .stage-card:not(:fullscreen) .stage { height: 100%; }
   .player-grid:not(.lights-out) .stage-card:not(:fullscreen) .stage-foot.side {
     overflow: auto;
@@ -160,10 +163,21 @@ button.chip-link:hover { border-color: var(--primary-warm); }
 .lights-menu { color: #f1f5f9; }
 .lights-menu .btn { color: #f1f5f9; }
 
-.stage-foot .physical-keypad { height: clamp(190px, 52dvh, 435px); }
+.stage-foot .physical-keypad { height: clamp(240px, 70dvh, 652px); }
+.stage-foot.side:has(.physical-keypad) { width: clamp(210px, 49%, 396px); }
+@media (min-width: 981px) and (min-height: 600px) {
+  /* Leave enough space for the close-up LCD to grow beyond its full-phone width. */
+  .player-grid:not(.lights-out) .stage-card:not(:fullscreen) .stage-foot.side:has(.physical-keypad) {
+    width: clamp(min(210px, 35cqw), calc(100cqw - (100cqh - 12px) * var(--full-lcd-width-factor, 0) - 36px), min(49cqw, 396px));
+  }
+}
+.lights-out.touch-controls .stage-foot.side:has(.physical-keypad) { width: clamp(250px, 44%, 468px); }
+.lights-out .stage-foot .physical-keypad { height: min(87dvh, 870px); }
 .view-keypad { overflow: hidden; border-radius: var(--r-sm); }
 @media (max-width: 760px) {
   .stage-row.with-keypad > .stage { order: -1; }
-  .stage-foot .physical-keypad { height: clamp(210px, 45dvh, 360px); }
+  .stage-foot.side:has(.physical-keypad), .lights-out.touch-controls .stage-foot.side:has(.physical-keypad) { width: 100%; }
+  .stage-foot .physical-keypad { height: clamp(230px, 58dvh, 540px); }
+  .lights-out .stage-foot .physical-keypad { height: min(60dvh, 650px); }
   .lights-out.touch-controls .stage-foot.side { width: 100%; max-height: 45dvh; }
 }

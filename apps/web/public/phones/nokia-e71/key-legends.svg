@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 2048">
+  <defs>
+    <linearGradient id="key" x2=".2" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#505052"/>
+      <stop offset="1" stop-color="#28282a"/>
+    </linearGradient>
+    <rect id="face" width="67" height="96" rx="3" fill="url(#key)"/>
+  </defs>
+  <g>
+    <use href="#face" x="130" y="1423"/>
+    <use href="#face" x="207" y="1423"/>
+    <use href="#face" x="285" y="1423"/>
+    <use href="#face" x="362" y="1423"/>
+    <use href="#face" x="440" y="1423"/>
+    <use href="#face" x="517" y="1423"/>
+    <use href="#face" x="595" y="1423"/>
+    <use href="#face" x="673" y="1423"/>
+    <path fill="url(#key)" d="M139 1532h59l7 94q-40-4-53-26zM213 1532h59l8 101-61-4zM675 1532h57l-7 100h-56zM750 1532h61l-11 95-61 5zM826 1532h56l-11 47q-10 32-53 48z"/>
+  </g>
+  <g fill="#f8f8f8" font-family="sans-serif" font-weight="600" text-anchor="middle">
+    <g font-size="32">
+      <text x="627" y="1235">*</text><text x="627" y="1347">#</text>
+      <text x="395" y="1459">7</text><text x="473" y="1459">8</text>
+      <text x="550" y="1459">9</text><text x="628" y="1459">0</text>
+      <text x="170" y="1593" font-size="27">Fn</text>
+      <text x="702" y="1573">;</text><text x="702" y="1611">,</text>
+      <text x="775" y="1573">:</text><text x="775" y="1611">.</text>
+      <text x="850" y="1568" font-size="24">Ctrl</text><text x="846" y="1605" font-size="22">Chr</text>
+    </g>
+    <g font-size="42">
+      <text x="163" y="1508">Z</text><text x="241" y="1508">X</text>
+      <text x="318" y="1508">C</text><text x="395" y="1508">V</text>
+      <text x="473" y="1508">B</text><text x="550" y="1508">N</text>
+      <text x="628" y="1508">M</text><text x="706" y="1508">,</text>
+    </g>
+    <path d="m246 1578-14 15h8v12h12v-12h8z" fill="none" stroke="#f8f8f8" stroke-width="3"/>
+  </g>
+</svg>

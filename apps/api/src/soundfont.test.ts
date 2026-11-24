@@ -28,9 +28,23 @@ describe('SoundfontStore', () => {
     assert.equal(info.name, 'Good Bank.SF2');
     assert.equal(info.size, 1000);
     assert.equal(s.info()?.size, 1000);
-    assert.ok(s.path()?.endsWith('custom.sf2'));
+    assert.ok(s.path()?.endsWith(`${info.id}.sf2`));
     s.remove();
     assert.equal(s.info(), null);
+  });
+
+  it('keeps separate banks when switching, disables the custom bank and remembers the choice across restart', async () => {
+    const dir = tmp();
+    const store = new SoundfontStore(dir);
+    const first = await store.save(Readable.from([sf2(100)]), 'First.sf2');
+    const second = await store.save(Readable.from([sf2(120)]), 'Second.sf2');
+    assert.deepEqual(store.list().map(bank => bank.id), [first.id, second.id]);
+    store.select(first.id);
+    assert.equal(new SoundfontStore(dir).info()?.id, first.id);
+    store.select(null);
+    assert.equal(new SoundfontStore(dir).path(), null);
+    assert.equal(store.list().length, 2);
+    assert.throws(() => store.select('../other.sf2'), /not found/i);
   });
 
   it('rejects other formats and incomplete files, and keeps the installed bank', async () => {

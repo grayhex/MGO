@@ -15,7 +15,7 @@ import { downloadBlob, fileSafe, framePng } from '../snapshot';
 import { GamepadPoller, loadPadProfile, type PadAction, type PadState } from '../gamepad';
 import { GamepadSettings } from './GamepadSettings';
 import { phoneHasTouch, KEY_LAYOUTS, SCREEN_PRESETS, type PhoneCatalog, type DevicePreset, type EmulationTweaks, type GameMeta, type HealthStatus, type LayoutId, type ServerEvent, type SessionState, type SessionStatus } from '@mgo/protocol';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { api, ApiError, type JarAnalysisView } from '../api';
 import type { Toast } from '../App';
 import { PcmAudio } from '../audio';
@@ -534,7 +534,14 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const res_ = session?.resources ?? null;
   const keypadRequired = view === 'screen' || skin?.config.input?.externalKeypad === true;
   const external = keypadRequired || showKeypad;
+  const keypadReady = loaded && skin !== null && (j2me || !!native.data || !!native.error);
   const crop = skin && external ? keypadCut(skin) : undefined;
+  const skinViews = skin?.config.views;
+  const screenView = skinViews?.screen;
+  const fullView = skinViews?.full;
+  const keypadLayout = crop !== undefined && fullView && screenView ? {
+    '--full-lcd-width-factor': (fullView.width / fullView.height) * (fullView.screenRect.width / screenView.screenRect.width),
+  } as CSSProperties : undefined;
   const skinScreen = skin?.config.screen;
 
   const overlay = !running ? (
@@ -584,8 +591,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           </div>
         </div>
 
-        <div className={`stage-row${external ? ' with-keypad' : ''}`}>
-          {external && (
+        <div className={`stage-row${external && keypadReady ? ' with-keypad' : ''}`} style={keypadLayout}>
+          {external && keypadReady && (
             <div className="stage-foot side">
               {skin && crop !== undefined
                 ? <PhoneSkin skin={skin} view="full" keypadCrop={crop} frame={frameSize} input={input} interactive={live} className="physical-keypad" />
@@ -626,12 +633,12 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           {session && <button className="btn ghost sm icon" onClick={() => api.diagnostics(session.id).then((b) => downloadBlob(b, `mgo-diagnostics-${fileSafe(game?.name ?? 'game')}.txt`), (e) => toast('error', (e as Error).message))} title={translateUI("A text report with the settings, the emulator log and the JVM state: attach it to a bug report")} aria-label={translateUI("Download diagnostics")} data-testid="diagnostics"><Icon name="log" /></button>}
           </div>
           {game && j2me && health?.ok !== false && <div className="control-line">
-            <span className="label-caps" title={translateUI('Frame limit (fps)')}>{translateUI('FPS limit')}</span>
+            <span className="label-caps" title={translateUI('Maximum rendering rate. Games with their own frame timing can run below this limit.')}>{translateUI('FPS limit')}</span>
             <Seg className="player-seg" label="Frame limit (fps)" value={String(tweaks.frameRate ?? 'default')}
               options={[
                 { value: 'default', label: 'Default' },
-                { value: '30', label: '30', ariaLabel: 'Force 30 FPS', title: 'Force 30 FPS' },
-                { value: '60', label: '60', ariaLabel: 'Force 60 FPS', title: 'Force 60 FPS' },
+                { value: '30', label: '30', ariaLabel: '30 FPS limit', title: '30 FPS limit' },
+                { value: '60', label: '60', ariaLabel: '60 FPS limit', title: '60 FPS limit' },
                 ...(tweaks.frameRate !== undefined && ![30, 60].includes(tweaks.frameRate) ? [{ value: String(tweaks.frameRate), label: `${tweaks.frameRate} FPS` }] : []),
               ]}
               onChange={value => setTweaks(previous => {
@@ -710,8 +717,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         </Panel>
         )}
 
-        {j2me && (
-        <Panel icon="sliders" title={translateUI("Game compatibility options")} open={false}>
+        {loaded && j2me && (
+        <Panel icon="sliders" title={translateUI("Game compatibility options")}>
           <EmulationTweaksForm pointerDefault={phoneHasTouch(prefs.skinId)} value={tweaks} onChange={setTweaks} />
         </Panel>
         )}
@@ -743,11 +750,11 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           {padMenu && <GamepadSettings gameId={gameId} poller={gamepad.current} state={padState} />}
         </Panel>
 
-        <Panel icon="log" title={translateUI("Input recording")} open={false}>
+        <Panel icon="log" title={translateUI("Input recording")}>
           <RecordingPanel gameId={gameId} gameName={game?.name ?? gameId} frame={frameSize} live={live} recorder={recorder} replayer={replayer} sendRaw={sendRaw} toast={toast} />
         </Panel>
 
-        {developer && <Panel icon="pulse" title={translateUI("Telemetry")} open={false}>
+        {developer && <Panel icon="pulse" title={translateUI("Telemetry")}>
           <div className="metric"><div className="metric-head"><span className="label-caps">{translateUI("Display FPS")}</span><span className="metric-value">{client.fps.toFixed(1)}</span></div><Spark values={fpsHist} label={translateUI("Display frames per second")} /></div>
           <div className="metric"><div className="metric-head"><span className="label-caps">{translateUI("Emulator CPU")}</span><span className="metric-value">{translateUI(res_ ? `${res_.cpuPercentNow.toFixed(0)}%` : '—')}</span></div><Spark values={cpuHist} max={Math.max(100, ...cpuHist)} label={translateUI("CPU use")} /></div>
           <div className="metric"><div className="metric-head"><span className="label-caps">{translateUI("Memory")}</span><span className="small mono">{translateUI(res_ ? `${res_.rssMb.toFixed(0)} MB (peak ${res_.peakRssMb.toFixed(0)})` : '—')}</span></div><Meter value={res_?.rssMb ?? 0} max={Math.max(512, heapMb * 2)} label={translateUI("Memory use")} /></div>
@@ -767,7 +774,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         </Panel>}
 
         {developer && analysis && (
-          <Panel icon="shield" title={translateUI("Compatibility")} open={false} right={<span className={`badge ${analysis.analysis.risk === 'low' ? 'prod' : analysis.analysis.risk === 'medium' ? 'mock' : 'danger'}`}>{analysis.analysis.risk} {translateUI("risk")}</span>}>
+          <Panel icon="shield" title={translateUI("Compatibility")} right={<span className={`badge ${analysis.analysis.risk === 'low' ? 'prod' : analysis.analysis.risk === 'medium' ? 'mock' : 'danger'}`}>{analysis.analysis.risk} {translateUI("risk")}</span>}>
             <dl className="kv"><dt>{translateUI("Platform")}</dt><dd>{analysis.analysis.platform.family}</dd><dt>{translateUI("3D (M3G / Mascot)")}</dt><dd>{translateUI(analysis.analysis.needs3d ? 'yes' : 'no')}</dd><dt>{translateUI("Classes")}</dt><dd>{analysis.analysis.classCount}</dd></dl>
             {analysis.analysis.apis.length > 0 && (
               <div className="table-wrap"><table className="table compact"><thead><tr><th>{translateUI("API")}</th><th>{translateUI("Classes")}</th><th>{translateUI("Missing")}</th></tr></thead>
@@ -778,7 +785,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           </Panel>
         )}
 
-        {(developer || state === 'failed') && <Panel icon="log" title={translateUI(`Emulator log (${log.length})`)} open={false}>
+        {(developer || state === 'failed') && <Panel icon="log" title={translateUI(`Emulator log (${log.length})`)}>
           <pre className="log" tabIndex={0}>{log.slice(-120).join('\n') || '—'}</pre>
         </Panel>}
       </aside>

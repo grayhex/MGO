@@ -17,8 +17,15 @@
 .phone-fit { color: var(--ok, #1f9d55); font-size: 0.78rem; margin: 2px 0 0; font-weight: 600; }
 
 /* Settings → Symbian */
-.symbian-panel h3 { margin: var(--s-xl) 0 var(--s-sm); }
+.symbian-panel, .symbian-panel .fw-add { display: grid; gap: 12px; min-width: 0; }
+.symbian-panel h3 { margin: 4px 0 0; }
 .symbian-panel h4 { margin: 0 0 2px; font-size: 1rem; }
+.sym-disk { display: grid; gap: 6px; }
+.firmware-reference { padding: 10px 12px; border: 1px solid var(--outline); border-radius: var(--r-md); }
+.firmware-reference[open] > summary { margin-bottom: 8px; }
+.firmware-reference-list { display: grid; gap: 0; list-style: none; margin-block: 8px; padding: 0; }
+.firmware-reference-list li { display: grid; grid-template-columns: minmax(0, 1fr) 78px minmax(0, 1.3fr); align-items: baseline; gap: 4px 12px; border-top: 1px solid var(--outline); padding: 7px 0; }
+@media (max-width: 600px) { .firmware-reference-list li { grid-template-columns: minmax(0, 1fr) auto; } .firmware-reference-list li > span { grid-column: 1 / -1; } }
 .sym-status { border: 1px solid var(--outline); border-radius: var(--r-lg, 12px); display: grid; gap: var(--s-md); background: var(--surface-soft); }
 .sym-status-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .sym-status-main .spacer { flex: 1; }

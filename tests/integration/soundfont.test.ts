@@ -32,7 +32,7 @@ const putSoundfont = (data: Buffer, name = 'bank.sf2') => {
 const traces = () => readdirSync(traceDir).map((f) => readFileSync(path.join(traceDir, f), 'utf8')).join('\n');
 // KEmulator rewrites property.txt when it exits and then holds an empty `SoundfontPath=`: only a value counts
 const hasBank = (file: string) => /^SoundfontPath=\S/m.test(readFileSync(file, 'utf8'));
-const opensBank = () => /openat\([^)]*custom\.sf2/.test(traces());
+const opensBank = () => /openat\([^)]*\/soundfont\/[a-f0-9]{32}\.sf2/.test(traces());
 
 async function playMidi(): Promise<{ userPath: string; log: () => Promise<string> }> {
   const up = await upload(env.base, lab('kemmidi.jar'));
@@ -84,7 +84,7 @@ describe('MIDI SoundFont setting', () => {
     const g = await playMidi();
     assert.match(await g.log(), /MIDI_RESULT ok/, 'MIDI playback still works (an unusable bank must not break the game)');
     const prop = readFileSync(path.join(g.userPath, 'property.txt'), 'utf8');
-    assert.match(prop, new RegExp(`^SoundfontPath=${path.join(env.dataDir, 'soundfont', 'custom.sf2').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+    assert.match(prop, new RegExp(`^SoundfontPath=${path.join(env.dataDir, 'soundfont', settings.soundfont.id + '.sf2').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
     if (hasStrace) assert.equal(opensBank(), true, 'the emulator opened the custom bank');
 
     const del = await fetch(env.base + '/api/settings/soundfont', { method: 'DELETE' });

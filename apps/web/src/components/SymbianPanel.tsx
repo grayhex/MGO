@@ -31,6 +31,7 @@ const PLATFORM_HELP: Record<DefaultPlatform, { title: string; hint: string }> = 
 /** The catalog entry of an installed firmware, by its product code (null for firmware MGO does not know). */
 const catalogOf = (code: string): Native | null => EMULATED_DEVICES.flatMap(d => (d.engine === 'eka2l1' && d.firmware.product.toLowerCase() === code.toLowerCase() ? [d] : []))[0] ?? null;
 const skinOf = (device: Native | null): string | null => (device ? (Object.entries(PHONE_COMPATIBILITY).find(([, ids]) => ids.includes(device.id))?.[0] ?? null) : null);
+const romOnly = new Set(['NEM-4', 'RH-29']);
 
 /**
  * Settings → Symbian (experimental): the optional mgo-symbian service and the user's own firmware. One way to add firmware: a firmware
@@ -65,7 +66,7 @@ export function SymbianPanel({ toast }: { toast: Toaster }) {
           {st.reachable
             ? <span className="badge ok">{translateUI('Service connected')}</span>
             : <span className={`badge ${st.configured ? 'mock' : 'plain'}`}>{translateUI(st.configured ? 'Service not answering' : 'Service not set up')}</span>}
-          {st.emulator && <span className="muted small">EKA2L1 <code>{st.emulator}</code></span>}
+          {st.emulator && <span className="muted small">EKA2L1 <code>{st.emulator.replace(/^EKA2L1\s+/i, '')}</code></span>}
           {st.busy && <span className="badge plain">{translateUI('busy')}</span>}
           <span className="spacer" />
           <button className="btn sm" onClick={load}><Icon name="restart" /> {translateUI('Refresh status')}</button>
@@ -140,6 +141,27 @@ export function SymbianPanel({ toast }: { toast: Toaster }) {
             </>
           )}
 
+        </>
+      )}
+      <details className="more firmware-reference">
+            <summary>{translateUI('Which firmware archive do I need?')}</summary>
+            <p className="small muted">{translateUI('Use the phone model and product code to identify the firmware. Keep the original filenames inside the archive.')}</p>
+            <ul className="firmware-reference-list">
+              {EMULATED_DEVICES.filter((device): device is Native => device.engine === 'eka2l1').map(device => (
+                <li key={device.id}>
+                  <strong>{device.name}</strong>
+                  <code>{device.firmware.product}</code>
+                  <span className="muted small">{translateUI(romOnly.has(device.firmware.product) ? 'Device ROM dump (e.g. SYM.ROM)' : device.firmware.product === 'RM-84' ? 'ROM dump and matching RPKG if requested' : 'ROM + RPKG, or a factory VPL with its FPSX files')}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="btn-row">
+              <a href="https://eka2l1.github.io/quickstart/basic/installdevice/" target="_blank" rel="noreferrer">{translateUI('EKA2L1 firmware guide')} ↗</a>
+              <a href="https://eka2l1.github.io/quickstart/ngage/" target="_blank" rel="noreferrer">{translateUI('N-Gage ROM guide')} ↗</a>
+            </div>
+      </details>
+      {st.reachable && (
+        <>
           <FirmwareAdd st={st} toast={toast} follow={follow} busy={busy} />
           <FirmwareJobStatus job={job} jobError={jobError} canResume={canResume} resume={resume} />
         </>

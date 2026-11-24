@@ -34,7 +34,7 @@ try {
   // ---- options are saved for the game and reach it ----
   const props = await upload('tests/fixtures/labgames/build/kemprops.jar');
   await p.goto(base + '/play/' + props.id);
-  await p.getByText('Game compatibility options', { exact: true }).click();
+  await p.getByText('Game compatibility options', { exact: true }).waitFor();
   await p.getByLabel('Language of the phone').fill('ru-RU');
   await p.getByLabel('Font size medium').fill('30');
   await p.getByLabel('Font size small').fill('20');
@@ -53,7 +53,7 @@ try {
   await wait(async () => !(await running()), 'stopped');
 
   await p.reload();
-  await p.getByText('Game compatibility options', { exact: true }).click();
+  await p.getByText('Game compatibility options', { exact: true }).waitFor();
   await wait(async () => (await p.getByLabel('Language of the phone').inputValue()) === 'ru-RU', 'saved options are shown after a reload');
   await p.getByRole('button', { name: 'Reset options' }).click();
   await wait(async () => { const g = (await (await fetch(base + '/api/games')).json()).find((x) => x.id === props.id); return g.settings.emulation === undefined; }, 'defaults restored');
@@ -94,17 +94,20 @@ try {
     assert.equal(await panel.getByText('Game files', { exact: true }).count(), 0);
   }
   const limits = p.getByRole('radiogroup', { name: 'Frame limit (fps)' });
-  await limits.getByRole('radio', { name: 'Force 30 FPS' }).click();
+  await limits.getByRole('radio', { name: '30 FPS limit' }).click();
   await p.locator('.ctrl-col').getByRole('button', { name: 'Start', exact: true }).click();
   await wait(async () => (await running())?.framesReceived > 5, 'game drawing');
   const first = await running();
   assert.equal(first.frameRateLimit, 30);
-  await limits.getByRole('radio', { name: 'Force 60 FPS' }).click();
+  const firstGame = await (await fetch(base + '/api/games/' + game.id)).json();
+  assert.deepEqual(firstGame.playedResolution, { width: first.width, height: first.height, source: 'played' });
+  await limits.getByRole('radio', { name: '60 FPS limit' }).click();
   await p.getByText('Restart to apply the frame limit.').waitFor();
   assert.equal((await running()).id, first.id, 'choosing a limit keeps the game running');
   await p.locator('.ctrl-col').getByRole('button', { name: 'Restart', exact: true }).click();
   await wait(async () => { const s = await running(); return s?.id !== first.id && s?.frameRateLimit === 60 && s.framesReceived > 5; }, '60 FPS applied on restart');
   assert.match(readFileSync(path.join(dir, 'saves', 'default', game.id, 'midlets.ini'), 'utf8'), /FrameRate=60/);
+  assert.match(readFileSync(path.join(dir, 'saves', 'default', game.id, 'midlets.ini'), 'utf8'), /PatchYield=true/);
   await p.getByRole('radio', { name: '×0.5', exact: true }).click();
   await wait(async () => (await running()).speed === -50, 'half speed');
   await wait(async () => (await p.getByRole('radio', { name: '×0.5', exact: true }).getAttribute('aria-checked')) === 'true', 'the control shows the speed');
