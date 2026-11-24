@@ -281,11 +281,14 @@ test('My Abandonware recovers from a gateway transport error and reads the Java 
   const game = library.add(makeJar('Example Puzzle'), null, 1000000).game;
   const calls = [];
   const shot = '/media/screenshots/e/example-puzzle/game.jpg';
+  const validPng = Buffer.from('89504e470d0a1a0a0000000d', 'hex');
   const service = new JavaCatalog(library, () => null, async (url, init) => {
     if (url.hostname === 'raw.githubusercontent.com') return Response.json({ entries: [{ id: 'ma:example-puzzle-demo', title: game.name }] });
     calls.push([url.hostname, url.pathname, init.headers.accept]);
     assert.match(init.headers['user-agent'], /^MGO game metadata/);
-    if (url.hostname === 'www.myabandonware.com') throw new TypeError('fetch failed', { cause: { code: 'EAI_AGAIN' } });
+    if (calls.length === 1) throw new TypeError('fetch failed', { cause: { code: 'EAI_AGAIN' } });
+    if (url.hostname === 'myabandonware.com') return Response.redirect(`https://www.myabandonware.com${url.pathname}`, 301);
+    if (url.pathname === shot) return new Response(validPng);
     return new Response(`<meta content='An example for Java ME &amp; other devices' property='og:description'>
       <script>const platformGalleries = {
         "Windows": {"items": [{"src": "/media/screenshots/e/example-puzzle/pc.png"}]},
@@ -297,5 +300,6 @@ test('My Abandonware recovers from a gateway transport error and reads the Java 
   assert.equal(result.description, 'An example for Java ME & other devices');
   assert.equal(result.screenshots, 1);
   assert.equal(result.partial, undefined);
-  assert.deepEqual(calls.map(call => call[0]), ['www.myabandonware.com', 'myabandonware.com']);
+  assert.deepEqual(await service.screenshot(game, 1), { bytes: validPng, type: 'image/png' });
+  assert.deepEqual(calls.map(call => call[0]), ['www.myabandonware.com', 'myabandonware.com', 'www.myabandonware.com', 'www.myabandonware.com']);
 });

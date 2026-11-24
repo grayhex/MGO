@@ -139,7 +139,7 @@ export class JavaCatalog {
       await delay(750, undefined, { signal });
       const alternate = preferred === origin ? alternateOrigin : origin;
       const response = await read(alternate);
-      this.preferredOrigin = alternate;
+      this.preferredOrigin = response.url.origin;
       return response;
     }
   }

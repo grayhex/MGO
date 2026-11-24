@@ -37,7 +37,7 @@ export async function readRemote(fetcher: typeof fetch, url: URL, allowed: (url:
     try {
       for (;;) {
         const { done, value } = await reader.read();
-        if (done) return { bytes: Buffer.concat(chunks, length), headers: response.headers };
+        if (done) return { bytes: Buffer.concat(chunks, length), headers: response.headers, url };
         length += value.length;
         if (length > maxBytes) throw new Error('Remote response exceeded the size limit');
         chunks.push(value);
