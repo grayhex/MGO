@@ -113,6 +113,16 @@ try {
     if (c.input.kind === 'keypad' && c.views.full.width < c.views.full.height) {
       assert.ok(await page.getByTestId('phone-keypad').locator('polygon[data-action=d5]').count(), 'the original numeric key is on the side keypad');
     }
+    if (id.startsWith('nokia-n-gage-')) {
+      const halves = page.getByTestId('phone-keypad');
+      assert.equal(await halves.count(), 2, 'the actual left and right parts of the N-Gage');
+      const left = await halves.nth(0).boundingBox(), right = await halves.nth(1).boundingBox();
+      assert.ok(left.y + left.height < right.y && right.x + right.width < (await page.locator('.stage').boundingBox()).x,
+        'the left half is above the numeric half, both alongside the LCD');
+      const numeric = await halves.nth(1).locator('polygon[data-action=d7]').boundingBox();
+      await page.mouse.click(numeric.x + numeric.width / 2, numeric.y + numeric.height / 2);
+      await wait(async () => (await logs()).includes('KEY_DOWN 55') && (await logs()).includes('KEY_UP 55'), id + ' cropped numeric 7');
+    }
     const metrics = await page.locator('.skin-canvas').evaluate(el => ({ w: el.getBoundingClientRect().width, h: el.getBoundingClientRect().height }));
     assert.ok(Math.abs(metrics.w / metrics.h - c.screen.width / c.screen.height) < 0.01);
     const zoomLcd = await page.getByTestId('skin-lcd').boundingBox();

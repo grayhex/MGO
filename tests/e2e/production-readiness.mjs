@@ -80,7 +80,7 @@ try{
   await p.getByRole('tab',{name:'Game metadata',exact:true}).click();
   for (const title of ['Build index and matching', 'Descriptions and screenshots', 'N-Gage', 'Symbian']) await p.getByRole('heading', {name:title, exact:true}).waitFor();
   await p.getByRole('tab',{name:'Firmware',exact:true}).click();
-  await p.getByText('Which firmware archive do I need?', {exact:true}).click();
+  await p.getByText('Which firmware file do I need?', {exact:true}).click();
   await p.locator('.firmware-reference').getByText('NEM-4', {exact:true}).waitFor();
   await p.locator('.firmware-reference').getByText('RM-320', {exact:true}).waitFor();
   await p.getByRole('tab',{name:'Game library',exact:true}).click();

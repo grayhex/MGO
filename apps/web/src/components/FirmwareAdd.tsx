@@ -63,9 +63,11 @@ export function useFirmwareJob(toast: Toaster, onFinished: () => void) {
   return { job, jobRunning: job?.state === 'running', jobError, follow, resume, canResume: !!jobId.current };
 }
 
-/** One firmware archive in, one device out: choose the archive (or a file of the inbox folder), upload, install. */
-export function FirmwareAdd({ st, toast, follow, busy: outerBusy = false, title = 'Add firmware', hint = 'One firmware archive per device. If you have a ROM and its RPKG, or a factory kit (.vpl + .fpsx), pack them into one archive first, or put them in the inbox folder.', compact = false }: { st: SymbianStatus; toast: Toaster; follow: (j: SymbianJob) => void; busy?: boolean; title?: string; hint?: string; compact?: boolean }) {
-  const [archive, setArchive] = useState<File | null>(null);
+const firmwareSlot = (name: string) => /\.rom$/i.test(name) ? 'rom' : 'archive';
+
+/** Choose a ROM or firmware archive from the browser or the service inbox. */
+export function FirmwareAdd({ st, toast, follow, busy: outerBusy = false, title = 'Add firmware', hint = 'For N-Gage, select the .rom file directly. For firmware with companion files such as RPKG or FPSX, use an archive or the inbox folder.', compact = false }: { st: SymbianStatus; toast: Toaster; follow: (j: SymbianJob) => void; busy?: boolean; title?: string; hint?: string; compact?: boolean }) {
+  const [file, setFile] = useState<File | null>(null);
   const [pickVersion, setPickVersion] = useState(0);
   const [working, setWorking] = useState<string | null>(null);
   const [inboxPick, setInboxPick] = useState('');
@@ -75,15 +77,16 @@ export function FirmwareAdd({ st, toast, follow, busy: outerBusy = false, title 
   const busy = outerBusy || st.busy || !!working;
 
   const install = async () => {
-    if (!archive) return;
+    if (!file) return;
     try {
-      if (archive.size > (st.maxFirmwareBytes ?? 0)) throw new Error(translateUI('The selected file exceeds the server firmware limit. Use the inbox folder or change the server limit.'));
+      if (file.size > (st.maxFirmwareBytes ?? 0)) throw new Error(translateUI('The selected file exceeds the server firmware limit. Use the inbox folder or change the server limit.'));
       const controller = new AbortController(); uploadAbort.current = controller;
-      setPercent(0); setWorking(`${translateUI('Uploading')} ${archive.name}…`);
-      const stored = await api.symbianUpload('archive', archive, { progress: setPercent, signal: controller.signal });
+      const slot = firmwareSlot(file.name);
+      setPercent(0); setWorking(`${translateUI('Uploading')} ${file.name}…`);
+      const stored = await api.symbianUpload(slot, file, { progress: setPercent, signal: controller.signal });
       uploadAbort.current = null; setPercent(null); setWorking(translateUI('Starting firmware job…'));
-      follow(await api.symbianInstall({ archive: stored.file }));
-      setWorking(null); setArchive(null); setPickVersion(v => v + 1);
+      follow(await api.symbianInstall({ [slot]: stored.file }));
+      setWorking(null); setFile(null); setPickVersion(v => v + 1);
     } catch (e) {
       uploadAbort.current = null; setPercent(null); setWorking(null);
       if ((e as ApiError).code === 'cancelled') { toast('info', translateUI('Upload cancelled')); return; }
@@ -95,7 +98,7 @@ export function FirmwareAdd({ st, toast, follow, busy: outerBusy = false, title 
   };
   const installFromInbox = async () => {
     setWorking(translateUI('Starting firmware job…'));
-    try { follow(await api.symbianInstall({ archive: inboxPick, source: 'inbox' })); }
+    try { follow(await api.symbianInstall({ [firmwareSlot(inboxPick)]: inboxPick, source: 'inbox' })); }
     catch (e) { toast('error', (e as Error).message); }
     finally { setWorking(null); }
   };
@@ -104,19 +107,19 @@ export function FirmwareAdd({ st, toast, follow, busy: outerBusy = false, title 
     <div className={`fw-add${compact ? ' compact' : ''}`}>
       {title && <h3>{translateUI(title)} {hint && <Hint text={hint} />}</h3>}
       <div className="sym-add card-pad">
-        <label className={`sym-drop${archive ? ' has-file' : ''}`}>
-          <input type="file" accept=".zip,.7z,.rar,.rpkg" disabled={busy} onChange={(e) => setArchive(e.target.files?.[0] ?? null)} key={`archive-${pickVersion}`} data-testid="fw-archive" />
-          <span className="sym-drop-title"><Icon name="upload" /> {archive ? archive.name : translateUI('Choose a firmware archive')}</span>
-          <span className="muted small">{archive ? mb(archive.size) : translateUI('.zip, .7z, .rar or .rpkg')} · {translateUI('up to')} {mb(st.maxFirmwareBytes)}</span>
+        <label className={`sym-drop${file ? ' has-file' : ''}`}>
+          <input type="file" accept=".rom,.zip,.7z,.rar,.rpkg" disabled={busy} onChange={(e) => setFile(e.target.files?.[0] ?? null)} key={pickVersion} data-testid="fw-archive" />
+          <span className="sym-drop-title"><Icon name="upload" /> {file ? file.name : translateUI('Choose a ROM or firmware archive')}</span>
+          <span className="muted small">{file ? mb(file.size) : translateUI('.rom, .zip, .7z, .rar or .rpkg')} · {translateUI('up to')} {mb(st.maxFirmwareBytes)}</span>
         </label>
-        <button className="btn primary" disabled={!archive || busy} onClick={install} data-testid="fw-install"><Icon name="upload" /> {translateUI('Upload and install')}</button>
+        <button className="btn primary" disabled={!file || busy} onClick={install} data-testid="fw-install"><Icon name="upload" /> {translateUI('Upload and install')}</button>
       </div>
       {!compact && <p className="muted small">{translateUI('They are sent to the service only and are not kept in MGO or in its image. Installing can take several minutes.')}</p>}
       {working && <div role="status"><p className="muted">{working} {percent !== null ? `${percent}%` : ''}</p><progress max={100} value={percent ?? undefined} aria-label={translateUI('Firmware upload progress')} />{uploadAbort.current && <button className="btn sm" onClick={() => uploadAbort.current?.abort()}>{translateUI('Cancel upload')}</button>}</div>}
       {st.inbox.length > 0 && (
         <div className="sym-inbox card-pad" data-testid="inbox">
           <h4>{translateUI('Firmware from a folder')} <Hint text="Files found in the service's inbox folder. They are read in place, never uploaded through the browser and never deleted. Use it for very large firmware or when a proxy blocks big uploads." /></h4>
-          <label className="field"><span className="label-caps">{translateUI('Archive')}</span>
+          <label className="field"><span className="label-caps">{translateUI('Firmware file')}</span>
             <select className="select" value={inboxPick} data-testid="inbox-archive" onChange={(e) => setInboxPick(e.target.value)}>
               <option value="">—</option>
               {st.inbox.map((f) => <option key={f.name} value={f.name}>{f.name} ({mb(f.size)})</option>)}

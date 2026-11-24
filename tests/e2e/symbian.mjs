@@ -50,17 +50,18 @@ try {
   await panel.getByText('Service connected').waitFor();
   await panel.getByText('No firmware yet').waitFor();
   assert.equal(await panel.getByTestId('fw-install').isDisabled(), true, 'nothing to install before a file is chosen');
-  // one way to add firmware: an archive. The ROM / RPKG / factory-kit forms are gone.
-  assert.equal(await panel.getByTestId('fw-rom').count() + await panel.getByTestId('fw-rpkg').count() + await panel.getByTestId('factory-mode').count() + await panel.getByTestId('fw-factory').count(), 0, 'only the firmware archive is offered');
-  await panel.getByTestId('fw-archive').setInputFiles({ name: 'RM-84.zip', mimeType: 'application/zip', buffer: Buffer.from('fake firmware archive') });
+  assert.match(await panel.getByTestId('fw-archive').getAttribute('accept'), /\.rom/);
+  await panel.getByTestId('fw-archive').setInputFiles({ name: 'SYM.ROM', mimeType: 'application/octet-stream', buffer: Buffer.from('fake firmware ROM') });
   // Cancel an upload before it reaches the service; retrying must not install twice.
-  await p.route('**/api/symbian/firmware?slot=archive', async route => { await sleep(1500); await route.abort().catch(() => undefined); });
+  await p.route('**/api/symbian/firmware?slot=rom', async route => { await sleep(1500); await route.abort().catch(() => undefined); });
   await panel.getByTestId('fw-install').click();
   await panel.getByRole('button', { name: 'Cancel upload', exact: true }).click();
-  await p.unroute('**/api/symbian/firmware?slot=archive');
+  await p.unroute('**/api/symbian/firmware?slot=rom');
   await wait(async () => !(await panel.getByTestId('fw-install').isDisabled()), 'upload cancelled');
   assert.equal((await (await fetch(base + '/api/symbian/status')).json()).firmware.devices.length, 0);
+  const installRom = p.waitForRequest('**/api/symbian/firmware/install');
   await panel.getByTestId('fw-install').click();
+  assert.match((await installRom).postDataJSON().rom, /SYM\.ROM$/);
   await panel.getByTestId('device-RM-84').waitFor({ timeout: 30000 });
   // the installed device reads as a phone, not as a code: its name, OS, what it runs and the default marks
   const card = panel.getByTestId('device-RM-84');
@@ -77,7 +78,7 @@ try {
   assert.match(await panel.getByTestId('default-ngage').innerText(), /No installed firmware can run these games|Automatic|not set/);
   await panel.getByText('No installed firmware can run these games.').first().waitFor();
   assert.ok(await defaults.locator('.hint-mark').count() >= 3, 'every platform has a hint');
-  console.log('✔ firmware uploaded and installed from Settings → Symbian');
+  console.log('✔ SYM.ROM uploaded and installed from Settings → Firmware');
   assert.ok(await panel.getByTestId('symbian-diagnostics').isVisible());
   const diag = await (await fetch(base + '/api/symbian/diagnostics')).text();
   assert.match(diag, /devices: Nokia Fake RM-84/);

@@ -21,7 +21,7 @@ import type { Toast } from '../App';
 import { PcmAudio } from '../audio';
 import { InputController } from '../input';
 import { isSkinId, useCatalog, usePrefs } from '../skin/registry';
-import { keypadCut } from '../skin/hitboxes';
+import { keypadCrops } from '../skin/hitboxes';
 import { PhoneSkin } from '../skin/PhoneSkin';
 import type { LoadedSkin } from '../skin/types';
 import { useHeld } from '../skin/useHeld';
@@ -535,11 +535,11 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const keypadRequired = view === 'screen' || skin?.config.input?.externalKeypad === true;
   const external = keypadRequired || showKeypad;
   const keypadReady = loaded && skin !== null && (j2me || !!native.data || !!native.error);
-  const crop = skin && external ? keypadCut(skin) : undefined;
+  const crops = useMemo(() => skin ? keypadCrops(skin) : [], [skin]);
   const skinViews = skin?.config.views;
   const screenView = skinViews?.screen;
   const fullView = skinViews?.full;
-  const keypadLayout = crop !== undefined && fullView && screenView ? {
+  const keypadLayout = crops.length > 0 && fullView && screenView ? {
     '--full-lcd-width-factor': (fullView.width / fullView.height) * (fullView.screenRect.width / screenView.screenRect.width),
   } as CSSProperties : undefined;
   const skinScreen = skin?.config.screen;
@@ -593,9 +593,9 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
 
         <div className={`stage-row${external && keypadReady ? ' with-keypad' : ''}`} style={keypadLayout}>
           {external && keypadReady && (
-            <div className="stage-foot side">
-              {skin && crop !== undefined
-                ? <PhoneSkin skin={skin} view="full" keypadCrop={crop} frame={frameSize} input={input} interactive={live} className="physical-keypad" />
+            <div className={`stage-foot side${crops.length > 1 ? ' split-keypad' : ''}`}>
+              {skin && crops.length > 0
+                ? crops.map(crop => <PhoneSkin key={`${crop.x}:${crop.y}`} skin={skin} view="full" keypadCrop={crop} frame={frameSize} input={input} interactive={live} className="physical-keypad" />)
                 : <Keypad input={input} softLeft={softkeys.left} softRight={softkeys.right} />}
             </div>
           )}

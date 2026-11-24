@@ -48,6 +48,19 @@ try {
   // ---- /phones: what fits, what has firmware, and every body sits exactly on its screen ----
   await p.getByRole('button', { name: 'Start', exact: true }).first().click();
   await wait(async () => (await p.getByTestId('frame-size').innerText()) === '176×208', 'the game picture');
+  await p.getByRole('radio', { name: 'Screen', exact: true }).click();
+  const halves = p.getByTestId('phone-keypad');
+  await halves.nth(1).waitFor();
+  assert.equal(await p.getByTestId('keypad').count(), 0, 'the native N-Gage player uses its real keypad');
+  await p.getByRole('button', { name: 'Lights Out', exact: true }).click();
+  await p.getByTestId('lights-options').click();
+  await p.getByRole('menuitemcheckbox', { name: /On-screen keypad/ }).click();
+  await halves.nth(1).waitFor();
+  await p.waitForFunction(() => [...document.querySelectorAll('.split-keypad .skin-body')].every(img => Number(getComputedStyle(img).opacity) < .25));
+  assert.equal(await p.locator('.stage canvas').evaluate(canvas => getComputedStyle(canvas).opacity), '1');
+  await p.screenshot({ path: 'test-results/ngage-lights-out.png' });
+  await p.keyboard.press('Escape');
+  await p.getByRole('radio', { name: 'Phone', exact: true }).click();
   await p.goto(base + '/phones');
   await p.locator('[data-testid^=phone-card-]').first().waitFor();
   await p.evaluate(async () => { for (const img of document.querySelectorAll('img.skin-body')) { img.loading = 'eager'; try { await img.decode(); } catch {} } });
