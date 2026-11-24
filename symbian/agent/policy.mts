@@ -17,28 +17,27 @@ const DELETE_OK = [/^\/v1\/session$/];
 /** Install types EKA2L1's `/v1/apps` knows. */
 export const INSTALL_TYPES = new Set(['sis', 'ngage', 'ngage2']);
 
-function under(dir, p) {
+function under(dir: string, p: unknown) {
   if (typeof p !== 'string' || !p || p.includes('\0')) return false;
   const rel = path.relative(dir, path.resolve(p));
   return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
-/**
- * @param {{ method: string, pathname: string, body: any, inputDir: string | null }} r
- * @returns {null | { status: number, code: string, message: string }} null = allowed
- */
-export function checkControl(r) {
-  const deny = (message, status = 403, code = 'forbidden') => ({ status, code, message });
-  const lists = { GET: GET_OK, POST: POST_OK, PUT: PUT_OK, DELETE: DELETE_OK };
+interface ControlRequest { method: string; pathname: string; body: unknown; inputDir: string | null }
+
+/** Returns an HTTP denial or null when the request may pass through. */
+export function checkControl(r: ControlRequest) {
+  const deny = (message: string, status = 403, code = 'forbidden') => ({ status, code, message });
+  const lists: Record<string, RegExp[]> = { GET: GET_OK, POST: POST_OK, PUT: PUT_OK, DELETE: DELETE_OK };
   const list = lists[r.method];
   if (r.method === 'POST' && r.pathname === '/v1/apps') {
     if (!r.inputDir) return deny('no instance is running', 409, 'no_instance');
-    const b = r.body;
-    if (!b || typeof b !== 'object' || Array.isArray(b)) return deny('a JSON object is required', 400, 'bad_request');
-    const paths = Array.isArray(b.paths) ? b.paths : [b.path];
+    if (!r.body || typeof r.body !== 'object' || Array.isArray(r.body)) return deny('a JSON object is required', 400, 'bad_request');
+    const b = r.body as { path?: unknown; paths?: unknown; type?: unknown };
+    const paths: unknown[] = Array.isArray(b.paths) ? b.paths : [b.path];
     if (!paths.length || paths.length > 8) return deny('one to eight paths', 400, 'bad_request');
     for (const p of paths) if (!under(r.inputDir, p)) return deny('only files uploaded to this instance can be installed', 403, 'path_not_allowed');
-    if (b.type !== undefined && !INSTALL_TYPES.has(b.type)) return deny('unknown install type', 400, 'bad_request');
+    if (b.type !== undefined && (typeof b.type !== 'string' || !INSTALL_TYPES.has(b.type))) return deny('unknown install type', 400, 'bad_request');
     return null;
   }
   if (!list || !list.some((re) => re.test(r.pathname))) return deny(`${r.method} ${r.pathname} is not available through the MGO service`);
@@ -46,7 +45,7 @@ export function checkControl(r) {
 }
 
 /** Names of uploaded files: a plain file name, nothing else. */
-export function safeName(name) {
+export function safeName(name: unknown) {
   if (typeof name !== 'string') return null;
   const n = name.normalize('NFKC');
   if (!n || n.length > 120 || /[\\/\0:*?"<>|]/.test(n) || n.startsWith('.') || n.includes('..')) return null;

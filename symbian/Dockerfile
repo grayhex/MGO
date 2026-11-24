@@ -54,7 +54,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && mkdir -p /data /symbian-auth /opt/eka2l1 /opt/mgo-symbian && chown mgo:mgo /data /symbian-auth
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=eka-build /out/ /opt/eka2l1/
-COPY symbian/agent/agent.mjs symbian/agent/policy.mjs symbian/agent/factory.mjs symbian/agent/audio.mjs symbian/agent/diagnostics.mjs /opt/mgo-symbian/
+COPY symbian/agent/agent.mts symbian/agent/policy.mts symbian/agent/factory.mts symbian/agent/audio.mts symbian/agent/diagnostics.mts /opt/mgo-symbian/
 COPY symbian/entrypoint.sh /opt/mgo-symbian/entrypoint.sh
 
 ENV EKA2L1_BIN=/opt/eka2l1/eka2l1_qt \

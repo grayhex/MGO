@@ -31,7 +31,7 @@ import { KeyMapDialog } from './KeyMapDialog';
 import { Keypad } from './Keypad';
 import { Modal } from './Modal';
 import { Hint, Meter, Panel, Seg, Spark, Switch } from './ui';
-import { audioSettings, buzz, controlSettings, getServerSettings } from '../serverSettings';
+import { audioSettings, buzz, controlSettings, getServerSettings, useServerSettings } from '../serverSettings';
 import { betterPhone, type PhoneOption } from '../betterPhone';
 import { nextRotation, unrotatePoint, type Rotation } from '../skin/geometry';
 import { useRotation } from '../skin/rotation';
@@ -39,6 +39,14 @@ import { useRotation } from '../skin/rotation';
 type Conn = 'connecting' | 'open' | 'reconnecting' | 'closed' | 'idle';
 
 const STATE_BADGE: Record<string, string> = { running: 'prod', starting: 'dev', stopping: 'dev', failed: 'danger', exited: '', idle: '' };
+const KEYPAD_WIDTHS = ['100', '150', '200'] as const;
+type KeypadWidth = typeof KEYPAD_WIDTHS[number];
+function getControlPreference(key: string): string | null {
+  try { return localStorage.getItem(`mgo.player.${key}`); } catch { return null; }
+}
+function saveControlPreference(key: string, value: string): void {
+  try { localStorage.setItem(`mgo.player.${key}`, value); } catch { /* browser storage is optional */ }
+}
 
 export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, health }: { gameId: string; autoStart: boolean; onAutoStartConsumed: () => void; toast: (k: Toast['kind'], t: string) => void; onExit: () => void; health: HealthStatus | null }) {
   const developer=useDeveloperMode();
@@ -80,7 +88,17 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const [prefs, setPrefs] = usePrefs();
   const [smooth, setSmooth] = useState(false);
   const [rotation, setRotation] = useRotation(gameId);
-  const [showKeypad, setShowKeypad] = useState(() => { const k = controlSettings().keypad; return k === 'always' || (k === 'auto' && matchMedia('(pointer: coarse)').matches); });
+  const controls = useServerSettings()?.settings.controls ?? controlSettings();
+  const [keypadOverride, setKeypadOverride] = useState<boolean | null>(() => {
+    const saved = getControlPreference('keypad');
+    return saved === 'on' ? true : saved === 'off' ? false : null;
+  });
+  const [keypadWidth, setKeypadWidth] = useState<KeypadWidth>(() => {
+    const saved = getControlPreference('keypad-width');
+    return saved === '100' || saved === '150' ? saved : '200';
+  });
+  const [gamepadVibration, setGamepadVibration] = useState(() => getControlPreference('gamepad-vibration') !== 'off');
+  const vibrationEnabled = useRef(gamepadVibration); vibrationEnabled.current = gamepadVibration;
   const [keymap, setKeymap] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -192,7 +210,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
       case 'state':
         setState(ev.state);
         if (ev.state === 'exited' || ev.state === 'failed') {
-          input.releaseAll(); replayer.stop(); setTextArea(null); setPauseInfo(null); setSpeed(1);
+          input.releaseAll(); gamepad.current?.stopRumble(); replayer.stop(); setTextArea(null); setPauseInfo(null); setSpeed(1);
           if (ev.state === 'failed') toast('error', translateUI('Emulator stopped: {detail}', {detail:ev.detail ?? translateUI('unknown error')}));
         }
         break;
@@ -205,9 +223,12 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
       case 'menu-close': setMenu(null); break;
       case 'text': setTextArea(ev.area); break;
       case 'speed': setSpeed(ev.modifier); break;
-      case 'paused': setPauseInfo({ on: ev.on, reason: ev.reason }); break;
+      case 'paused': setPauseInfo({ on: ev.on, reason: ev.reason }); if (ev.on) gamepad.current?.stopRumble(); break;
       case 'permission': setPerm(ev); break;
-      case 'vibrate': if (ev.ms > 0) buzz(Math.min(ev.ms, 2000)); else navigator.vibrate?.(0); break;
+      case 'vibrate':
+        if (ev.ms > 0) buzz(Math.min(ev.ms, 2000)); else navigator.vibrate?.(0);
+        if (vibrationEnabled.current && controlSettings().gamepad && sessionRef.current?.backend === 'kemulator') gamepad.current?.rumble(ev.ms);
+        break;
       case 'displayable': break; // the Bridge draws every screen into the framebuffer (patch 0006): the kind needs no UI
       case 'url': setLink(ev.url); break;
       default: break;
@@ -218,6 +239,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     // Native launch monitoring can attach before the POST response arrives.
     // Keep that viewer: reconnecting the same session releases held inputs.
     if (sessionRef.current?.id === s.id && streamRef.current) return;
+    gamepad.current?.stopRumble();
     streamRef.current?.close();
     sessionRef.current = s;
     setSession(s); if (s.failure) setFailure({ failure: s.failure, sessionId: s.id }); setSpeed(s.speed ?? 1); setState(s.state); setFrameSize({ w: s.width, h: s.height }); setLog(s.logTail);
@@ -233,7 +255,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
       onAudio: (pcm) => audio.push(pcm),
       onConnection: (cs) => {
         setConn(cs);
-        if(cs !== 'open') input.releaseAll();
+        if(cs !== 'open') { input.releaseAll(); gamepad.current?.stopRumble(); }
         if(cs === 'closed') api.session(s.id).then(actual=>setState(actual.state),()=>{setState('exited');toast('info','The previous session ended or the service restarted. Start the game again; only game-written RMS can be restored.');});
       },
     });
@@ -302,13 +324,13 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     // the pressed buttons are shown on the on-screen keypad (it follows every input source); the state is only needed while the mapping dialog is open
     gp.onState = (s) => { if (!padMenuOpen.current) return; const serialized=JSON.stringify(s);if(serialized!==previous){previous=serialized;setPadState(s);} };
     gp.onUi = (action) => uiRef.current(action);
-    if (controlSettings().gamepad) gp.start();
+    if (controls.gamepad) gp.start();
     return () => {
       window.removeEventListener('keydown', input.onKeyDown); window.removeEventListener('keyup', input.onKeyUp);
       window.removeEventListener('blur', rel); document.removeEventListener('visibilitychange', vis);
       gp.stop(); input.releaseAll();
     };
-  }, [input]);
+  }, [input, gameId, controls.gamepad]);
   const uiRef = useRef<(action: PadAction) => void>(() => undefined);
   uiRef.current = (action) => {
     wake();
@@ -532,16 +554,21 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const diag = session?.diagnostics ?? [];
   const logDiag = log.filter((l) => l.startsWith('⚠'));
   const res_ = session?.resources ?? null;
-  const keypadRequired = view === 'screen' || skin?.config.input?.externalKeypad === true;
-  const external = keypadRequired || showKeypad;
+  const keypadDefault = controls.keypad === 'always' || (controls.keypad === 'auto'
+    && (view === 'screen' || skin?.config.input?.externalKeypad === true || matchMedia('(pointer: coarse)').matches));
+  const showKeypad = keypadOverride ?? keypadDefault;
+  const external = lightsActive ? touchControls : showKeypad;
   const keypadReady = loaded && skin !== null && (j2me || !!native.data || !!native.error);
   const crops = useMemo(() => skin ? keypadCrops(skin) : [], [skin]);
   const skinViews = skin?.config.views;
   const screenView = skinViews?.screen;
   const fullView = skinViews?.full;
-  const keypadLayout = crops.length > 0 && fullView && screenView ? {
-    '--full-lcd-width-factor': (fullView.width / fullView.height) * (fullView.screenRect.width / screenView.screenRect.width),
-  } as CSSProperties : undefined;
+  const keypadLayout = {
+    '--keypad-scale': Number(keypadWidth) / 200,
+    ...(crops.length > 0 && fullView && screenView ? {
+      '--full-lcd-width-factor': (fullView.width / fullView.height) * (fullView.screenRect.width / screenView.screenRect.width),
+    } : {}),
+  } as CSSProperties;
   const skinScreen = skin?.config.screen;
 
   const overlay = !running ? (
@@ -740,13 +767,23 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
 
         <Panel icon="gamepad" title={translateUI("Controls")}>
           <div className="control-line">
-            <Switch checked={external} disabled={keypadRequired} onChange={setShowKeypad}>{translateUI("On-screen keypad")}</Switch>
+            <Switch checked={showKeypad} onChange={enabled => { setKeypadOverride(enabled); saveControlPreference('keypad', enabled ? 'on' : 'off'); }}>{translateUI("On-screen keypad")}</Switch>
             <div className="btn-row">
               <Hint text={`${translateUI("Arrows · Enter = OK · Q/W = soft keys · 0–9 · X = * · Z = #.")}${pad ? ` ${pad.slice(0, 28)}` : ''}`} />
               <button className="btn sm icon" type="button" title={translateUI("Remap keyboard")} aria-label={translateUI("Remap keyboard")} onClick={() => setKeymap(true)}><Icon name="keypad" /></button>
               <button className="btn sm icon" type="button" title={translateUI("Gamepad settings / UI navigation")} aria-label={translateUI("Gamepad settings / UI navigation")} aria-expanded={padMenu} onClick={() => { input.releaseAll(); setPadMenu(v => !v); }}><Icon name="gamepad" /></button>
             </div>
           </div>
+          {showKeypad && <div className="control-line">
+            <span className="label-caps">{translateUI('Keypad width')}</span>
+            <Seg className="player-seg" label="Keypad width" value={keypadWidth}
+              options={KEYPAD_WIDTHS.map(value => ({ value, label: `${value}%` }))}
+              onChange={value => { setKeypadWidth(value); saveControlPreference('keypad-width', value); }} />
+          </div>}
+          {game && j2me && <Switch checked={gamepadVibration} disabled={!controls.gamepad} onChange={enabled => {
+            setGamepadVibration(enabled); saveControlPreference('gamepad-vibration', enabled ? 'on' : 'off');
+            if (!enabled) gamepad.current?.stopRumble();
+          }}>{translateUI('Gamepad vibration')}</Switch>}
           {padMenu && <GamepadSettings gameId={gameId} poller={gamepad.current} state={padState} />}
         </Panel>
 

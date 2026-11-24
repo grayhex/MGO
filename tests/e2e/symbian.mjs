@@ -18,7 +18,7 @@ const token = 'e2e-token-0123456789abcdef';
 const agentPort = await free(), port = await free(), control = await free();
 const base = `http://127.0.0.1:${port}`;
 const fx = path.join(process.cwd(), 'tests/fixtures/fake-eka2l1');
-const agent = spawn(process.execPath, ['symbian/agent/agent.mjs'], { env: { PATH: process.env.PATH, EKA2L1_ENV_PASSTHROUGH: 'FAKE_LAUNCH_GATE', FAKE_LAUNCH_GATE: launchGate, AGENT_TOKEN: token, AGENT_PORT: String(agentPort), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(control), DATA_DIR: path.join(dir, 'agent'), EKA2L1_BIN: path.join(fx, 'fake-eka2l1.mjs'), AUDIO_CMD: `${process.execPath} ${path.join(fx, 'pcm.mjs')}` }, stdio: 'ignore' });
+const agent = spawn(process.execPath, ['--experimental-strip-types', 'symbian/agent/agent.mts'], { env: { PATH: process.env.PATH, EKA2L1_ENV_PASSTHROUGH: 'FAKE_LAUNCH_GATE', FAKE_LAUNCH_GATE: launchGate, AGENT_TOKEN: token, AGENT_PORT: String(agentPort), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(control), DATA_DIR: path.join(dir, 'agent'), EKA2L1_BIN: path.join(fx, 'fake-eka2l1.mjs'), AUDIO_CMD: `${process.execPath} ${path.join(fx, 'pcm.mjs')}` }, stdio: 'ignore' });
 mkdirSync(path.join(dir, 'app'));
 const server = spawn('node', ['apps/api/dist/server.js'], { env: { ...process.env, PORT: String(port), DATA_DIR: path.join(dir, 'app'), HOST: '127.0.0.1', LOG_LEVEL: 'warn', SYMBIAN_AGENT_URL: `http://127.0.0.1:${agentPort}`, SYMBIAN_AGENT_TOKEN: token, KEM_DIR: path.join(dir, 'no-java-runtime') }, stdio: ['ignore', 'inherit', 'inherit'] });
 let browser;

@@ -36,20 +36,38 @@ export class GamepadPoller {
   private active = new Map<string, PadAction>();
   private blocked = new Set<string>();
   private suspended = false;
+  private vibration?: { index: number; id: string; actuator: GamepadHapticActuator };
   profile: PadProfile;
   uiMode = false;
   onUi?: (action: PadAction) => void;
   onState?: (state: PadState) => void;
   capture?: (binding: PadBinding) => void;
   constructor(private input: InputController, private onName?: (name: string | null) => void, profile = loadPadProfile()) { this.profile = profile; }
-  private blur = () => { this.suspended = true; for(const source of this.active.keys())this.blocked.add(source); this.release(); };
+  private blur = () => { this.suspended = true; this.stopRumble(); for(const source of this.active.keys())this.blocked.add(source); this.release(); };
   private focus = () => { this.suspended = false; };
   private visibility = () => { if (document.hidden) this.blur(); else this.focus(); };
   release(): void { for (const source of this.active.keys()) this.input.release(source); this.active.clear(); }
   setProfile(profile: PadProfile): void { this.release(); this.profile = sanitizeProfile(profile); }
+  rumble(ms: number): void {
+    if (!Number.isFinite(ms) || ms <= 0) { this.stopRumble(); return; }
+    if (this.suspended || document.hidden || !document.hasFocus()) return;
+    const pad = [...(navigator.getGamepads?.() ?? [])].find(p => p?.connected && typeof p.vibrationActuator?.playEffect === 'function');
+    if (!pad) return;
+    if (this.vibration?.index !== pad.index || this.vibration.id !== pad.id) this.stopRumble();
+    const actuator = pad.vibrationActuator;
+    this.vibration = { index: pad.index, id: pad.id, actuator };
+    // Browsers can reject haptics when the controller is disconnected or the document loses focus.
+    void actuator.playEffect('dual-rumble', { duration: Math.min(ms, 2000), strongMagnitude: .7, weakMagnitude: .45 }).catch(() => undefined);
+  }
+  stopRumble(): void {
+    const actuator = this.vibration?.actuator;
+    this.vibration = undefined;
+    void actuator?.reset?.().catch(() => undefined);
+  }
   tick(pads: readonly (Gamepad | null)[], focused = true): void {
     const capturing=!!this.capture; const now = new Map<string, PadAction>(); const present = new Set<string>();
     const controllers = pads.filter((p): p is Gamepad => !!p?.connected).map((p) => ({ id:p.id,index:p.index,mapping:p.mapping }));
+    if (this.vibration && (!focused || !controllers.some(p => p.index === this.vibration?.index && p.id === this.vibration.id))) this.stopRumble();
     this.onName?.(controllers[0]?.id ?? null);
     for (const p of pads) {
       if (!p?.connected) continue;
@@ -81,5 +99,5 @@ export class GamepadPoller {
     const run=()=>{ this.tick(navigator.getGamepads?.() ?? [], document.hasFocus() && !document.hidden);this.raf=requestAnimationFrame(run); };
     this.raf=requestAnimationFrame(run);
   }
-  stop(): void { cancelAnimationFrame(this.raf);window.removeEventListener('blur',this.blur);window.removeEventListener('focus',this.focus);document.removeEventListener('visibilitychange',this.visibility);this.release(); }
+  stop(): void { cancelAnimationFrame(this.raf);window.removeEventListener('blur',this.blur);window.removeEventListener('focus',this.focus);document.removeEventListener('visibilitychange',this.visibility);this.stopRumble();this.release(); }
 }

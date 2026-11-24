@@ -1,10 +1,16 @@
 import { t as translateUI } from '../i18n';
 import type { Action, InputController } from '../input';
+import { useEffect, useRef } from 'react';
 import { buzz } from '../serverSettings';
 import { useHeld } from '../skin/useHeld';
 
 function Key({ input, held, a, label, sub, cls = '' }: { input: InputController; held: Set<Action>; a: Action; label: string; sub?: string; cls?: string }) {
-  const release = (id: number) => input.release(`touch:${a}:${id}`);
+  const active = useRef(new Set<number>());
+  useEffect(() => {
+    const pointers = active.current;
+    return () => { for (const id of pointers) input.release(`touch:${a}:${id}`); pointers.clear(); };
+  }, [input, a]);
+  const release = (id: number) => { active.current.delete(id); input.release(`touch:${a}:${id}`); };
   return (
     <button
       type="button"
@@ -13,6 +19,7 @@ function Key({ input, held, a, label, sub, cls = '' }: { input: InputController;
       onPointerDown={(e) => {
         e.preventDefault();
         try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic or already-released pointer */ }
+        active.current.add(e.pointerId);
         input.press(`touch:${a}:${e.pointerId}`, a);
         buzz(8);
       }}

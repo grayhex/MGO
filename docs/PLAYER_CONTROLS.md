@@ -25,6 +25,8 @@ Automatic mode applies skinId → device + width/height + layout on the server, 
 
 Screen view shows the original handset controls alongside the display. On N-Gage Classic and QD the directional controls sit above the numeric keypad in the left column.
 
+Use **Controls → On-screen keypad** to show or hide the keypad in Phone and Screen views. Pick 100%, 150% or 200% under **Keypad width**. The size applies to Lights Out too. The player remembers these choices in the browser.
+
 Use the moon button or **Alt+L** to toggle Lights Out. **Escape** exits. The player hides the side panels and dims the handset and onscreen controls. The LCD stays at full brightness. Moving or touching the pointer reveals the menu for the touch controls, fullscreen and exit. The presentation preference is saved in the browser and respects reduced motion.
 
 ## Gamepads
@@ -36,6 +38,8 @@ Open **Gamepad settings / UI navigation** or press default Start (button 9). Inp
 Default standard controls: D-pad/left stick directions, face bottom = Fire, face left/right = soft keys, face top = 5, shoulders = */#. Start enters/exits player UI navigation; Back exits menus/Lights Out. In navigation mode directions move focus, Fire activates; left/right on selects change the value. Every Java ME digit/action plus UI lights/fullscreen/menu/back can be explicitly bound. Connected IDs and held actions are shown, and shared keypad/PhoneSkin feedback uses InputController.
 
 Focus loss/hidden page, disconnect and remapping release only relevant sources. Unfocused/disabled held inputs are blocked until neutral before rearming. Multiple controllers, keyboard, skin and touches can hold the same action without releasing one another.
+
+**Controls → Gamepad vibration** sends Java ME vibration requests to a connected controller that exposes rumble in the browser. The toggle is saved in the browser. Rumble stops on pause, exit or focus loss.
 
 ## Validation
 

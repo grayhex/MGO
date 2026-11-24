@@ -52,7 +52,7 @@ describe('several devices and the inbox, against the agent with a fake EKA2L1', 
     mkdirSync(inbox);
     const port = await free();
     base = `http://127.0.0.1:${port}`;
-    proc = spawn(process.execPath, [path.join(root, 'symbian/agent/agent.mjs')], {
+    proc = spawn(process.execPath, ['--experimental-strip-types', path.join(root, 'symbian/agent/agent.mts')], {
       env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: TOKEN, AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(await free()), DATA_DIR: path.join(data, 'd'), INBOX_DIR: inbox, EKA2L1_BIN: path.join(root, 'tests/fixtures/fake-eka2l1/fake-eka2l1.mjs'), AUDIO_CMD: `${process.execPath} ${path.join(root, 'tests/fixtures/fake-eka2l1/pcm.mjs')}` },
       stdio: 'ignore',
     });
@@ -156,7 +156,7 @@ describe('N-Gage 1.0 card upload', () => {
   before(async () => {
     data = mkdtempSync(path.join(tmpdir(), 'mgo-card-'));
     const port = await free();
-    proc = spawn(process.execPath, [path.join(root, 'symbian/agent/agent.mjs')], { env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: TOKEN, AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(await free()), DATA_DIR: data, EKA2L1_BIN: path.join(root, 'tests/fixtures/fake-eka2l1/fake-eka2l1.mjs') }, stdio: 'ignore' });
+    proc = spawn(process.execPath, ['--experimental-strip-types', path.join(root, 'symbian/agent/agent.mts')], { env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: TOKEN, AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(await free()), DATA_DIR: data, EKA2L1_BIN: path.join(root, 'tests/fixtures/fake-eka2l1/fake-eka2l1.mjs') }, stdio: 'ignore' });
     const base = `http://127.0.0.1:${port}`;
     for (let i = 0; i < 100; i++) { try { if ((await fetch(`${base}/agent/ping`)).ok) break; } catch { /* wait */ } await new Promise((r) => setTimeout(r, 100)); }
     agent = new AgentClient({ baseUrl: base, token: TOKEN });
@@ -196,7 +196,7 @@ describe('free space guard', () => {
     data = mkdtempSync(path.join(tmpdir(), 'mgo-disk-'));
     const port = await free();
     base = `http://127.0.0.1:${port}`;
-    proc = spawn(process.execPath, [path.join(root, 'symbian/agent/agent.mjs')], { env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: TOKEN, AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(await free()), DATA_DIR: data, EKA2L1_BIN: path.join(root, 'tests/fixtures/fake-eka2l1/fake-eka2l1.mjs'), MAX_FIRMWARE_BYTES: String(1e15), INSTALL_SPACE_FACTOR: '1e12' }, stdio: 'ignore' });
+    proc = spawn(process.execPath, ['--experimental-strip-types', path.join(root, 'symbian/agent/agent.mts')], { env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: TOKEN, AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(await free()), DATA_DIR: data, EKA2L1_BIN: path.join(root, 'tests/fixtures/fake-eka2l1/fake-eka2l1.mjs'), MAX_FIRMWARE_BYTES: String(1e15), INSTALL_SPACE_FACTOR: '1e12' }, stdio: 'ignore' });
     for (let i = 0; i < 100; i++) { try { if ((await fetch(`${base}/agent/ping`)).ok) break; } catch { /* wait */ } await new Promise((r) => setTimeout(r, 100)); }
     agent = new AgentClient({ baseUrl: base, token: TOKEN });
   });
@@ -234,7 +234,7 @@ describe('shared secret in a file', () => {
     data = mkdtempSync(path.join(tmpdir(), 'mgo-tok-'));
     const port = await free();
     base = `http://127.0.0.1:${port}`;
-    proc = spawn(process.execPath, [path.join(root, 'symbian/agent/agent.mjs')], { env: { PATH: process.env.PATH ?? '', AGENT_TOKEN_FILE: path.join(data, 'secrets', 'symbian.token'), AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(await free()), DATA_DIR: path.join(data, 'd'), EKA2L1_BIN: path.join(root, 'tests/fixtures/fake-eka2l1/fake-eka2l1.mjs') }, stdio: 'ignore' });
+    proc = spawn(process.execPath, ['--experimental-strip-types', path.join(root, 'symbian/agent/agent.mts')], { env: { PATH: process.env.PATH ?? '', AGENT_TOKEN_FILE: path.join(data, 'secrets', 'symbian.token'), AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(await free()), DATA_DIR: path.join(data, 'd'), EKA2L1_BIN: path.join(root, 'tests/fixtures/fake-eka2l1/fake-eka2l1.mjs') }, stdio: 'ignore' });
     for (let i = 0; i < 100; i++) { try { if ((await fetch(`${base}/agent/ping`)).ok) break; } catch { /* wait */ } await new Promise((r) => setTimeout(r, 100)); }
   });
   after(async () => { proc?.kill('SIGTERM'); await new Promise((r) => setTimeout(r, 300)); rmSync(data, { recursive: true, force: true }); });

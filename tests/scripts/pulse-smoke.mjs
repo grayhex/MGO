@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
-import { audioEnvironment } from '/opt/mgo-symbian/audio.mjs';
+import { audioEnvironment } from '/opt/mgo-symbian/audio.mts';
 const env = audioEnvironment(process.env);
 execFileSync('pactl', ['info'], { env, stdio: 'ignore' });
 mkdirSync('/tmp/mgo-audio-other-home', { recursive: true });

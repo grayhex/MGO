@@ -162,7 +162,7 @@ export class JavaCatalog {
   enrich(game: GameMeta): GameMeta {
     if ((game.platform ?? 'j2me') !== 'j2me') return game;
     const data = this.stored(game.groupKey);
-    if (data) game.javaCatalog = { genres: data.genres, year: data.year, ...(data.partial ? { partial: true } : {}) };
+    if (data) game.javaCatalog = { genres: data.genres, year: data.year, screenshots: data.images.length, ...(data.partial ? { partial: true } : {}) };
     // A title's image dimensions can describe a different port. Use a size hint from an exact binary match only.
     if (!game.nativeResolution && game.archiveMatch?.state === 'exact' && game.archiveMatch.build?.sha256 === game.sha256) {
       const build = game.archiveMatch.build;

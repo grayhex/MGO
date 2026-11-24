@@ -12,13 +12,11 @@ import { Eka2l1Adapter } from './adapter.js';
 import { ekaKeyName } from './keymap.js';
 import { decodePng } from './png.js';
 import type { FrameMsg } from '../emulator.js';
-// @ts-expect-error plain ESM modules without types: the policy of the service and the fake emulator's PNG encoder
-import { checkControl, safeName } from '../../../../symbian/agent/policy.mjs';
-// @ts-expect-error see above
+// @ts-expect-error plain ESM fixture without types
 import { encodePng } from '../../../../tests/fixtures/fake-eka2l1/png.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
-const AGENT = path.join(root, 'symbian/agent/agent.mjs');
+const AGENT = path.join(root, 'symbian/agent/agent.mts');
 const FAKE = path.join(root, 'tests/fixtures/fake-eka2l1/fake-eka2l1.mjs');
 const PCM = path.join(root, 'tests/fixtures/fake-eka2l1/pcm.mjs');
 
@@ -69,45 +67,6 @@ describe('PNG decoder', () => {
   });
 });
 
-describe('control policy (what a client may ask EKA2L1)', () => {
-  const inputDir = '/data/run/abc/in';
-  const ok = (method: string, pathname: string, body: unknown = null) => checkControl({ method, pathname, body, inputDir }) === null;
-  it('allows what the adapter needs', () => {
-    assert.ok(ok('GET', '/v1/status'));
-    assert.ok(ok('GET', '/v1/screenshot'));
-    assert.ok(ok('POST', '/v1/input/key', {}));
-    assert.ok(ok('POST', '/v1/apps/0x2000A001/launch', {}));
-    assert.ok(ok('POST', '/v1/devices/RM-84/boot', {}));
-    assert.ok(ok('DELETE', '/v1/session'));
-  });
-  it('blocks host file access, configuration, card management and device install/delete', () => {
-    assert.ok(!ok('GET', '/v1/files'));
-    assert.ok(!ok('PUT', '/v1/files'));
-    assert.ok(!ok('DELETE', '/v1/files'));
-    assert.ok(!ok('GET', '/v1/config'));
-    assert.ok(!ok('PATCH', '/v1/config'));
-    assert.ok(!ok('PUT', '/v1/card'));
-    assert.ok(!ok('POST', '/v1/devices', {}));
-    assert.ok(!ok('DELETE', '/v1/devices/RM-84'));
-    assert.ok(!ok('DELETE', '/v1/apps/0x2000A001'));
-    assert.ok(!ok('GET', '/v2/anything'));
-  });
-  it('installs only from the instance upload directory, with a known type', () => {
-    assert.ok(ok('POST', '/v1/apps', { path: `${inputDir}/game.sis`, type: 'sis' }));
-    assert.ok(ok('POST', '/v1/apps', { path: `${inputDir}/card`, type: 'ngage' }));
-    assert.ok(!ok('POST', '/v1/apps', { path: '/etc/passwd', type: 'sis' }));
-    assert.ok(!ok('POST', '/v1/apps', { path: `${inputDir}/../../../etc/passwd`, type: 'sis' }));
-    assert.ok(!ok('POST', '/v1/apps', { path: inputDir, type: 'sis' }));
-    assert.ok(!ok('POST', '/v1/apps', { paths: [`${inputDir}/a.sis`, '/root/x.sis'], type: 'sis' }));
-    assert.ok(!ok('POST', '/v1/apps', { path: `${inputDir}/a.sis`, type: 'host' }));
-    assert.ok(checkControl({ method: 'POST', pathname: '/v1/apps', body: { path: `${inputDir}/a.sis` }, inputDir: null }));
-  });
-  it('accepts only plain file names for uploads', () => {
-    assert.equal(safeName('Game (1).sis'), 'Game (1).sis');
-    for (const bad of ['../x.sis', 'a/b.sis', '.hidden', 'a\\b', '', 'x'.repeat(200), 'a\0b']) assert.equal(safeName(bad), null, bad);
-  });
-});
-
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The mgo-symbian agent end to end, with the FAKE EKA2L1 behind it. This checks MGO's side only: the agent's auth, upload, firmware,
 // per-game saves, allow-list and the adapter (frames, sound, keys, touch). It says nothing about the real emulator.
@@ -138,7 +97,7 @@ describe('mgo-symbian agent with a fake EKA2L1', () => {
     const port = await freePort();
     const control = await freePort();
     base = `http://127.0.0.1:${port}`;
-    proc = spawn(process.execPath, [AGENT], {
+    proc = spawn(process.execPath, ['--experimental-strip-types', AGENT], {
       env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: token, AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(control), DATA_DIR: data, EKA2L1_BIN: FAKE, AUDIO_CMD: `${process.execPath} ${PCM}`, FAKE_INPUT_LOG: inputLog, EKA2L1_ENV_PASSTHROUGH: 'FAKE_INPUT_LOG', MAX_PACKAGE_BYTES: String(1024 * 1024) },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -381,7 +340,7 @@ describe('agent with the real EKA2L1 (no firmware)', { skip: realBin ? false : '
     await new Promise((r) => setTimeout(r, 1500));
     const port = await freePort(), control = await freePort();
     base = `http://127.0.0.1:${port}`;
-    proc = spawn(process.execPath, [AGENT], { env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: token, AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(control), DATA_DIR: path.join(data, 'd'), EKA2L1_BIN: realBin!, DISPLAY: ':96', XDG_RUNTIME_DIR: rt, QT_QPA_PLATFORM: 'xcb' }, stdio: 'ignore' });
+    proc = spawn(process.execPath, ['--experimental-strip-types', AGENT], { env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: token, AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(control), DATA_DIR: path.join(data, 'd'), EKA2L1_BIN: realBin!, DISPLAY: ':96', XDG_RUNTIME_DIR: rt, QT_QPA_PLATFORM: 'xcb' }, stdio: 'ignore' });
     for (let i = 0; i < 100; i++) { try { if ((await fetch(`${base}/agent/ping`)).ok) break; } catch { /* wait */ } await new Promise((r) => setTimeout(r, 100)); }
     agent = new AgentClient({ baseUrl: base, token });
   });

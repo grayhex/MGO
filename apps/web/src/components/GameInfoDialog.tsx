@@ -9,6 +9,7 @@ import { archiveMatchLabel } from './ArchiveSettings';
 import { PlatformTag } from './PlatformTag';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
+import { JavaCover } from './JavaCover';
 
 export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onChanged }: {
   game: GameMeta; toast: (k: 'info' | 'error', text: string) => void;
@@ -26,22 +27,22 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
   const [busy, setBusy] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [change, setChange] = useState(false);
-  const [selected, setSelected] = useState(0);
-  const [broken, setBroken] = useState<number[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [broken, setBroken] = useState<string[]>([]);
   useEffect(() => {
     let alive = true;
     void api.gameInfo(game.id).then(result => { if (alive) setInfo(result); }, () => undefined);
     if (java) void api.javaCatalogInfo(game.id).then(result => { if (alive) setCatalog(result.info); }, () => undefined);
     if (!game.fileName) void api.gameMeta(game.id).then(meta => { if (alive) setFilename(meta.fileName); }, () => undefined);
     return () => { alive = false; };
-  }, [game.id, game.fileName, java]);
+  }, [game.id, game.fileName, game.info?.hasCover, game.info?.screenshots, game.javaCatalog?.screenshots, java]);
 
   const lookupCatalog = async () => {
     setCatalogBusy(true); setCatalogEmpty(false);
     try {
       const { info: result, resolution: knownResolution } = await api.javaCatalogLookup(game.id);
       if (knownResolution) setResolution(knownResolution);
-      if (result) { setCatalog(result); setSelected(0); setBroken([]); onChanged(); }
+      if (result) { setCatalog(result); setSelected(null); setBroken([]); onChanged(); }
       else setCatalogEmpty(true);
     } catch (error) { toast('error', t((error as Error).message)); }
     finally { setCatalogBusy(false); }
@@ -49,7 +50,7 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
 
   const act = async (f: () => Promise<GameInfo>) => {
     setBusy(true);
-    try { setInfo(await f()); setSelected(0); setBroken([]); onChanged(); }
+    try { setInfo(await f()); setSelected(null); setBroken([]); onChanged(); }
     catch (e) { toast('error', (e as Error).message); }
     finally { setBusy(false); }
   };
@@ -62,9 +63,13 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
 
   const has = info?.status === 'matched' || info?.status === 'manual';
   const mobyShots = has ? info?.screenshots ?? 0 : 0;
-  const shots = Array.from({ length: mobyShots || catalog?.screenshots || 0 }, (_, index) => index + 1).filter(index => !broken.includes(index));
-  const shotUrl = (index: number) => mobyShots ? api.shotUrl(game.id, index) : api.javaCatalogShotUrl(game.id, index);
-  const visible = shots.includes(selected) ? selected : shots[0];
+  const shots = [
+    ...Array.from({ length: mobyShots }, (_, index) => api.shotUrl(game.id, index + 1)),
+    ...Array.from({ length: catalog?.screenshots ?? 0 }, (_, index) => api.javaCatalogShotUrl(game.id, index + 1)),
+  ].filter(url => !broken.includes(url));
+  const shotIndex = Math.max(0, selected ? shots.indexOf(selected) : 0);
+  const visible = shots[shotIndex];
+  const stepShot = (step: number) => setSelected(shots[(shotIndex + step + shots.length) % shots.length] ?? null);
   const ngage = game.ngageInfo;
   const played = game.playedResolution;
   const fields: [string, string | undefined][] = [
@@ -82,12 +87,15 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
     <div className="game-info-layout">
       <section className="game-media" aria-label={t('Screenshots')}>
         <div className="game-shot">
-          {visible ? <a href={shotUrl(visible)} target="_blank" rel="noreferrer"><img src={shotUrl(visible)} alt={t('Screenshot {n}', { n: visible })} onError={() => setBroken(failed => [...failed, visible])} /></a>
+          {visible ? <a href={visible} target="_blank" rel="noreferrer"><img src={visible} alt={t('Screenshot {n}', { n: shotIndex + 1 })} onError={() => setBroken(failed => [...failed, visible])} /></a>
+            : java ? <JavaCover game={game} coverOnly hasCover={info?.hasCover ?? game.info?.hasCover} />
             : <img className="game-shot-placeholder" src="/graphics/brand/mark.svg" alt={t('No screenshots yet')} />}
+          {shots.length > 1 && <>
+            <button type="button" className="game-shot-arrow previous" aria-label={t('Previous screenshot')} onClick={() => stepShot(-1)}><Icon name="back" /></button>
+            <button type="button" className="game-shot-arrow next" aria-label={t('Next screenshot')} onClick={() => stepShot(1)}><Icon name="back" /></button>
+            <span className="game-shot-count" aria-live="polite" aria-label={t('Screenshot {current} of {total}', { current: shotIndex + 1, total: shots.length })}>{shotIndex + 1} / {shots.length}</span>
+          </>}
         </div>
-        {shots.length > 1 && <div className="game-shot-strip">{shots.map(index => <button type="button" key={index} aria-label={t('Screenshot {n}', { n: index })} aria-pressed={visible === index} onClick={() => setSelected(index)}>
-          <img src={shotUrl(index)} alt="" loading="lazy" onError={() => setBroken(failed => [...failed, index])} />
-        </button>)}</div>}
       </section>
       <section className="game-info-fields">
         <PlatformTag platform={game.platform ?? 'j2me'} />
@@ -121,7 +129,7 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
         {archive.build && <button className="btn sm" onClick={() => setShowArchive(true)}>{t('Possible alternate builds')}</button>}
       </div>}
       {has && info && <p className="attrib small">{info.attribution} {info.mobyUrl && <a href={info.mobyUrl} target="_blank" rel="noreferrer">MobyGames ↗</a>}</p>}
-      {info && hasKey && (!has || change) && (info.status !== 'none' || change) && <Candidates gameId={game.id} info={info} toast={toast} onChanged={result => { setInfo(result); if (result.status === 'manual') { setChange(false); setSelected(0); setBroken([]); onChanged(); } }} />}
+      {info && hasKey && (!has || change) && (info.status !== 'none' || change) && <Candidates gameId={game.id} info={info} toast={toast} onChanged={result => { setInfo(result); if (result.status === 'manual') { setChange(false); setSelected(null); setBroken([]); onChanged(); } }} />}
       {info?.error && <p className="note warn">{info.error}</p>}
       {hasKey && <div className="btn-row">
         <button className="btn sm" disabled={busy} onClick={() => void act(() => api.infoRefresh(game.id))}>{t(has ? 'Look up again' : 'Look up now')}</button>

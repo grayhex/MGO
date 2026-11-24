@@ -68,7 +68,7 @@ jobs:
           # manifests/invalid FPSX only: verifies format dispatch and failures,
           # variant choice and missing/unsafe paths without proprietary firmware.
           AGENT_URL=http://127.0.0.1:8766 AGENT_TOKEN=ci-token-0123456789abcdef node tests/scripts/vpl-real-smoke.mjs
-          docker exec -i sym node --input-type=module < tests/scripts/pulse-smoke.mjs
+          docker exec -i sym node --experimental-strip-types --input-type=module < tests/scripts/pulse-smoke.mjs
           docker logs sym | tail -20
           docker rm -f sym
       - name: Version file

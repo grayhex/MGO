@@ -15,6 +15,7 @@ import { archiveMatchLabel } from './ArchiveSettings';
 import { Icon } from './Icon';
 import { PlatformTag } from './PlatformTag';
 import { Seg } from './ui';
+import { JavaCover } from './JavaCover';
 
 type Filter = 'all' | 'favorites' | 'recent';
 type GenreFilter = 'all' | 'unclassified' | (typeof GENRES)[number];
@@ -50,10 +51,11 @@ function ResolutionTag({ resolution }: { resolution: GameMeta['nativeResolution'
   return <span className={`resolution-tag ${tone}`} title={hint} aria-label={`${label} · ${hint}`}>{resolution.source === 'saved-profile' ? '≈' : ''}{label}</span>;
 }
 
-function Cover({ g }: { g: GameMeta }) {
+function Cover({ g, compact = false }: { g: GameMeta; compact?: boolean }) {
   const [broken, setBroken] = useState(false);
   const art = !!(g.ngageInfo?.hasCover || g.info?.hasCover) && !broken; // a MobyGames cover, served by this server
   const hue = 170 + (parseInt(g.groupKey.slice(0, 4), 16) % 46); // teal to blue: the palette has one signal colour, cyan
+  if ((g.platform ?? 'j2me') === 'j2me') return <JavaCover game={g} compact={compact} />;
   return (
     <div className={`cover ${art ? 'art' : ''}`} style={{ ['--hue' as string]: hue }}>
       {art ? <img src={g.ngageInfo?.hasCover ? `/api/games/${g.id}/ngage-cover` : api.coverUrl(g.id)} alt="" loading="lazy" onError={() => setBroken(true)} /> : g.hasIcon && !broken ? <img src={api.iconUrl(g.id)} alt="" onError={() => setBroken(true)} /> : <span className="initials">{g.name.slice(0, 2).toUpperCase()}</span>}
@@ -79,6 +81,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
   const [archiveFilter, setArchiveFilter] = useState<'all' | 'exact' | 'review' | 'unknown'>('all');
   const [downloadedOnly, setDownloadedOnly] = useState(false);
   const [infoFor, setInfoFor] = useState<GameMeta | null>(null);
+  const infoGame = infoFor ? games?.find(game => game.id === infoFor.id) ?? infoFor : null;
   const [genreFor, setGenreFor] = useState<GameMeta | null>(null);
   const [sort, setSortState] = useState<SortKey>(loadSort);
   const setSort = (v: SortKey) => { setSortState(v); try { localStorage.setItem(SORT_STORE, v); } catch { /* storage unavailable */ } };
@@ -117,11 +120,14 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
         setScan(s.running ? s.report : null);
         // refresh when a scan started or ended since the last look; the first look always refreshes (a quick scan may already be over)
         // MobyGames lookups finish after the scan: covers, genres and the "review" mark must appear without a manual reload
-        const meta = await api.metaJob().then((m) => m.job, () => null);
+        const [meta, javaMeta] = await Promise.all([
+          api.metaJob().then(m => m.job, () => null),
+          api.javaCatalogStatus().then(m => m.job, () => null),
+        ]);
         if (dead) return;
-        metaRunning.current = meta?.state === 'running';
+        metaRunning.current = meta?.state === 'running' || javaMeta?.state === 'running';
         const scanId = s.report ? `${s.report.id}:${s.report.state}` : null;
-        const metaId = meta ? `${meta.state}:${meta.done}` : null;
+        const metaId = `${meta?.state}:${meta?.done}/${javaMeta?.state}:${javaMeta?.matched}:${javaMeta?.partial}`;
         if (scanId !== lastScan.current || metaId !== lastMeta.current) {
           const first = lastScan.current === undefined;
           const scanChanged = scanId !== lastScan.current;
@@ -351,7 +357,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
           if (view === 'list') return (
             <article className="card game-card game-row" key={sel.groupKey} data-library-group={sel.groupKey} data-returned={returned || undefined} tabIndex={-1}
               onClick={event => { if (!(event.target as Element).closest('button, select, a')) setInfoFor(sel); }}>
-              <button className="row-cover" tabIndex={-1} aria-hidden onClick={() => setInfoFor(sel)}><Cover g={sel} /></button>
+              <button className="row-cover" tabIndex={-1} aria-hidden onClick={() => setInfoFor(sel)}><Cover g={sel} compact /></button>
               <button className="card-main row-title" onClick={() => setInfoFor(sel)} title={translateUI("Game information")}>
                 <h3>{sel.name}</h3>
                 <span className="row-flags">{flags}</span>
@@ -392,7 +398,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
       {dragging && <div className="dropzone"><div><strong>{translateUI("Drop to add")}</strong><br />{translateUI(".jar, .jad, .sis, .sisx, .n-gage files")}</div></div>}
       {genreFor && <GenreDialog game={genreFor} toast={toast} onClose={() => setGenreFor(null)} onChanged={() => { setGenreFor(null); void reload(); }} />}
       {archiveOpen && <ArchiveBrowser onClose={() => setArchiveOpen(false)} onImported={reload} onPlay={id => { setArchiveOpen(false); onPlay(id); }} />}
-      {infoFor && <GameInfoDialog game={infoFor} toast={toast} onClose={() => setInfoFor(null)} onPlay={id => { setInfoFor(null); onPlay(id); }} playDisabled={(infoFor.platform ?? 'j2me') === 'j2me' && (infoFor.classVersion >= 49 || health?.ok === false)} onChanged={() => void reload()} />}
+      {infoGame && <GameInfoDialog game={infoGame} toast={toast} onClose={() => setInfoFor(null)} onPlay={id => { setInfoFor(null); onPlay(id); }} playDisabled={(infoGame.platform ?? 'j2me') === 'j2me' && (infoGame.classVersion >= 49 || health?.ok === false)} onChanged={() => void reload()} />}
       {editing && <GameSettingsDialog game={editing} toast={toast} onClose={() => setEditing(null)} onChanged={() => { setEditing(null); void reload(); }} />}
     </div>
   );

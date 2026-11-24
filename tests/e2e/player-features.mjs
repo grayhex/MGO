@@ -16,7 +16,20 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  const upload=await fetch(base+'/api/games',{method:'POST',body:fd});assert.equal(upload.status,201);const game=(await upload.json()).game;
  browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH || undefined,args:['--no-sandbox']});
  const p=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];p.on('pageerror',e=>errors.push(e.message));
- await p.addInitScript(()=>{window.padButtons=[];Object.defineProperty(navigator,'getGamepads',{value:()=>[{index:0,id:'Simulated Xbox standard',connected:true,mapping:'standard',timestamp:performance.now(),axes:[0,0],buttons:Array.from({length:17},(_,i)=>({pressed:window.padButtons.includes(i),value:window.padButtons.includes(i)?1:0}))}]});});
+ await p.addInitScript(() => {
+   window.padButtons = [];
+   window.padEffects = [];
+   window.padResets = 0;
+   const vibrationActuator = {
+     playEffect: async (effect, params) => { window.padEffects.push({ effect, ...params }); return 'complete'; },
+     reset: async () => { window.padResets++; return 'complete'; },
+   };
+   Object.defineProperty(navigator, 'getGamepads', { value: () => [{
+     index: 0, id: 'Simulated Xbox standard', connected: true, mapping: 'standard', timestamp: performance.now(),
+     axes: [0, 0], buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: window.padButtons.includes(i), value: window.padButtons.includes(i) ? 1 : 0 })),
+     vibrationActuator,
+   }] });
+ });
  // the phones are chosen on /phones (the player has no picker): a click sets the phone of the game opened last
  const choosePhone=async(re)=>{await p.getByTestId('current-game').waitFor();await p.getByRole('link',{name:'Phones'}).click();await p.getByRole('button',{name:re}).click();await p.waitForURL('**/play/'+game.id,{waitUntil:'commit'});};
  await p.goto(base+'/play/'+game.id);
@@ -37,6 +50,22 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  await p.waitForFunction(()=>document.querySelector('[aria-label="Device preset"]')?.value==='132x176-siemens-full-screen'); // the advanced profile survives the trip to /phones
  await wait(async()=>{const games=await(await fetch(base+'/api/games')).json();const s=games.find(g=>g.id===game.id).settings;return s.skinId==='sony-ericsson-k750i'&&s.profileMode==='advanced'&&s.device==='132x176-siemens-full-screen';});
  await p.getByRole('radio',{name:/Screen/}).click();
+ const keypad = p.getByTestId('phone-keypad');
+ await keypad.waitFor();
+ const column = p.locator('.stage-foot.side');
+ const maxWidth = (await column.boundingBox()).width;
+ const widths = p.getByRole('radiogroup', { name: 'Keypad width', exact: true });
+ for (const [label, scale] of [['150%', .75], ['100%', .5]]) {
+   await widths.getByRole('radio', { name: label }).click();
+   assert.ok(Math.abs((await column.boundingBox()).width - maxWidth * scale) < 2, `the ${label} keypad width applies`);
+ }
+ const keypadToggle = p.getByRole('checkbox', { name: 'On-screen keypad', exact: true });
+ const keypadLabel = p.locator('label.switch').filter({ hasText: 'On-screen keypad' });
+ await keypadLabel.click();
+ assert.equal(await keypadToggle.isChecked(), false);
+ await keypad.waitFor({ state: 'hidden' });
+ await keypadLabel.click();
+ await keypad.waitFor();
  await p.evaluate(()=>window.originalCanvas=document.querySelector('.skin-canvas'));
  await p.getByRole('button',{name:'Lights Out',exact:true}).click();
  await p.locator('.lights-out').waitFor();
@@ -54,6 +83,7 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  await p.reload();await p.locator('.lights-out').waitFor();
  assert.equal((await sessions()).find(s=>s.state==='running').id,running);
  await p.keyboard.press('Escape');await p.waitForFunction(()=>!document.querySelector('.lights-out'));
+ assert.equal(await widths.getByRole('radio', { name: '100%' }).getAttribute('aria-checked'), 'true', 'the keypad width survives a reload');
  await p.keyboard.press('Alt+KeyL');await p.locator('.lights-out').waitFor();
  // one Options button: exit, fullscreen and the keypad are in its menu
  assert.equal(await p.locator('.lights-hud button.lights-opts').count(),1);
@@ -86,4 +116,32 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  assert.ok(await p.getByTestId('lights-options').isVisible());
  assert.equal((await sessions()).find(s=>s.state==='running').id,running);
  console.log('PASS: mobile exit remains visible.');
+
+ await p.setViewportSize({ width: 1440, height: 1000 });
+ await fetch(base + '/api/sessions/' + running, { method: 'DELETE' });
+ const net = new FormData();
+ net.append('jar', new Blob([readFileSync('tests/fixtures/labgames/build/kemnet.jar')]), 'kemnet.jar');
+ const netUpload = await fetch(base + '/api/games', { method: 'POST', body: net });
+ assert.equal(netUpload.status, 201);
+ await p.goto(base + '/play/' + (await netUpload.json()).game.id);
+ if (await p.locator('.lights-out').count()) await p.keyboard.press('Escape');
+ await p.locator('.ctrl-col').getByRole('button', { name: 'Start', exact: true }).click();
+ await p.waitForFunction(() => document.querySelector('[data-testid=state-badge]').textContent.includes('running'));
+ const deny = p.getByRole('button', { name: 'Deny', exact: true });
+ await deny.waitFor({ timeout: 2500 }).then(() => deny.click(), () => undefined);
+ await p.keyboard.press('Digit1');
+ await p.waitForFunction(() => window.padEffects.some(effect => effect.effect === 'dual-rumble' && effect.duration === 300));
+ const effects = await p.evaluate(() => window.padEffects.length);
+ await p.locator('label.switch').filter({ hasText: 'Gamepad vibration' }).click();
+ await p.waitForFunction(() => window.padResets > 0);
+ await p.locator('.skin-canvas').click();
+ await p.keyboard.press('Digit1');
+ await wait(async () => {
+   const running = (await sessions()).find(session => session.state === 'running');
+   const status = await (await fetch(base + '/api/sessions/' + running.id)).json();
+   return status.logTail.filter(line => line.includes('VIBRATE_REQUESTED')).length >= 2;
+ });
+ assert.equal(await p.evaluate(() => window.padEffects.length), effects, 'a real Java ME vibrate request is ignored when gamepad vibration is off');
+ assert.deepEqual(errors, []);
+ console.log('PASS: Java ME vibration reaches the gamepad and the control can switch it off.');
 } finally {await browser?.close();server.kill('SIGTERM');await new Promise(r=>server.once('exit',r));rmSync(dir,{recursive:true,force:true});}

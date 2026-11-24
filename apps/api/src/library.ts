@@ -160,8 +160,8 @@ export function validateSettings(input: unknown, base: GameSettings = DEFAULT_SE
 
 /** SQLite metadata + files on disk: <data>/games/<id>/{game.jar,game.jad,icon.png}. */
 function infoSummary(m: { status: string; data_json: string }): GameInfoSummary {
-  const d = JSON.parse(m.data_json) as { title?: string; year?: number | null; genres?: string[]; hasCover?: boolean };
-  return { status: m.status as MetaStatus, ...(d.title ? { title: d.title } : {}), year: d.year ?? null, genres: d.genres ?? [], hasCover: !!d.hasCover };
+  const d = JSON.parse(m.data_json) as Pick<GameInfoSummary, 'title' | 'year' | 'genres' | 'hasCover' | 'screenshots'>;
+  return { status: m.status as MetaStatus, ...(d.title ? { title: d.title } : {}), year: d.year ?? null, genres: d.genres ?? [], hasCover: !!d.hasCover, screenshots: d.screenshots ?? 0 };
 }
 
 export function javaGroupKey(name: string, vendor: string): string {

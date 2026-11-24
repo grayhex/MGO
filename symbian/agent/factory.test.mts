@@ -3,8 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { it } from 'node:test';
-// @ts-expect-error plain ESM service module, without a declaration file
-import { factoryDirectory, factoryUploadPath, factoryInstallFiles } from '../../../../symbian/agent/factory.mjs';
+import { factoryDirectory, factoryUploadPath, factoryInstallFiles } from './factory.mts';
 
 it('factory kits retain original names and isolate bundles with identical VPL/FPSX filenames', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'mgo-factory-'));

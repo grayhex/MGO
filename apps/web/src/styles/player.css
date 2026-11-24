@@ -127,7 +127,7 @@ textarea.text-editor-field { resize: vertical; min-height: 84px; }
 .player-grid .stage.stage-screen,
 .player-grid .stage-screen.stage-touchscreen { --stage-h: clamp(420px, calc(100dvh - var(--header-h) - 74px), 1600px); padding: 6px 10px; }
 .stage-card:fullscreen .stage { --stage-h: calc(100dvh - 60px); }
-.stage-foot.side { width: clamp(208px, 24vw, 264px); flex: none; padding: 10px 8px; border-top: 0; border-right: 1px solid var(--outline); align-content: center; gap: 8px; }
+.stage-foot.side { width: max(140px, calc(clamp(208px, 24vw, 264px) * var(--keypad-scale, 1))); flex: none; padding: 10px 8px; border-top: 0; border-right: 1px solid var(--outline); align-content: center; gap: 8px; }
 @media (min-width: 981px) and (min-height: 600px) {
   .player-grid .ctrl-col { max-height: calc(100dvh - var(--header-h) - 24px); overflow: auto; align-content: start; }
   .player-grid:not(.lights-out) .stage-card:not(:fullscreen) {
@@ -146,7 +146,7 @@ textarea.text-editor-field { resize: vertical; min-height: 84px; }
 /* Lights Out: the keys are a narrow column on the left, the screen is never covered */
 .lights-out .stage-row { flex: 1; min-height: 0; }
 .lights-out .stage-foot.side { display: none; background: #010203; border: 0; }
-.lights-out.touch-controls .stage-foot.side { display: grid; position: static; max-height: 95dvh; width: clamp(196px, 24vw, 234px); }
+.lights-out.touch-controls .stage-foot.side { display: grid; position: static; max-height: 95dvh; width: max(140px, calc(clamp(196px, 24vw, 234px) * var(--keypad-scale, 1))); }
 .lights-out .stage-foot .keypad { opacity: .4; }
 .lights-out .stage-foot { position: static; }
 /* the frame rate: small green digits in the corner of the screen */
@@ -163,25 +163,26 @@ button.chip-link:hover { border-color: var(--primary-warm); }
 .lights-menu { color: #f1f5f9; }
 .lights-menu .btn { color: #f1f5f9; }
 
-.stage-foot .physical-keypad { height: clamp(240px, 70dvh, 652px); }
-.stage-foot.side:has(.physical-keypad) { width: clamp(210px, 49%, 396px); }
+.stage-foot .physical-keypad { height: calc(clamp(240px, 70dvh, 652px) * var(--keypad-scale, 1)); }
+.stage-foot.side:has(.physical-keypad) { width: calc(clamp(210px, 49%, 396px) * var(--keypad-scale, 1)); }
 @media (min-width: 981px) and (min-height: 600px) {
   /* Leave enough space for the close-up LCD to grow beyond its full-phone width. */
   .player-grid:not(.lights-out) .stage-card:not(:fullscreen) .stage-foot.side:has(.physical-keypad) {
-    width: clamp(min(210px, 35cqw), calc(100cqw - (100cqh - 12px) * var(--full-lcd-width-factor, 0) - 36px), min(49cqw, 396px));
+    width: calc(clamp(min(210px, 35cqw), calc(100cqw - (100cqh - 12px) * var(--full-lcd-width-factor, 0) - 36px), min(49cqw, 396px)) * var(--keypad-scale, 1));
   }
 }
-.lights-out.touch-controls .stage-foot.side:has(.physical-keypad) { width: clamp(250px, 44%, 468px); }
-.lights-out .stage-foot .physical-keypad { height: min(87dvh, 870px); }
+.lights-out.touch-controls .stage-foot.side:has(.physical-keypad) { width: calc(clamp(250px, 44%, 468px) * var(--keypad-scale, 1)); }
+.lights-out .stage-foot .physical-keypad { height: calc(min(87dvh, 870px) * var(--keypad-scale, 1)); }
 .stage-foot.side.split-keypad { grid-template-rows: repeat(2, minmax(0, 1fr)); }
-.stage-foot.side.split-keypad .physical-keypad { height: 100%; min-height: 0; max-height: min(40dvh, 420px); }
+.stage-foot.side.split-keypad .physical-keypad { height: 100%; min-height: 0; max-height: calc(min(40dvh, 420px) * var(--keypad-scale, 1)); }
 .view-keypad { overflow: hidden; border-radius: var(--r-sm); }
 @media (max-width: 760px) {
   .stage-row.with-keypad > .stage { order: -1; }
   .stage-foot.side:has(.physical-keypad), .lights-out.touch-controls .stage-foot.side:has(.physical-keypad) { width: 100%; }
-  .stage-foot .physical-keypad { height: clamp(230px, 58dvh, 540px); }
-  .lights-out .stage-foot .physical-keypad { height: min(60dvh, 650px); }
+  .stage-foot .physical-keypad { height: calc(clamp(230px, 58dvh, 540px) * var(--keypad-scale, 1)); }
+  .lights-out .stage-foot .physical-keypad { height: calc(min(60dvh, 650px) * var(--keypad-scale, 1)); }
   .lights-out.touch-controls .stage-foot.side { width: 100%; max-height: 45dvh; }
-  .stage-foot.side.split-keypad { height: min(58dvh, 520px); }
+  .stage-foot.side.split-keypad { height: calc(min(58dvh, 520px) * var(--keypad-scale, 1)); }
+  .stage-foot.side .keypad { width: max(140px, calc(100% * var(--keypad-scale, 1))); }
   .lights-out.touch-controls .stage-row.with-keypad > .stage { flex: 1; height: auto; }
 }
