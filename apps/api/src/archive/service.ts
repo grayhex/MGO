@@ -245,15 +245,15 @@ export class ArchiveService {
 
   currentDownload(): ArchiveDownload | null { return this.download; }
 
-  startDownload(sha: string, rootId: string, folder: string, curatedRoot?: string): ArchiveDownload {
-    const fromCurated = !!curatedRoot;
+  startDownload(sha: string, rootId: string, folder: string, curated?: { root: string; title: string }): ArchiveDownload {
+    const fromCurated = !!curated;
     this.ensureIdle(fromCurated);
     if (!SHA256.test(sha)) throw new UploadError('archive_bad_hash', 'Select a valid SHA-256 from the archive');
     const index = this.requireIndex();
     const build = index.get(sha);
     if (!build) throw new UploadError('archive_build_missing', 'This build was not found in the installed archive index', 404);
     const segments = folderSegments(folder);
-    const root = curatedRoot ?? (rootId === 'managed' ? managedRoot(this.cfg) : rootId === 'external' ? this.cfg.archiveWritableRoot : rootId === 'java' ? this.javaLibrary() : null);
+    const root = curated?.root ?? (rootId === 'managed' ? managedRoot(this.cfg) : rootId === 'external' ? this.cfg.archiveWritableRoot : rootId === 'java' ? this.javaLibrary() : null);
     if (!root) throw new UploadError('archive_bad_root', 'Choose an allowed upload destination');
     const existing = this.library.findBySha(sha);
     const report: ArchiveDownload = { sha256: sha, state: 'running', phase: 'fetching', message: null, gameId: existing?.id ?? null, duplicate: !!existing };
@@ -307,6 +307,14 @@ export class ArchiveService {
         report.phase = 'importing';
         // It may have been uploaded while the archive job was still transferring.
         const duplicate = this.library.findBySha(sha);
+        if (!duplicate && curated) {
+          const installed = this.installedTitle(curated.title, build.title);
+          if (installed) {
+            report.gameId = installed;
+            report.duplicate = true;
+            return;
+          }
+        }
         const game = duplicate ?? withDestination(root, segments, dir => publishJar(dir, build.filename, sha, bytes, (name, mtime) => {
           const relative = [...segments, name].join('/');
           const result = this.scanner.importArchiveJar(root, relative, bytes, sha, mtime);
@@ -386,6 +394,11 @@ export class ArchiveService {
     return installed;
   }
 
+  private installedTitle(title: string, candidate?: string) {
+    const installed = this.installedTitles();
+    return installed.get(titleKey(title)) ?? (candidate ? installed.get(titleKey(candidate)) : undefined);
+  }
+
   currentCurated(): CuratedImport | null { return this.curated; }
 
   async importCurated(selection: { title: string; sha256: string }[]): Promise<CuratedImport> {
@@ -430,12 +443,11 @@ export class ArchiveService {
       report.progress = null;
       delete report.source;
       try {
-        const installed = this.installedTitles();
-        if (installed.has(titleKey(item.title)) || (build?.title && installed.has(titleKey(build.title)))) {
+        if (this.installedTitle(item.title, build?.title)) {
           report.duplicates++;
           continue;
         }
-        const job = this.startDownload(item.sha256, destination.rootId, destination.folder, destination.root);
+        const job = this.startDownload(item.sha256, destination.rootId, destination.folder, { root: destination.root, title: item.title });
         await this.job?.task;
         if (signal.aborted) break;
         if (job.state !== 'done') throw new Error(job.message ?? 'Archive source is unavailable');

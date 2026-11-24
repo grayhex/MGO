@@ -107,8 +107,12 @@ export class JavaCatalog {
 
   async lookup(game: GameMeta): Promise<JavaCatalogInfo | null> {
     if ((game.platform ?? 'j2me') !== 'j2me') return null;
-    const index = await this.catalog();
     const archive = this.exactBuild(game.sha256);
+    if (!game.nativeResolution && archive) {
+      const hint = readScreenHints({}, archive.filename)[0] ?? readScreenHints({}, archive.archivePath)[0];
+      if (hint) this.library.recordGameResolution(game.id, { ...hint, source: 'J2ME Archive' });
+    }
+    const index = await this.catalog();
     const known = archive?.title ? index.get(key(archive.title)) : undefined;
     const candidates = known ?? index.get(key(game.name)) ?? [];
     if (candidates.length !== 1) return null;
@@ -119,10 +123,6 @@ export class JavaCatalog {
     const data = { title: match.title, sourceUrl: url.href, genres: match.genres, description, images,
       year: /^\d{4}$/.test(match.listed_year) ? Number(match.listed_year) : null };
     this.library.db.prepare('INSERT OR REPLACE INTO java_catalog VALUES (?,?)').run(game.groupKey, JSON.stringify(data));
-    if (!game.nativeResolution && archive) {
-      const hint = readScreenHints({}, archive.filename)[0] ?? readScreenHints({}, archive.archivePath)[0];
-      if (hint) this.library.recordGameResolution(game.id, { ...hint, source: 'J2ME Archive' });
-    }
     return this.summary(data);
   }
 

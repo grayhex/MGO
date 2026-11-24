@@ -112,10 +112,21 @@ test('curated downloads publish into the configured Java subfolder and are recog
   const existing = makeJar('Arkanoid', { vendor: 'TAITO' });
   const alternate = makeJar('Arkanoid', { vendor: 'Electronic Arts', version: '1.8.6' });
   const arkanoid = archiveBuild(alternate, { title: 'Arkanoid', vendor: 'Electronic Arts' });
+  const bejeweledJar = makeJar('Bejeweled', { vendor: 'Electronic Arts' });
+  const bejeweled = archiveBuild(bejeweledJar, { title: 'Bejeweled', vendor: 'Electronic Arts' });
+  const worker = archiveFixtureWorker([build, arkanoid, bejeweled], new Map([[build.sha256, bytes], [arkanoid.sha256, alternate], [bejeweled.sha256, bejeweledJar]]));
+  const transferring = Promise.withResolvers();
+  const canFinish = Promise.withResolvers();
   const app = await buildApp(testConfig({ dataDir: path.join(dir, 'data'), runDir: path.join(dir, 'run'), roots: [java] }), {
-    archiveWorker: archiveFixtureWorker([build, arkanoid], new Map([[build.sha256, bytes], [arkanoid.sha256, alternate]])),
+    archiveWorker: async (...args) => {
+      if (args[0][0] === 'download' && args[0][1] === bejeweled.sha256) {
+        transferring.resolve();
+        await canFinish.promise;
+      }
+      return worker(...args);
+    },
   });
-  t.after(async () => { await app.close(); rmSync(dir, { recursive: true, force: true }); });
+  t.after(async () => { canFinish.resolve(); await app.close(); rmSync(dir, { recursive: true, force: true }); });
 
   const patch = payload => app.fastify.inject({ url: '/api/settings', method: 'PATCH', payload });
   assert.equal((await patch({ archiveDownloadFolder: '../escape' })).statusCode, 400);
@@ -135,13 +146,16 @@ test('curated downloads publish into the configured Java subfolder and are recog
   const local = app.library.add(existing, null, 1000000).game;
   const after = (await app.fastify.inject('/api/archive/curated/preview')).json().titles;
   assert.equal(after.find(row => row.title === 'Arkanoid').installedGameId, local.id);
-  const selection = [{ title: build.title, sha256: build.sha256 }, { title: arkanoid.title, sha256: arkanoid.sha256 }];
+  const selection = [build, arkanoid, bejeweled].map(({ title, sha256 }) => ({ title, sha256 }));
   const start = await app.fastify.inject({ url: '/api/archive/curated', method: 'POST', payload: { confirmed: true, selection } });
   assert.equal(start.statusCode, 202, start.body);
+  await transferring.promise;
+  app.library.add(makeJar('Bejeweled', { vendor: 'PopCap' }), null, 1000000);
+  canFinish.resolve();
   await waitFor(async () => (await app.fastify.inject('/api/archive/curated')).json().job?.state === 'done');
   const job = (await app.fastify.inject('/api/archive/curated')).json().job;
   assert.equal(job.imported, 1, JSON.stringify(job.failed));
-  assert.equal(job.duplicates, 1);
+  assert.equal(job.duplicates, 2);
   const destination = path.join(java, 'Downloads/Curated');
   const [file] = readdirSync(destination);
   assert.deepEqual(readFileSync(path.join(destination, file)), Buffer.from(bytes));
@@ -150,7 +164,7 @@ test('curated downloads publish into the configured Java subfolder and are recog
   assert.equal(downloaded.downloadedFrom, 'J2ME Archive');
   app.scan.start('update');
   await app.scan.idle();
-  assert.equal(app.library.count(), 2);
+  assert.equal(app.library.count(), 3);
   assert.equal(app.library.sourcesOf(app.library.findBySha(build.sha256).id)[0].missing, 0);
   const remove = id => app.fastify.inject({ method: 'DELETE', url: `/api/games/${id}?downloaded=1` });
   assert.equal((await remove(local.id)).statusCode, 409);
@@ -161,7 +175,7 @@ test('curated downloads publish into the configured Java subfolder and are recog
   assert.equal((await remove(downloaded.id)).statusCode, 204);
   app.scan.start('full');
   await app.scan.idle();
-  assert.equal(app.library.count(), 1);
+  assert.equal(app.library.count(), 2);
   assert.deepEqual(readdirSync(destination), []);
 });
 
