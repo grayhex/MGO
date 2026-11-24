@@ -145,8 +145,9 @@ try {
 
   // game info dialog: choose manually
   const snake = page.locator('article.game-card', { hasText: 'Snake' });
-  await snake.getByRole('button', { name: 'Game information' }).click();
+  await snake.locator('.card-main').click();
   const info = page.getByRole('dialog');
+  await info.getByText('Metadata sources', { exact: true }).click();
   await info.locator('.cand').first().waitFor();
   ok('the candidates of an ambiguous title are listed, with their platform', (await info.locator('.cand').count()) === 2 && /J2ME/.test(await info.locator('.cand').first().innerText()));
   await page.screenshot({ path: path.join(outDir, 'setup-06-choose.png') });
@@ -162,8 +163,8 @@ try {
   ok('the wizard does not come back after it was finished', (await page.getByRole('dialog', { name: 'Set up MGO' }).count()) === 0);
   const stored = await page.evaluate(() => ({ ...localStorage }));
   ok('the secret is not in the browser storage', !JSON.stringify(stored).includes(KEY));
-  await page.locator('article.game-card').first().locator('button.card-main').click();
-  await page.waitForSelector('.skin-box');
+  await page.goto(base + '/play/' + (await page.evaluate(() => fetch('/api/games').then(response => response.json())))[0].id);
+  await page.waitForSelector('.stage .skin-box');
   ok('the default phone chosen in the wizard is what a new browser starts with', (await page.locator('.skin-box').first().getAttribute('data-skin')) === 'nokia-e71');
   ok('... and the default volume', (await page.evaluate(() => localStorage.getItem('j2me-web.volume'))) === '35');
   await page.goBack();

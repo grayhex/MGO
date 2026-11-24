@@ -50,7 +50,7 @@ Screenshots use demonstration MIDlets from the project’s test fixtures.
 Use the setup wizard to choose existing Java ME, N-Gage and Symbian folders.
 For a starting collection, choose **Curated Java ME library** in the wizard,
 install the J2ME Archive index and review the proposed builds before confirming.
-Downloads go to the managed archive import folder. **Settings → Game metadata**
+Downloads default to a configurable subfolder of the Java ME library. Without a configured Java ME folder, MGO uses its managed import folder. **Settings → Game metadata**
 groups J2ME Archive and MobyGames under Java ME and All About Symbian and LaunchBox Games Database under N-Gage.
 [Library guide](docs/LIBRARY.md)
 

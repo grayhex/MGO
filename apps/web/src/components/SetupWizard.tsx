@@ -74,7 +74,7 @@ export function SetupWizard({ toast, onClose, onFinished }: { toast: Toaster; on
         {step.id === 'library' && (
           <div className="stack">
             <h3>{translateUI("Where are your games?")}</h3>
-            <p>{translateUI("Choose a folder for each kind of games you have: Java ME (.jar), N-Gage and Symbian (.sis). MGO only reads them. Skip a kind you do not have, or upload games from the browser instead.")}</p>
+            <p>{translateUI("Choose a folder for each kind of games you have: Java ME (.jar), N-Gage and Symbian (.sis). MGO scans the folders for games. Skip a kind you do not have, or upload games from the browser instead.")}</p>
             <LibraryFolders toast={toast} wizard />
             {!hasLibrary && status?.storage.libraryBytes === 0 && <CuratedSetup />}
           </div>

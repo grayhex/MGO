@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
 import { PlatformTag } from './PlatformTag';
 import { useTheme } from '../theme';
-import { ThemeSelect } from './ThemeSelect';
+import { ThemeToggle } from './ThemeToggle';
 import { LanguageSwitch } from './LanguageSwitch';
 import { useLastGame } from '../lastGame';
 
@@ -106,10 +106,10 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
           <div className="header-title">{translateUI(title)}</div>
           {subtitle && <div className="header-sub">{translateUI(subtitle)}</div>}
         </div>
-        <div className="header-language"><ThemeSelect /><LanguageSwitch onShell /></div>
+        <div className="header-language"><ThemeToggle /><LanguageSwitch onShell /></div>
       </header>
       <main className="content" id="main">
-        <div className={`container${inPlayer ? ' wide' : path === '/' ? ' library-container' : ''}`}>{!inPlayer && <div className="workspace-language"><ThemeSelect /><LanguageSwitch /></div>}{children}</div>
+        <div className={`container${inPlayer ? ' wide' : ''}`}>{!inPlayer && <div className="workspace-language"><ThemeToggle /><LanguageSwitch /></div>}{children}</div>
       </main>
     </div>
   );

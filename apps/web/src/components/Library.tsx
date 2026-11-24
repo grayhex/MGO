@@ -335,14 +335,15 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
           const actions = (
             <>
               <button className={`icon-btn ${sel.favorite ? 'fav' : ''}`} onClick={() => toggleFav(sel)} aria-label={translateUI(sel.favorite ? 'Remove from favorites' : 'Add to favorites')} aria-pressed={sel.favorite}><Icon name="star" /></button>
-              <button className="icon-btn" onClick={() => setInfoFor(sel)} aria-label={translateUI("Game information")}><Icon name="info" /></button>
+              <button className="icon-btn play-game" onClick={() => onPlay(sel.id)} disabled={blocked} aria-label={translateUI("Play")} title={translateUI(bad ? "Java 5+ class files are not supported by KEmulator" : "Play")}><Icon name="play" /></button>
               <button className="icon-btn" onClick={() => setEditing(sel)} aria-label={translateUI("Game settings")}><Icon name="sliders" /></button>
             </>
           );
           if (view === 'list') return (
-            <article className="card game-card game-row" key={sel.groupKey} data-library-group={sel.groupKey} tabIndex={-1}>
-              <button className="row-cover" tabIndex={-1} aria-hidden onClick={() => onPlay(sel.id)} disabled={blocked}><Cover g={sel} /></button>
-              <button className="card-main row-title" onClick={() => onPlay(sel.id)} disabled={blocked} title={translateUI(bad ? 'Java 5+ class files are not supported by KEmulator' : `Play ${sel.name}`)}>
+            <article className="card game-card game-row" key={sel.groupKey} data-library-group={sel.groupKey} tabIndex={-1}
+              onClick={event => { if (!(event.target as Element).closest('button, select, a')) setInfoFor(sel); }}>
+              <button className="row-cover" tabIndex={-1} aria-hidden onClick={() => setInfoFor(sel)}><Cover g={sel} /></button>
+              <button className="card-main row-title" onClick={() => setInfoFor(sel)} title={translateUI("Game information")}>
                 <h3>{sel.name}</h3>
                 <span className="row-flags">{flags}</span>
               </button>
@@ -356,7 +357,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
           );
           return (
             <article className="card game-card" key={sel.groupKey} data-library-group={sel.groupKey} tabIndex={-1}>
-              <button className="card-main" onClick={() => onPlay(sel.id)} disabled={blocked} title={translateUI(bad ? 'Java 5+ class files are not supported by KEmulator' : `Play ${sel.name}`)}>
+              <button className="card-main" onClick={() => setInfoFor(sel)} title={translateUI("Game information")}>
                 <Cover g={sel} />
                 <div className="meta">
                   <h3>{sel.name} {archiveMark}</h3>
@@ -382,7 +383,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
       {dragging && <div className="dropzone"><div><strong>{translateUI("Drop to add")}</strong><br />{translateUI(".jar, .jad, .sis, .sisx, .n-gage files")}</div></div>}
       {genreFor && <GenreDialog game={genreFor} toast={toast} onClose={() => setGenreFor(null)} onChanged={() => { setGenreFor(null); void reload(); }} />}
       {archiveOpen && <ArchiveBrowser onClose={() => setArchiveOpen(false)} onImported={reload} onPlay={id => { setArchiveOpen(false); onPlay(id); }} />}
-      {infoFor && <GameInfoDialog game={infoFor} toast={toast} onClose={() => setInfoFor(null)} onChanged={() => void reload()} />}
+      {infoFor && <GameInfoDialog game={infoFor} toast={toast} onClose={() => setInfoFor(null)} onPlay={id => { setInfoFor(null); onPlay(id); }} playDisabled={(infoFor.platform ?? 'j2me') === 'j2me' && (infoFor.classVersion >= 49 || health?.ok === false)} onChanged={() => void reload()} />}
       {editing && <GameSettingsDialog game={editing} toast={toast} onClose={() => setEditing(null)} onChanged={() => { setEditing(null); void reload(); }} />}
     </div>
   );

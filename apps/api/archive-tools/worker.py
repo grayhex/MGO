@@ -1,7 +1,6 @@
 """Single-artifact jobs. MGO invokes this with server-owned paths and a validated SHA-256."""
 import sys
 from pathlib import Path
-import shutil
 import resource
 
 MIB = 1024 * 1024
@@ -12,15 +11,20 @@ if sys.argv[1] == "index":
     main(*sys.argv[2:])
 elif sys.argv[1] == "download":
     from jarchive_download import main
-    sha, output, cache, upload_mib = sys.argv[2:]
-    # Keep at most 256 MiB from earlier attempts. The transport caps the next attempt at another 256 MiB.
-    cache_dir = Path(cache)
-    cache_bytes = sum(p.stat().st_size for p in cache_dir.rglob("*") if p.is_file())
-    if cache_bytes > 256 * MIB:
-        shutil.rmtree(cache_dir)
+    sha, output, cache, upload_mib, *sources = sys.argv[2:]
+    # Preserve the most recently used compressed ranges across different games.
+    ranges = list((Path(cache) / "ranges").rglob("*.bin"))
+    old_ranges = sorted((p.stat().st_mtime, p.stat().st_size, p) for p in ranges)
+    cache_bytes = sum(size for _, size, _ in old_ranges)
+    for _, size, file in old_ranges:
+        if cache_bytes <= 256 * MIB:
+            break
+        file.unlink(missing_ok=True)
+        file.with_suffix(".bin.sha256").unlink(missing_ok=True)
+        cache_bytes -= size
     resource.setrlimit(resource.RLIMIT_FSIZE, (64 * MIB, 64 * MIB))
     sys.exit(main([sha, "--output", output, "--cache-dir", cache,
                    "--time-limit", "360", "--stall-limit", "45", "--request-timeout", "20",
-                   "--max-download-mib", "192", "--max-jar-mib", upload_mib, "--route-passes", "1"]))
+                   "--source", sources[0] if sources else "auto", "--max-download-mib", "192", "--max-jar-mib", upload_mib, "--route-passes", "1"]))
 else:
     raise SystemExit("Unknown archive job")

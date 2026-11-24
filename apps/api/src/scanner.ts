@@ -222,8 +222,10 @@ export class ScanManager {
 
   /** A completed single-JAR transfer, indexed with the same importer and source metadata as a folder scan. */
   importArchiveJar(root: string, relative: string, bytes: Buffer, sha: string, mtimeMs: number) {
-    const rel = prefixFor(root, 'j2me') + relative;
-    const defaults = gameDefaults(this.hooks.settings().phone, this.hooks.explicitPhone?.());
+    const settings = this.hooks.settings();
+    const legacy = settings.libraryPath === root && !settings.libraryPaths?.j2me;
+    const rel = (legacy ? '' : prefixFor(root, 'j2me')) + relative;
+    const defaults = gameDefaults(settings.phone, this.hooks.explicitPhone?.());
     return this.addJarSource({ rel, size: bytes.length, mtimeMs }, null, bytes, null, sha, defaults);
   }
 

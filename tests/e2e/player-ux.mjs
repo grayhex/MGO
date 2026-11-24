@@ -43,9 +43,9 @@ try {
   await p.goto(base + '/');
   await p.locator('.game-card').first().waitFor();
   assert.equal(await p.locator('.sidebar').getByTestId('current-game').count(), 0, 'no game opened yet: no item');
-  await p.locator('.game-card', { hasText: 'KemGame' }).locator('button.card-main').click();
+  await p.goto(base + '/play/' + game.id);
   await p.waitForURL('**/play/' + game.id);
-  await p.locator('.skin-box').waitFor();
+  await p.locator('.stage .skin-box').waitFor();
   await p.locator('.sidebar').getByRole('link', { name: 'Library', exact: true }).click();
   await p.locator('.game-card').first().waitFor();
   const back = p.locator('.sidebar').getByTestId('current-game');
@@ -55,10 +55,10 @@ try {
   console.log('✔ the sidebar item "Game" returns to the opened game');
 
   // ---- no phone picker under the phone; the phone is bigger than before ----
-  await p.locator('.skin-box').waitFor();
+  await p.locator('.stage .skin-box').waitFor();
   assert.equal(await p.locator('.skin-picker').count(), 0);
   await sleep(500);
-  const m = await p.evaluate(() => ({ box: document.querySelector('.skin-box').getBoundingClientRect().height, win: window.innerHeight, header: 0 }));
+  const m = await p.evaluate(() => ({ box: document.querySelector('.stage .skin-box').getBoundingClientRect().height, win: window.innerHeight, header: 0 }));
   assert.ok(m.box >= (m.win - m.header) * 0.88, `phone height ${m.box}px of ${m.win - m.header}px available`);
   await assertStageFits();
   console.log(`✔ the phone is ${Math.round(m.box)}px tall in a ${m.win}px window (was about 520px), game card fits the window`);

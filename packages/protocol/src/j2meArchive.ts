@@ -67,7 +67,7 @@ export interface ArchiveStatus {
   indexJob: ArchiveTransfer | null;
   matchJob: ArchiveMatchJob | null;
   maxIndexBytes: number;
-  writableRoots: { id: 'managed' | 'external'; label: string; writable: boolean }[];
+  writableRoots: { id: 'managed' | 'external' | 'java'; label: string; writable: boolean }[];
 }
 
 export interface ArchiveDownload extends ArchiveTransfer {
@@ -82,6 +82,8 @@ export interface CuratedTitle {
   builds: ArchiveSearchItem[];
 }
 
+export interface CuratedDestination { path: string; writable: boolean }
+
 export interface CuratedImport {
   state: 'running' | 'done' | 'cancelled';
   total: number;
@@ -89,5 +91,7 @@ export interface CuratedImport {
   duplicates: number;
   failed: { title: string; message: string }[];
   current: string | null;
+  currentBytes?: number;
+  destination?: string;
   progress: string | null;
 }

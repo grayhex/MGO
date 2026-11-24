@@ -29,12 +29,10 @@
 .ctrl-col { display: grid; gap: 6px; min-width: 0; }
 .player-resources { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--surface-elevated); border: 1px solid var(--outline); border-radius: var(--r-md); font-size: .75rem; }
 .player-preferences { display: flex; align-items: center; gap: 6px; flex: none; }
-.player-preferences .theme-select select { width: 31px; height: 30px; padding: 0; appearance: none; color: transparent; }
-.player-preferences .theme-select option { color: var(--fg); }
 .player-preferences .seg button { height: 22px; padding: 0 7px; font-size: .7rem; }
-.resource-meters { display: grid; flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; color: var(--muted); }
-.resource-meters > div { display: grid; grid-template-columns: 1fr auto; gap: 3px 6px; }
-.resource-meters b { color: var(--fg); font-variant-numeric: tabular-nums; }
+.resource-meters { display: grid; flex: 1; grid-template-columns: minmax(0,.77fr) minmax(0,1.23fr); gap: 8px; color: var(--muted); }
+.resource-meters > div { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 3px 4px; align-items: baseline; white-space: nowrap; }
+.resource-meters b { white-space: nowrap; color: var(--fg); font-variant-numeric: tabular-nums; }
 .resource-meters progress { grid-column: 1 / -1; width: 100%; height: 5px; accent-color: var(--primary); }
 .resource-meters > div + div progress { accent-color: var(--accent); }
 @media (max-width: 860px) { .player-preferences { display: none; } }
@@ -161,3 +159,7 @@ button.chip-link:hover { border-color: var(--primary-warm); }
 .stage-bar .title strong, .stage-bar .title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lights-menu { color: #f1f5f9; }
 .lights-menu .btn { color: #f1f5f9; }
+
+.stage-foot .physical-keypad { height: clamp(140px, 35dvh, 290px); }
+.view-keypad { overflow: hidden; border-radius: var(--r-sm); }
+@media (max-width: 760px) { .stage-row.with-keypad > .stage { order: -1; } .stage-foot .physical-keypad { height: clamp(150px, 30dvh, 240px); } }

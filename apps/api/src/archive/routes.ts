@@ -32,7 +32,7 @@ export function registerArchiveRoutes(app: FastifyInstance, archive: ArchiveServ
     return archive.matching.confirm(req.params.id, req.body?.sha256 === null ? null : hash(req.body?.sha256));
   });
 
-  app.get(prefix + '/curated', () => ({ count: archive.curatedTitles().length, job: archive.currentCurated() }));
+  app.get(prefix + '/curated', () => ({ count: archive.curatedTitles().length, job: archive.currentCurated(), destination: archive.curatedDestination() }));
   app.get(prefix + '/curated/preview', async () => ({ titles: await archive.previewCurated() }));
   app.post<{ Body: { selection?: { title: string; sha256: string }[]; confirmed?: boolean } }>(prefix + '/curated', async (req, reply) => {
     if (req.body?.confirmed !== true || !Array.isArray(req.body.selection)) throw new UploadError('archive_bad_selection', 'Confirm the selected builds first');

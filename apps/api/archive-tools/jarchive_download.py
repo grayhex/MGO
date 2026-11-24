@@ -281,7 +281,7 @@ def load_sources(root: Path, sha: str):
             })
     except (KeyError, TypeError, ValueError, IndexError) as exc:
         raise RetrievalError(f"Malformed retrieval entry: {exc}") from exc
-    sources.sort(key=lambda s: (s["skip"], s["collection"], s["reset_absolute"]))
+    sources.sort(key=lambda s: (s["compressed_upper_bound"], s["skip"], s["collection"]))
     return sources
 
 
@@ -434,22 +434,20 @@ def fetch_range(routes: list[dict], *, start: int, count: int, archive_bytes: in
 
 
 class RangeCache:
-    def __init__(self, base: Path, source: dict, sha256: str, enabled: bool):
+    def __init__(self, base: Path, source: dict, enabled: bool):
         self.enabled = enabled
         if not enabled:
             self.directory = None
             return
         identity = {
-            "schema": 1, "item": ITEM, "sha256": sha256,
+            "schema": 2, "item": ITEM,
             "archive": source["archive_name"], "archive_bytes": source["archive_bytes"],
             "block": source["block_number"], "block_end": source["block_end"],
             "restart": source["reset_absolute"], "uncompressed_at_restart": source["reset_uncompressed"],
             "dict_mib": source["dict_mib"],
         }
         fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:20]
-        self.directory = (base / sha256[:2] / sha256 /
-                          f"{source['collection']}-b{source['block_number']}-"
-                          f"r{source['reset_absolute']}-{fingerprint}")
+        self.directory = base / "ranges" / fingerprint
 
     def _paths(self, start: int, count: int):
         filename = f"{start}-{count}.bin"
@@ -470,6 +468,10 @@ class RangeCache:
             data = data_path.read_bytes()
             if len(data) != count or hashlib.sha256(data).hexdigest() != expected:
                 raise ValueError("cached range checksum mismatch")
+            try:
+                data_path.touch(exist_ok=True)
+            except OSError:
+                pass
             return data
         except (OSError, UnicodeError, ValueError):
             print(f"  Discarding damaged/incomplete cached range {start:,}+{count:,}", flush=True)
@@ -519,7 +521,7 @@ def extract_one(source: dict, sha256: str, *, expected_sha1: str | None,
         {"id": lzma.FILTER_LZMA2, "dict_size": source["dict_mib"] * MIB}
     ])
     routes = [dict(r, archive_name=source["archive_name"]) for r in routes]
-    cache = RangeCache(cache_dir, source, sha256, use_cache)
+    cache = RangeCache(cache_dir, source, use_cache)
     uncompressed_at, compressed_at = source["reset_uncompressed"], source["reset_absolute"]
     end = before + size
     needed_uncompressed = end - uncompressed_at

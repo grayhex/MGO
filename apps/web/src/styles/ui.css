@@ -153,15 +153,6 @@ input[type='range'] { width: 100%; accent-color: var(--primary); height: 20px; }
 .ichip.warn .icon-svg { color: var(--warning); }
 
 
-.theme-select { position: relative; display: inline-flex; align-items: center; min-width: 0; color: var(--muted); }
-.theme-select > .icon-svg { position: absolute; left: 8px; width: 15px; height: 15px; pointer-events: none; }
-.theme-select select {
-  min-width: 0; width: 100%; height: 34px; padding: 0 6px 0 29px;
-  border: 1px solid var(--outline); border-radius: var(--r-sm);
-  background: var(--surface); color: var(--fg); font-size: .8125rem; font-weight: 600; cursor: pointer;
-}
-.theme-select select:hover { border-color: var(--outline-strong); }
-
 .hint-popover {
   position: fixed; z-index: 90; width: max-content; max-width: min(240px, calc(100vw - 16px));
   padding: 6px 12px; border-radius: var(--r-sm); box-shadow: var(--shadow-raised);

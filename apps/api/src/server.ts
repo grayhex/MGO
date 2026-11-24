@@ -8,9 +8,10 @@ import { phoneCatalog } from './phones.js';
 import { readSymbianStatus } from './eka2l1/status.js';
 import { execFile } from 'node:child_process';
 import { createReadStream, readFileSync } from 'node:fs';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import { crc32 } from 'node:zlib';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import fastifyMultipart from '@fastify/multipart';
@@ -113,7 +114,7 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
       }
     },
   });
-  const archive = new ArchiveService(cfg, library, scan, options.archiveWorker);
+  const archive = new ArchiveService(cfg, library, scan, options.archiveWorker, () => settings.get());
   library.enrich = game => archive.matching.enrich(ngageCatalog.enrich(game));
   let emuClasses: { dir: string; classes: Set<string> } | null = null;
   const devicePresets = () => {
@@ -367,6 +368,21 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
     if ((game.platform ?? 'j2me') === 'j2me') throw new UploadError('not_applicable', 'Native readiness applies to Symbian and N-Gage games.', 404);
     const status = await readSymbianStatus(cfg);
     return { status, plan: nativePhonePlan(game.platform as 'symbian' | 'ngage' | 'ngage2', game.settings, status, game.packageFormat) };
+  });
+
+  app.get<{ Params: { id: string } }>('/api/games/:id/checksums', async req => {
+    const game = library.get(req.params.id);
+    if (!game) throw new UploadError('not_found', 'Game not found', 404);
+    const file = game.platform && game.platform !== 'j2me' ? library.packagePath(game.id) : library.paths(game.id).jar;
+    if (!file || !existsSync(file)) throw new UploadError('missing_package', 'The game file is missing from the library', 410);
+    const sha1 = createHash('sha1');
+    let crc = 0;
+    for await (const chunk of createReadStream(file)) {
+      const bytes = chunk as Buffer;
+      sha1.update(bytes);
+      crc = crc32(bytes, crc);
+    }
+    return { sha1: sha1.digest('hex'), crc32: crc.toString(16).padStart(8, '0') };
   });
 
   app.get<{ Params: { id: string } }>('/api/games/:id/analysis', async (req) => {

@@ -84,10 +84,9 @@
 .shell-collapsed .runtime-list { display: grid; padding: 4px; }
 
 /* MGO graphics kit: wide logo in the sidebar, the mark when it is collapsed */
-.brand { height: 64px; flex: none; border-bottom: 1px solid var(--outline); }
+.brand { height: 64px; flex: none; justify-content: center; border-bottom: 1px solid var(--outline); }
 .shell-collapsed .brand { justify-content: center; }
-@media (max-width: 860px) { .shell-collapsed .brand { justify-content: flex-start; } }
-.brand-logo { width: 192px; max-width: 100%; height: 72px; object-fit: contain; object-position: left center; }
+.brand-logo { width: 192px; max-width: 100%; height: 72px; object-fit: contain; object-position: center; }
 .brand-mark-img { display: none; width: 32px; height: 32px; flex: none; }
 .shell-collapsed .brand-logo { display: none; }
 .shell-collapsed .brand-mark-img { display: block; }
@@ -96,7 +95,5 @@
 .runtime-text small { white-space: normal; overflow-wrap: anywhere; }
 
 @media (max-width: 600px) {
-  .header-language .theme-select select { width: 34px; padding: 0; appearance: none; color: transparent; }
-  .header-language .theme-select option { color: var(--fg); }
   .header-language .seg button { padding: 0 7px; }
 }

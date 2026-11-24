@@ -61,8 +61,13 @@ try {
   ok('favorite toggle + filter', (await page.locator('article.game-card').count()) === 1);
 
   await page.click('article.game-card button.card-main');
-  await page.waitForSelector('.skin-lcd-overlay button.primary');
-  await page.click('.skin-lcd-overlay button.primary');
+  const details = page.getByRole('dialog');
+  await details.getByText('kemtest.jar', { exact: true }).waitFor();
+  await details.getByText('File checksums', { exact: true }).click();
+  await details.locator('button[aria-label="Copy SHA-1"]:enabled').waitFor();
+  await page.screenshot({ path: path.join(outDir, '02-game-details.png') });
+  ok('clicking a game row opens its card without launching it', (await (await fetch(base + '/api/sessions')).json()).length === 0);
+  await details.getByRole('button', { name: 'Play', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[data-testid=state-badge]')?.textContent?.includes('running'), null, { timeout: 20000 });
   ok('session reaches running state', true);
 
@@ -117,8 +122,8 @@ try {
 
   // on-screen keypad (touch/pointer) works too
   await page.getByText('On-screen keypad', { exact: true }).click();
-  await page.waitForSelector('[data-testid=keypad]');
-  const k0loc = page.locator('[data-testid=keypad] .key:has-text("0")').first();
+  await page.waitForSelector('[data-testid=phone-keypad]');
+  const k0loc = page.locator('[data-testid=phone-keypad] polygon[data-action=d0]');
   await k0loc.scrollIntoViewIfNeeded();
   const k0 = await k0loc.boundingBox();
   await page.mouse.move(k0.x + k0.width / 2, k0.y + k0.height / 2);
@@ -169,13 +174,12 @@ try {
   await mp.goto(base);
   await mp.waitForSelector('article.game-card');
   await mp.screenshot({ path: path.join(outDir, '08-mobile-library.png') });
-  await mp.click('article.game-card button.card-main');
-  await mp.click('.skin-lcd-overlay button.primary');
+  await mp.locator('article.game-card .play-game').click();
   await mp.waitForFunction(() => document.querySelector('[data-testid=state-badge]')?.textContent?.includes('running'), null, { timeout: 20000 });
-  await mp.waitForSelector('[data-testid=keypad]');
+  await mp.waitForSelector('[data-testid=phone-keypad]');
   await mp.waitForTimeout(500);
   await mp.screenshot({ path: path.join(outDir, '09-mobile-player.png') });
-  ok('mobile viewport shows the on-screen keypad', (await mp.locator('[data-testid=keypad]').count()) === 1);
+  ok('mobile viewport shows the on-screen keypad', (await mp.locator('[data-testid=phone-keypad]').count()) === 1);
   await mp.click('button.danger:has-text("Stop")').catch(() => undefined);
 
   ok('no uncaught browser errors', errors.length === 0, errors.slice(0, 3).join(' | '));

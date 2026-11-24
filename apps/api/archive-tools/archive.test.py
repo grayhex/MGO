@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from build_index import main
+from jarchive_download import RangeCache
 from transport import route
 
 
@@ -25,6 +26,17 @@ class ArchiveWorkerTests(unittest.TestCase):
         ]:
             with self.subTest(url=url), self.assertRaises(ValueError):
                 route(url)
+
+    def test_ranges_are_shared_between_members_of_the_same_archive_block(self):
+        source = dict(archive_name="JARchiveLite_v11.7z", archive_bytes=500, block_number=2,
+                      block_end=500, reset_absolute=80, reset_uncompressed=100, dict_mib=32,
+                      before=150, size=9)
+        with tempfile.TemporaryDirectory() as temp:
+            first = RangeCache(Path(temp), source, True)
+            first.save(80, b"abcd")
+            second = RangeCache(Path(temp), {**source, "before": 180, "size": 16}, True)
+            self.assertEqual(second.read(80, 4), b"abcd")
+            self.assertIsNone(RangeCache(Path(temp), {**source, "block_number": 3}, True).read(80, 4))
 
     def test_verified_record_and_mini_map(self):
         sha = "1" * 64

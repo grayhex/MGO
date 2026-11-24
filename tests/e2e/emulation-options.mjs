@@ -58,6 +58,10 @@ try {
   await p.getByRole('button', { name: 'Reset options' }).click();
   await wait(async () => { const g = (await (await fetch(base + '/api/games')).json()).find((x) => x.id === props.id); return g.settings.emulation === undefined; }, 'defaults restored');
 
+  await p.route('**/api/system/resources', route => route.fulfill({ json: {
+    cpuPercent: 4.8, memoryBytes: 204 * 1024 ** 2, memoryLimitBytes: 1536 * 1024 ** 2
+  } }));
+
   // ---- game speed ----
   const game = await upload('tests/fixtures/labgames/build/kemgame.jar');
   await p.setViewportSize({ width: 1280, height: 720 });
@@ -65,6 +69,19 @@ try {
   const panel = p.locator('.ctrl-col');
   for (const [language, label] of [['RU', 'Ограничение кадров (fps)'], ['EN', 'Frame limit (fps)']]) {
     await panel.locator('.seg.lang').getByRole('radio', { name: language }).click();
+    await panel.locator('.resource-meters').getByText('4.8%').waitFor();
+    const row = await panel.locator('.resource-meters').evaluate(meters =>
+      [...meters.children].map(meter => {
+        const label = document.createRange();
+        label.selectNodeContents(meter.querySelector('span'));
+        const value = document.createRange();
+        value.selectNodeContents(meter.querySelector('b'));
+        const left = label.getBoundingClientRect();
+        const right = value.getBoundingClientRect();
+        return Math.abs(left.top - right.top) < 2 && left.right <= right.left;
+      })
+    );
+    assert.deepEqual(row, [true, true], `resource labels fit on one line in ${language}`);
     const fps = panel.getByRole('radiogroup', { name: label, exact: true });
     await fps.waitFor();
     assert.deepEqual((await fps.getByRole('radio').allTextContents()).slice(-2), ['30', '60']);

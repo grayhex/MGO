@@ -48,7 +48,10 @@ try{
   assert.equal(await p.locator('.phones-intro').count(),1);
   await p.evaluate(async () => { await Promise.all([...document.querySelectorAll('.phone-pick .skin-body')].map(img => img.decode().catch(() => undefined))); });
   await p.screenshot({ path: 'test-results/mgo-phones.png', fullPage: true, animations: 'disabled' });
-  const box=await p.locator('.phone-pick').first().boundingBox();assert.ok(box.height<330,'compact phone card');
+  const firstPhone = p.locator('.phone-pick').first();
+  const box = await firstPhone.boundingBox();
+  const thumb = await firstPhone.locator('.phone-pick-skin').boundingBox();
+  assert.ok(thumb.height >= 220 && box.height - thumb.height < 145, 'large handset with compact controls below it');
   await p.getByRole('button',{name:'Nokia N95-1',exact:true}).click();
   await n95Ready.waitFor({ state: 'visible' });
   const saved=await(await fetch(base+'/api/games/'+game.id)).json();assert.equal(saved.settings.symbianDevice,'RM-320');assert.equal(saved.settings.emulatedDeviceId,'eka2l1-n95-8gb');
@@ -108,7 +111,8 @@ try{
   const tile=p.locator('.game-card').filter({hasText:'Pathway to Glory'});await tile.waitFor();
   await tile.locator('.cover.art img').waitFor();assert.ok((await tile.innerText()).includes('All About Symbian'));
   assert.ok((await tile.innerText()).includes('Bluetooth (2 players)'));
-  await tile.getByRole('button',{name:'Game information',exact:true}).click();
+  await tile.locator('.card-main').click();
+  await p.getByText('Metadata sources',{exact:true}).click();
   await p.getByText('6R72',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
   console.log('PASS MGO production UI: N95 RM-320/SIS9, own-session status, sidebar versions/current game, compact phones, settings tabs/keyboard/mobile, separate folders/defaults and cached N-Gage facts/cover');

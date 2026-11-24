@@ -16,7 +16,7 @@ services:
     volumes:
       - ${MGO_DATA:-mgo-data}:/data
       - symbian-auth:/symbian-auth:ro
-      - ${MGO_LIBRARY:-./games}:/mnt/mgo-library:ro
+      - ${MGO_LIBRARY:-./games}:/mnt/mgo-library:rw
     networks: [internal, symbian]
     user: "${PUID:-10001}:${PGID:-10001}"
     group_add: ["10"]

@@ -56,13 +56,14 @@ test('exact matching can resume across restarts and never applies candidates aut
   await matches.idle();
   assert.equal(matches.current().state, 'preview');
   assert.equal(library.get(a.id).archiveMatch, undefined);
-  assert.deepEqual(matches.rows(true, 0).rows.map(row => row.match.state).sort(), ['exact', 'review']);
+  assert.deepEqual(matches.rows(true, 0).rows.map(row => row.match.state).sort(), ['review']);
   matches.apply(index);
   assert.equal(library.get(a.id).name, 'Snow / locked');
   assert.equal(library.get(a.id).version, '1');
   assert.equal(library.get(b.id).version, '2');
   assert.equal(library.get(b.id).archiveMatch.build, null);
   matches.confirm(b.id, build.sha256);
+  assert.equal(matches.current().review, 0);
   for (let i = 0; i < 2; i++) {
     matches.start(index, false);
     await matches.idle();
@@ -95,4 +96,47 @@ test('writable destinations reject traversal, symlinks and unavailable roots; pu
     assert.throws(() => publishJar(folder, 'Broken.jar', sha, Buffer.from('fixture'), () => { throw Error('insertion error'); }), /insertion error/);
     assert.deepEqual(readdirSync(folder).sort(), [name, 'Racer [aaaaaaaaaaaa].jar'].sort());
   });
+});
+
+test('curated downloads publish into the configured Java subfolder and are recognised by a rescan', async t => {
+  const { buildApp } = await import('../../apps/api/src/server.ts');
+  const { testConfig } = await import('../../apps/api/src/dev/testing.ts');
+  const { archiveFixtureWorker } = await import('../fixtures/archive-fixture.mjs');
+  const dir = tmpDir();
+  const java = path.join(dir, 'Shared', 'Java');
+  mkdirSync(java, { recursive: true });
+  const bytes = makeJar('3D Bomberman');
+  const build = archiveBuild(bytes, { title: '3D Bomberman', filename: 'Bomberman.jar' });
+  const app = await buildApp(testConfig({ dataDir: path.join(dir, 'data'), runDir: path.join(dir, 'run'), roots: [java] }), {
+    archiveWorker: archiveFixtureWorker([build], new Map([[build.sha256, bytes]])),
+  });
+  t.after(async () => { await app.close(); rmSync(dir, { recursive: true, force: true }); });
+
+  const patch = payload => app.fastify.inject({ url: '/api/settings', method: 'PATCH', payload });
+  assert.equal((await patch({ archiveDownloadFolder: '../escape' })).statusCode, 400);
+  assert.equal((await patch({ libraryPaths: { j2me: java }, archiveDownloadFolder: 'Downloads/Curated' })).statusCode, 200);
+  assert.equal((await app.fastify.inject('/api/archive/curated')).json().destination.path, path.join(java, 'Downloads/Curated'));
+  await app.fastify.inject({ url: '/api/archive/index', method: 'POST' });
+  const waitFor = async fn => {
+    for (let i = 0; i < 200; i++) {
+      if (await fn()) return;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.fail('Timed out waiting for the archive job');
+  };
+  await waitFor(async () => !!(await app.fastify.inject('/api/archive')).json().index);
+  const selection = [{ title: build.title, sha256: build.sha256 }];
+  const start = await app.fastify.inject({ url: '/api/archive/curated', method: 'POST', payload: { confirmed: true, selection } });
+  assert.equal(start.statusCode, 202, start.body);
+  await waitFor(async () => (await app.fastify.inject('/api/archive/curated')).json().job?.state === 'done');
+  const job = (await app.fastify.inject('/api/archive/curated')).json().job;
+  assert.equal(job.imported, 1, JSON.stringify(job.failed));
+  const destination = path.join(java, 'Downloads/Curated');
+  const [file] = readdirSync(destination);
+  assert.deepEqual(readFileSync(path.join(destination, file)), Buffer.from(bytes));
+  assert.equal(app.library.get(app.library.findBySha(build.sha256).id).fileName, file);
+  app.scan.start('update');
+  await app.scan.idle();
+  assert.equal(app.library.count(), 1);
+  assert.equal(app.library.sourcesOf(app.library.findBySha(build.sha256).id)[0].missing, 0);
 });

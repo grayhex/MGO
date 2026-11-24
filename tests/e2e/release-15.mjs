@@ -48,7 +48,7 @@ try {
   for (let i = 0; i < 26; i++) app.library.add(makeJar(`Another title ${i}`), null, 1024 ** 2);
   const last = app.library.add(makeJar('ZZZ last played'), null, 1024 ** 2).game;
   await page.reload();
-  await page.locator('.game-card', { hasText: last.name }).locator('button.card-main').click();
+  await page.locator('.game-card', { hasText: last.name }).getByRole('button', { name: 'Play', exact: true }).click();
   await page.waitForURL('**/play/' + last.id);
   const fps = page.getByRole('radiogroup', { name: 'Frame limit (fps)' });
   await fps.waitFor();

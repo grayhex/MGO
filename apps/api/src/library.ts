@@ -10,6 +10,10 @@ import { readScreenHints, type ScreenHint } from './analysis/screenHints.js';
 import { Classifications } from './classification.js';
 import { cleanTitle, cleanVendor } from './title.js';
 
+function originalFileName(name?: string): string | null {
+  return name ? sanitizeText(path.basename(name.replaceAll('\\', '/')), 255) || null : null;
+}
+
 interface Row {
   id: string;
   sha256: string;
@@ -20,6 +24,7 @@ interface Row {
   midlets_json: string;
   class_version: number;
   size_bytes: number;
+  file_name?: string | null;
   has_icon: number;
   has_jad: number;
   favorite: number;
@@ -192,6 +197,7 @@ export class Library {
     if (!cols.includes('package_ext')) this.db.exec('ALTER TABLE games ADD COLUMN package_ext TEXT');
     if (!cols.includes('package_format')) this.db.exec('ALTER TABLE games ADD COLUMN package_format TEXT');
     if (!cols.includes('play_seconds')) this.db.exec('ALTER TABLE games ADD COLUMN play_seconds INTEGER NOT NULL DEFAULT 0');
+    if (!cols.includes('file_name')) this.db.exec('ALTER TABLE games ADD COLUMN file_name TEXT');
     if (!cols.includes('native_resolution_json')) this.db.exec('ALTER TABLE games ADD COLUMN native_resolution_json TEXT');
     this.dropStaleNativeSkins();
     this.fillPackageFormats();
@@ -359,6 +365,7 @@ export class Library {
       midlets: JSON.parse(r.midlets_json),
       classVersion: r.class_version,
       sizeBytes: r.size_bytes,
+      ...(r.file_name ? { fileName: r.file_name } : {}),
       hasIcon: !!r.has_icon,
       hasJad: !!r.has_jad,
       favorite: !!r.favorite,
@@ -425,6 +432,10 @@ export class Library {
   /** What `list()` adds to every game (MobyGames summary, genre, "file gone"), for one game: single-game answers must carry it too. */
   private withExtras(g: GameMeta, origin: string | undefined): GameMeta {
     const s = this.db.prepare('SELECT COUNT(*) AS n, SUM(CASE WHEN missing = 0 THEN 1 ELSE 0 END) AS active FROM sources WHERE game_id = ?').get(g.id) as unknown as { n: number; active: number | null };
+    if (!g.fileName && s.n > 0) {
+      const source = this.db.prepare('SELECT rel_path FROM sources WHERE game_id = ? ORDER BY missing, rel_path LIMIT 1').get(g.id);
+      if (typeof source?.rel_path === 'string') g.fileName = path.basename(source.rel_path);
+    }
     if (s.n > 0 && origin === 'import' && !s.active) g.sourceMissing = true;
     const m = this.db.prepare('SELECT status, data_json FROM metadata WHERE group_key = ?').get(g.groupKey) as unknown as { status: string; data_json: string } | undefined;
     if (m) g.info = infoSummary(m);
@@ -497,9 +508,9 @@ export class Library {
     this.db
       .prepare(
         `INSERT INTO games (id, sha256, name, vendor, version, group_key, midlets_json, class_version, size_bytes, has_icon, has_jad,
-          favorite, created_at, last_played_at, settings_json, warnings_json, origin, platform, package_ext, package_format, native_resolution_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,?,?,?,?,?)`,
+          favorite, created_at, last_played_at, settings_json, warnings_json, origin, platform, package_ext, package_format, native_resolution_json, file_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,?,?,?,?,?,?)`,
       )
-      .run(id, sha, name, vendor, '', groupKey, '[]', 0, bytes.length, 0, 0, new Date().toISOString(), JSON.stringify(settings), '[]', opts.origin ?? 'upload', platform, ext, ext === 'sis' || ext === 'sisx' ? sisFormatOf(bytes.subarray(0, 8)) : null, JSON.stringify(this.packageResolution(platform, fileName)));
+      .run(id, sha, name, vendor, '', groupKey, '[]', 0, bytes.length, 0, 0, new Date().toISOString(), JSON.stringify(settings), '[]', opts.origin ?? 'upload', platform, ext, ext === 'sis' || ext === 'sisx' ? sisFormatOf(bytes.subarray(0, 8)) : null, JSON.stringify(this.packageResolution(platform, fileName)), originalFileName(fileName));
     return { game: this.get(id)!, duplicate: false };
   }
 
@@ -527,13 +538,13 @@ export class Library {
     this.db
       .prepare(
         `INSERT INTO games (id, sha256, name, vendor, version, group_key, midlets_json, class_version, size_bytes, has_icon, has_jad,
-          favorite, created_at, last_played_at, settings_json, warnings_json, origin, native_resolution_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,?,?)`,
+          favorite, created_at, last_played_at, settings_json, warnings_json, origin, native_resolution_json, file_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,?,?,?)`,
       )
       .run(
         id, sha, name, vendor, sanitizeText(info.version, 40), groupKey,
         JSON.stringify(info.midlets.map((m) => ({ name: sanitizeText(m.name), className: m.className }))),
         info.classVersion, jar.length, info.icon ? 1 : 0, jadBytes ? 1 : 0,
-        new Date().toISOString(), JSON.stringify(settings), JSON.stringify(info.warnings), opts.origin ?? 'upload', JSON.stringify(readScreenHints(info.attributes, opts.fileName ?? name)[0] ?? null),
+        new Date().toISOString(), JSON.stringify(settings), JSON.stringify(info.warnings), opts.origin ?? 'upload', JSON.stringify(readScreenHints(info.attributes, opts.fileName ?? name)[0] ?? null), originalFileName(opts.fileName),
       );
     return { game: this.get(id)!, duplicate: false };
   }

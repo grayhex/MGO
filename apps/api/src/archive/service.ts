@@ -1,14 +1,15 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ArchiveBuild, ArchiveDownload, ArchiveSearchItem, ArchiveStatus, ArchiveTransfer, CuratedTitle, CuratedImport } from '@mgo/protocol';
+import type { ArchiveBuild, ArchiveDownload, ArchiveSearchItem, ArchiveStatus, ArchiveTransfer, CuratedTitle, CuratedImport, PublicSettings } from '@mgo/protocol';
 import type { Config } from '../config.js';
 import { javaGroupKey, type Library } from '../library.js';
 import type { ScanManager } from '../scanner.js';
 import { parseJar, UploadError } from '../jar.js';
+import { resolveInsideRoots } from '../libraryPath.js';
 import { assertSpace, folderSegments, managedRoot, publishJar, withDestination, writable } from './destination.js';
 import { ArchiveIndex, MIB, SHA256, SOURCE } from './index.js';
 import { ArchiveMatching } from './matching.js';
@@ -70,7 +71,7 @@ export class ArchiveService {
   private curatedAbort: AbortController | null = null;
   private curatedPlan: { index: ArchiveIndex; rows: Promise<CuratedTitle[]> } | null = null;
 
-  constructor(private cfg: Config, private library: Library, private scanner: ScanManager, private worker: ArchiveWorker = runArchiveWorker) {
+  constructor(private cfg: Config, private library: Library, private scanner: ScanManager, private worker: ArchiveWorker = runArchiveWorker, private settings?: () => PublicSettings) {
     this.matching = new ArchiveMatching(library);
     this.dir = path.join(cfg.dataDir, 'j2me-archive');
     this.indexPath = path.join(this.dir, 'index.sqlite');
@@ -86,13 +87,31 @@ export class ArchiveService {
 
   status(): ArchiveStatus {
     const managed = managedRoot(this.cfg);
+    const java = this.javaLibrary();
     const external = this.cfg.archiveWritableRoot;
     return { availableVersion: SOURCE.version, index: this.index?.info ?? null, indexJob: this.indexJob, matchJob: this.matching.current(),
       maxIndexBytes: this.maxIndex, writableRoots: [
         { id: 'managed', label: 'Managed Java ME library', writable: writable(existsSync(managed) ? managed : this.cfg.dataDir) },
+        ...(java ? [{ id: 'java' as const, label: java, writable: this.javaWritable(java) }] : []),
         ...(external ? [{ id: 'external' as const, label: external, writable: writable(external) }] : []),
       ],
     };
+  }
+
+  private javaLibrary() {
+    const settings = this.settings?.();
+    return settings?.libraryPaths?.j2me ?? settings?.libraryPath ?? null;
+  }
+
+  private javaWritable(root: string) {
+    return resolveInsideRoots(this.cfg, root)?.real === root && writable(root);
+  }
+
+  curatedDestination() {
+    const java = this.javaLibrary();
+    const root = java ?? managedRoot(this.cfg);
+    const folder = this.settings?.().archiveDownloadFolder ?? 'Curated Java ME';
+    return { path: path.join(root, folder), writable: java ? this.javaWritable(java) : writable(existsSync(root) ? root : this.cfg.dataDir) };
   }
 
   requireIndex(): ArchiveIndex {
@@ -197,14 +216,15 @@ export class ArchiveService {
 
   currentDownload(): ArchiveDownload | null { return this.download; }
 
-  startDownload(sha: string, rootId: string, folder: string, fromCurated = false): ArchiveDownload {
+  startDownload(sha: string, rootId: string, folder: string, curatedRoot?: string): ArchiveDownload {
+    const fromCurated = !!curatedRoot;
     this.ensureIdle(fromCurated);
     if (!SHA256.test(sha)) throw new UploadError('archive_bad_hash', 'Select a valid SHA-256 from the archive');
     const index = this.requireIndex();
     const build = index.get(sha);
     if (!build) throw new UploadError('archive_build_missing', 'This build was not found in the installed archive index', 404);
     const segments = folderSegments(folder);
-    const root = rootId === 'managed' ? managedRoot(this.cfg) : rootId === 'external' ? this.cfg.archiveWritableRoot : null;
+    const root = curatedRoot ?? (rootId === 'managed' ? managedRoot(this.cfg) : rootId === 'external' ? this.cfg.archiveWritableRoot : rootId === 'java' ? this.javaLibrary() : null);
     if (!root) throw new UploadError('archive_bad_root', 'Choose an allowed upload destination');
     const existing = this.library.findBySha(sha);
     const report: ArchiveDownload = { sha256: sha, state: 'running', phase: 'fetching', message: null, gameId: existing?.id ?? null, duplicate: !!existing };
@@ -217,24 +237,20 @@ export class ArchiveService {
     if (!fromCurated && Date.now() - this.attemptedAt < 2000) throw new UploadError('archive_rate_limit', 'Wait two seconds before downloading another build', 429);
     if (build.size > this.cfg.maxUploadBytes) throw new UploadError('too_large', 'The archive JAR exceeds the Java ME upload limit', 413);
     if (build.size + this.library.totalBytes() > this.cfg.libraryQuotaBytes) throw new UploadError('quota_exceeded', 'Library quota exceeded; delete some games first', 507);
+    if (rootId === 'java' && !this.javaWritable(root)) throw new UploadError('archive_read_only', 'The archive destination is unavailable or read-only', 403);
     if (rootId === 'managed') mkdirSync(root, { mode: 0o700, recursive: true });
     withDestination(root, segments, dir => assertSpace(dir, build.size));
     mkdirSync(this.dir, { mode: 0o700, recursive: true });
     assertSpace(this.dir, DOWNLOAD_BUDGET + 2 * build.size);
     const staging = path.join(this.dir, '.download');
-    const cacheKey = path.join(staging, 'sha256');
-    let cached: string | undefined;
-    try { cached = readFileSync(cacheKey, 'utf8'); } catch { /* no cached transfer */ }
-    if (sha !== cached) rmSync(staging, { recursive: true, force: true });
     mkdirSync(staging, { mode: 0o700, recursive: true });
-    writeFileSync(cacheKey, sha, { mode: 0o600 });
     const file = path.join(staging, 'verified.jar');
     rmSync(file, { force: true });
     this.attemptedAt = Date.now();
     this.download = report;
     this.start(report, async signal => {
       try {
-        await this.worker(['download', sha, file, path.join(staging, 'cache'), String(Math.min(64, Math.ceil(this.cfg.maxUploadBytes / MIB)))], staging, this.proxy(), signal, line => {
+        await this.worker(['download', sha, file, path.join(staging, 'cache'), String(Math.min(64, Math.ceil(this.cfg.maxUploadBytes / MIB))), build.collection === '96x65pixels J2ME mini' ? 'mini' : 'auto'], staging, this.proxy(), signal, line => {
           report.message = line.slice(0, 300);
           if (fromCurated && this.curated) this.curated.progress = report.message;
         });
@@ -254,7 +270,6 @@ export class ArchiveService {
         this.matching.exact(game.id, index.info.version, build);
         report.gameId = game.id;
         report.duplicate = !!duplicate;
-        rmSync(staging, { recursive: true, force: true });
       } finally {
         rmSync(file, { force: true });
       }
@@ -297,11 +312,19 @@ export class ArchiveService {
         selection.some(row => !plan.get(row.title)?.builds.some(build => build.sha256 === row.sha256))) {
       throw new UploadError('archive_bad_selection', 'Select one available build per title from the curated list');
     }
-    const report: CuratedImport = { state: 'running', total: selection.length, imported: 0, duplicates: 0, failed: [], current: null, progress: null };
+    const java = this.javaLibrary();
+    const rootId = java ? 'java' : 'managed';
+    const root = java ?? managedRoot(this.cfg);
+    const folder = this.settings?.().archiveDownloadFolder ?? 'Curated Java ME';
+    const destination = this.curatedDestination();
+    if (!destination.writable) throw new UploadError('archive_read_only', 'The archive destination is unavailable or read-only', 403);
+    if (!java) mkdirSync(root, { mode: 0o700, recursive: true });
+    withDestination(root, folderSegments(folder), dir => assertSpace(dir, 0));
+    const report: CuratedImport = { state: 'running', total: selection.length, imported: 0, duplicates: 0, failed: [], current: null, progress: null, destination: destination.path };
     const abort = new AbortController();
     this.curated = report;
     this.curatedAbort = abort;
-    this.curatedTask = this.runCurated(selection, report, abort.signal).finally(() => {
+    this.curatedTask = this.runCurated(selection, report, abort.signal, { rootId, root, folder }).finally(() => {
       report.state = abort.signal.aborted ? 'cancelled' : 'done';
       report.current = null;
       report.progress = null;
@@ -311,14 +334,15 @@ export class ArchiveService {
     return report;
   }
 
-  private async runCurated(selection: { title: string; sha256: string }[], report: CuratedImport, signal: AbortSignal): Promise<void> {
+  private async runCurated(selection: { title: string; sha256: string }[], report: CuratedImport, signal: AbortSignal, destination: { rootId: string; root: string; folder: string }): Promise<void> {
     await new Promise<void>(done => setImmediate(done));
     for (const item of selection) {
       if (signal.aborted) break;
       report.current = item.title;
+      report.currentBytes = this.index?.get(item.sha256)?.size ?? 0;
       report.progress = null;
       try {
-        const job = this.startDownload(item.sha256, 'managed', 'Curated Java ME', true);
+        const job = this.startDownload(item.sha256, destination.rootId, destination.folder, destination.root);
         await this.job?.task;
         if (signal.aborted) break;
         if (job.state !== 'done') throw new Error(job.message ?? 'Archive source is unavailable');

@@ -1,3 +1,4 @@
+import { getServerSettings } from '../serverSettings';
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import type { ArchiveBuild, ArchiveDownload, ArchiveSearchItem, ArchiveStatus } from '@mgo/protocol';
 import { api } from '../api';
@@ -45,8 +46,10 @@ export function ArchiveBrowser({ onClose, onImported, onPlay, initial, initialSh
   const [results, setResults] = useState<Results | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [confirm, setConfirm] = useState(false);
-  const [root, setRoot] = useState('managed');
-  const [folder, setFolder] = useState('J2ME Archive');
+  const settings = getServerSettings()?.settings;
+  const java = settings?.libraryPaths?.j2me ?? settings?.libraryPath;
+  const [root, setRoot] = useState(java ? 'java' : 'managed');
+  const [folder, setFolder] = useState(java ? settings?.archiveDownloadFolder ?? 'Curated Java ME' : 'J2ME Archive');
   const [job, setJob] = useState<ArchiveDownload | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
