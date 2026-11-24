@@ -1,22 +1,46 @@
 #!/usr/bin/env node
-import { audioDiagnostics, runtimeMetrics } from './diagnostics.mjs';
-import { audioEnvironment } from './audio.mjs';
+import { audioDiagnostics, runtimeMetrics, type AudioCapture } from './diagnostics.mts';
+import { audioEnvironment } from './audio.mts';
 // mgo-symbian agent: the only thing MGO talks to in the Symbian container. It starts and stops EKA2L1 (one at a time), gives every
 // game its own data directory, takes uploads, captures the sound, and passes an allow-list of EKA2L1's /v1 control API through.
 // No dependencies: Node 22 only. Configuration is by environment (see symbian/README.md).
-import { spawn, execFile } from 'node:child_process';
+import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { statfsSync, createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, renameSync, statSync, symlinkSync } from 'node:fs';
-import http from 'node:http';
+import http, { type IncomingMessage, type OutgoingHttpHeaders, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
-import { checkControl, safeName, SAVE_KEY } from './policy.mjs';
-import { factoryDirectory, factoryUploadPath, factoryInstallFiles } from './factory.mjs';
+import { checkControl, safeName, SAVE_KEY } from './policy.mts';
+import { factoryDirectory, factoryUploadPath, factoryInstallFiles } from './factory.mts';
 
 const run = promisify(execFile);
 const env = process.env;
-const audioCapture = { streams: 0, bytes: 0, lastError: null };
+const audioCapture: AudioCapture = { streams: 0, bytes: 0, lastError: null };
+
+type RequestBody = Record<string, unknown>;
+type JobKind = 'install_device' | 'delete_device';
+type JobState = 'running' | 'succeeded' | 'failed';
+interface FirmwareJob { id: string; kind: JobKind; state: JobState; progress: number; started: number; error: string | null; errorCode?: string | null }
+interface FirmwareFiles { archive?: string; rom?: string; rpkg?: string; vpl?: string }
+interface FirmwareOptions { keep?: boolean; bundleDir?: string | null; variant?: number }
+interface Device { code: string; manufacturer: string; model: string }
+interface ControlBody {
+  started?: boolean;
+  firmwareFormats?: string[];
+  id?: string;
+  state?: JobState;
+  progress?: number;
+  devices?: Device[];
+  current?: Device | null;
+  error?: { message?: string; code?: string };
+}
+interface Instance { id: string; saveKey: string | null; maintenance: boolean; proc: ChildProcess; dir: string; since: number; log: string[]; timer: NodeJS.Timeout }
+
+function errorDetails(value: unknown) {
+  const error = value instanceof Error ? value as Error & { status?: number; code?: string } : null;
+  return { message: error?.message ?? String(value), status: error?.status, code: error?.code };
+}
 /**
  * The shared secret between MGO and this service. Either AGENT_TOKEN, or AGENT_TOKEN_FILE: a file on a volume both containers mount;
  * it is created here on the first start, so the default compose file needs no token to be typed in.
@@ -61,15 +85,15 @@ const PERSIST = (env.INSTANCE_PERSIST_DIRS ?? 'drives/c,drives/e').split(',').fi
 if (!TOKEN || TOKEN.length < 16) { console.error('AGENT_TOKEN (at least 16 characters) or AGENT_TOKEN_FILE is required'); process.exit(1); }
 for (const d of [DATA, PRIVATE_RUN, BASE, SAVES, FIRMWARE_IN]) mkdirSync(d, { recursive: true, mode: 0o700 });
 
-const ring = [];
-const log = (...a) => { const line = [new Date().toISOString(), ...a].join(' '); console.log(line); ring.push(line.slice(0, 500)); if (ring.length > 300) ring.shift(); };
-const json = (res, status, body, headers = {}) => { const s = JSON.stringify(body); res.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(s), ...headers }); res.end(s); };
-const err = (res, status, code, message) => json(res, status, { error: { code, message } });
-const sameToken = (given) => { const a = Buffer.from(String(given ?? '')), b = Buffer.from(TOKEN); return a.length === b.length && timingSafeEqual(a, b); };
+const ring: string[] = [];
+const log = (...a: unknown[]) => { const line = [new Date().toISOString(), ...a].join(' '); console.log(line); ring.push(line.slice(0, 500)); if (ring.length > 300) ring.shift(); };
+const json = (res: ServerResponse, status: number, body: unknown, headers: OutgoingHttpHeaders = {}) => { const s = JSON.stringify(body); res.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(s), ...headers }); res.end(s); };
+const err = (res: ServerResponse, status: number, code: string, message: string) => json(res, status, { error: { code, message } });
+const sameToken = (given: string) => { const a = Buffer.from(String(given ?? '')), b = Buffer.from(TOKEN); return a.length === b.length && timingSafeEqual(a, b); };
 
 // ------------------------------------------------------------------ devices cache
-function readDevices() { try { return JSON.parse(readFileSync(DEVICES_FILE, 'utf8')); } catch { return []; } }
-function writeDevices(list) {
+function readDevices(): Device[] { try { return JSON.parse(readFileSync(DEVICES_FILE, 'utf8')); } catch { return []; } }
+function writeDevices(list: Device[]) {
   writeFileSync(DEVICES_FILE + '.tmp', JSON.stringify(list)); renameSync(DEVICES_FILE + '.tmp', DEVICES_FILE);
   // a default that points at a device which is gone would silently send a game to another firmware: drop it
   const d = readDefaults(), codes = new Set(list.map((x) => String(x.code).toLowerCase()));
@@ -82,14 +106,14 @@ const PLATFORMS = new Set(['symbian', 'ngage', 'ngage2']);
 const INSTALL_SPACE_FACTOR = Number(env.INSTALL_SPACE_FACTOR ?? 2);
 const SPACE_MARGIN = 512 * 1024 ** 2;
 function diskInfo() { try { const s = statfsSync(DATA); return { free: Number(s.bavail) * Number(s.bsize), total: Number(s.blocks) * Number(s.bsize) }; } catch { return null; } }
-const gb = (n) => `${(n / 1024 ** 3).toFixed(1)} GB`;
+const gb = (n: number) => `${(n / 1024 ** 3).toFixed(1)} GB`;
 /** @returns null when there is room, otherwise a message */
-function needSpace(bytes) {
+function needSpace(bytes: number) {
   const d = diskInfo();
   if (!d) return null;
   return d.free < bytes + SPACE_MARGIN ? `not enough free space in the service volume: ${gb(bytes + SPACE_MARGIN)} needed, ${gb(d.free)} free of ${gb(d.total)}` : null;
 }
-function treeSize(p) {
+function treeSize(p: string): number {
   try {
     const st = lstatSync(p);
     if (st.isFile()) return st.size;
@@ -97,8 +121,8 @@ function treeSize(p) {
     return readdirSync(p).reduce((n, name) => n + treeSize(path.join(p, name)), 0);
   } catch { return 0; }
 }
-function readDefaults() { try { const j = JSON.parse(readFileSync(DEFAULTS_FILE, 'utf8')); return j && typeof j === 'object' ? j : {}; } catch { return {}; } }
-function writeDefaults(d) { writeFileSync(DEFAULTS_FILE + '.tmp', JSON.stringify(d)); renameSync(DEFAULTS_FILE + '.tmp', DEFAULTS_FILE); }
+function readDefaults(): Record<string, string> { try { const j = JSON.parse(readFileSync(DEFAULTS_FILE, 'utf8')); return j && typeof j === 'object' ? j : {}; } catch { return {}; } }
+function writeDefaults(d: Record<string, string>) { writeFileSync(DEFAULTS_FILE + '.tmp', JSON.stringify(d)); renameSync(DEFAULTS_FILE + '.tmp', DEFAULTS_FILE); }
 /** Plain files directly in the inbox (no links, no sub-folders), names that are safe to show and to pass on. */
 function listInbox() {
   const out = [];
@@ -112,17 +136,16 @@ function listInbox() {
 }
 
 // ------------------------------------------------------------------ the one EKA2L1 instance
-/** @type {null | { id: string, saveKey: string | null, maintenance: boolean, proc: import('node:child_process').ChildProcess, dir: string, since: number, log: string[], timer: NodeJS.Timeout }} */
-let instance = null;
+let instance: Instance | null = null;
 let starting = false;
 
-async function copyTree(from, to, link) {
+async function copyTree(from: string, to: string, link: boolean) {
   mkdirSync(path.dirname(to), { recursive: true });
   await run('cp', [link ? '-al' : '-a', '--', from, to]);
 }
 
 /** Builds the data directory of an instance: firmware shared (hardlinks, never written), the game's own drives linked in, the rest copied. */
-async function prepareInstance(id, saveKey) {
+async function prepareInstance(id: string, saveKey: string) {
   const dir = path.join(PRIVATE_RUN, id);
   const xdg = path.join(dir, 'xdg');
   const target = path.join(xdg, 'EKA2L1');
@@ -155,18 +178,20 @@ async function prepareInstance(id, saveKey) {
   return { dir, xdg };
 }
 
-function killInstance(inst) {
+function killInstance(inst: Instance) {
   clearTimeout(inst.timer);
-  try { process.kill(-inst.proc.pid, 'SIGTERM'); } catch { /* gone */ }
-  const t = setTimeout(() => { try { process.kill(-inst.proc.pid, 'SIGKILL'); } catch { /* gone */ } }, 4000);
+  const { pid } = inst.proc;
+  if (!pid) return;
+  try { process.kill(-pid, 'SIGTERM'); } catch { /* gone */ }
+  const t = setTimeout(() => { try { process.kill(-pid, 'SIGKILL'); } catch { /* gone */ } }, 4000);
   t.unref();
 }
 
 const LAST_RUN = path.join(DATA, 'last-run.json');
-function tailFile(f, n) { try { return readFileSync(f, 'utf8').split('\n').filter(Boolean).slice(-n).map((l) => l.slice(0, 600)); } catch { return []; } }
-function emulatorLogFile(inst) { return inst.maintenance ? path.join(BASE, 'EKA2L1', 'EKA2L1.log') : path.join(inst.dir, 'xdg', 'EKA2L1', 'EKA2L1.log'); }
+function tailFile(f: string, n: number) { try { return readFileSync(f, 'utf8').split('\n').filter(Boolean).slice(-n).map((l) => l.slice(0, 600)); } catch { return []; } }
+function emulatorLogFile(inst: Instance) { return inst.maintenance ? path.join(BASE, 'EKA2L1', 'EKA2L1.log') : path.join(inst.dir, 'xdg', 'EKA2L1', 'EKA2L1.log'); }
 /** The per-run directory is deleted when the instance ends; what the emulator said is kept for the next diagnostics request. */
-function snapshotLogs(inst) {
+function snapshotLogs(inst: Instance) {
   try {
     writeFileSync(LAST_RUN, JSON.stringify({ savedAt: new Date().toISOString(), maintenance: inst.maintenance, saveKey: inst.saveKey, output: inst.log.slice(-120), eka2l1Log: tailFile(emulatorLogFile(inst), 300) }), { mode: 0o600 });
   } catch { /* diagnostics are best effort */ }
@@ -178,7 +203,7 @@ async function stopInstance() {
   instance = null;
   snapshotLogs(inst);
   killInstance(inst);
-  await new Promise((r) => { if (inst.proc.exitCode !== null) return r(); inst.proc.once('exit', r); setTimeout(r, 5000).unref(); });
+  await new Promise<void>((r) => { if (inst.proc.exitCode !== null) return r(); inst.proc.once('exit', r); setTimeout(r, 5000).unref(); });
   rmSync(inst.dir, { recursive: true, force: true }); // the per-run copy goes; saves and the base stay
   log('instance stopped', inst.id);
 }
@@ -188,13 +213,13 @@ async function stopInstance() {
  * dialog BEFORE it starts the control API, so a fresh data directory never answers on the control port. That dialog is
  * suppressed by this QSettings key (it is the dialog's own "Don't show this again").
  */
-function writeQtSettings(home) {
+function writeQtSettings(home: string) {
   const d = path.join(home, '.config', 'EKA2L1');
   mkdirSync(d, { recursive: true });
   writeFileSync(path.join(d, 'EKA2L1.conf'), '[General]\ndisableNoDeviceInstallNotify=true\n');
 }
 
-async function startInstance({ saveKey, maintenance }) {
+async function startInstance({ saveKey, maintenance }: { saveKey: string | null; maintenance: boolean }) {
   if (instance || starting) throw Object.assign(new Error('an emulator instance is already running'), { status: 409, code: 'busy' });
   starting = true;
   try {
@@ -207,6 +232,7 @@ async function startInstance({ saveKey, maintenance }) {
       mkdirSync(path.join(dir, 'in'), { recursive: true });
       mkdirSync(path.join(BASE, 'EKA2L1'), { recursive: true });
     } else {
+      if (!saveKey) throw new Error('a save key is required');
       ({ dir, xdg } = await prepareInstance(id, saveKey));
     }
     writeQtSettings(path.join(dir, 'home'));
@@ -214,17 +240,17 @@ async function startInstance({ saveKey, maintenance }) {
       detached: true,
       cwd: path.dirname(EKA_BIN),
       env: {
-        PATH: env.PATH, LANG: 'C.UTF-8', HOME: path.join(dir, 'home'), XDG_DATA_HOME: xdg, XDG_CONFIG_HOME: path.join(dir, 'home', '.config'), XDG_CACHE_HOME: path.join(dir, 'home', '.cache'),
+        LANG: 'C.UTF-8', HOME: path.join(dir, 'home'), XDG_DATA_HOME: xdg, XDG_CONFIG_HOME: path.join(dir, 'home', '.config'), XDG_CACHE_HOME: path.join(dir, 'home', '.cache'),
         DISPLAY: env.DISPLAY ?? ':99', LIBGL_ALWAYS_SOFTWARE: '1', QT_QPA_PLATFORM: env.QT_QPA_PLATFORM ?? 'xcb', ...audioEnvironment(env),
         QT_QUICK_BACKEND: 'software',
         ...Object.fromEntries(PASS_ENV.filter((n) => env[n] !== undefined).map((n) => [n, env[n]])),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    const lines = [];
-    const take = (b) => { for (const l of b.toString('utf8').split('\n')) if (l) { lines.push(l.slice(0, 400)); if (lines.length > 300) lines.shift(); } };
+    const lines: string[] = [];
+    const take = (b: Buffer) => { for (const l of b.toString('utf8').split('\n')) if (l) { lines.push(l.slice(0, 400)); if (lines.length > 300) lines.shift(); } };
     proc.stdout.on('data', take); proc.stderr.on('data', take);
-    const inst = { id, saveKey: saveKey ?? null, maintenance: !!maintenance, proc, dir, since: Date.now(), log: lines, timer: setTimeout(() => { log('instance time limit'); void stopInstance(); }, MAX_INSTANCE_MS) };
+    const inst: Instance = { id, saveKey: saveKey ?? null, maintenance: !!maintenance, proc, dir, since: Date.now(), log: lines, timer: setTimeout(() => { log('instance time limit'); void stopInstance(); }, MAX_INSTANCE_MS) };
     inst.timer.unref();
     proc.on('exit', (code, sig) => { log('EKA2L1 exited', code, sig); if (instance === inst) { instance = null; clearTimeout(inst.timer); snapshotLogs(inst); rmSync(inst.dir, { recursive: true, force: true }); } });
     instance = inst;
@@ -236,13 +262,13 @@ async function startInstance({ saveKey, maintenance }) {
 }
 
 // ------------------------------------------------------------------ talking to EKA2L1 (loopback)
-function control(method, urlPath, body, timeoutMs = 20000) {
-  return new Promise((resolve, reject) => {
+function control(method: string, urlPath: string, body?: unknown, timeoutMs = 20000) {
+  return new Promise<{ status: number | undefined; body: ControlBody | null }>((resolve, reject) => {
     const data = body === undefined ? null : Buffer.from(JSON.stringify(body));
     const req = http.request({ host: '127.0.0.1', port: CONTROL_PORT, method, path: urlPath, timeout: timeoutMs, headers: data ? { 'content-type': 'application/json', 'content-length': data.length } : {} }, (res) => {
-      const chunks = [];
+      const chunks: Buffer[] = [];
       res.on('data', (c) => chunks.push(c));
-      res.on('end', () => { const text = Buffer.concat(chunks).toString('utf8'); let j = null; try { j = JSON.parse(text); } catch { /* not JSON */ } resolve({ status: res.statusCode, body: j, text }); });
+      res.on('end', () => { const text = Buffer.concat(chunks).toString('utf8'); let j = null; try { j = JSON.parse(text); } catch { /* not JSON */ } resolve({ status: res.statusCode, body: j }); });
     });
     req.on('timeout', () => req.destroy(new Error('timeout')));
     req.on('error', reject);
@@ -252,10 +278,17 @@ function control(method, urlPath, body, timeoutMs = 20000) {
 }
 
 // ------------------------------------------------------------------ jobs (firmware install)
-const jobs = new Map();
-const factoryUploads = new Set();
-const installingBundles = new Set();
-function newJob(kind) { const id = randomBytes(6).toString('hex'); const j = { id, kind, state: 'running', progress: 0, error: null, started: Date.now() }; jobs.set(id, j); if (jobs.size > 20) jobs.delete(jobs.keys().next().value); return j; }
+const jobs = new Map<string, FirmwareJob>();
+const factoryUploads = new Set<string>();
+const installingBundles = new Set<string>();
+function newJob(kind: JobKind): FirmwareJob {
+  const id = randomBytes(6).toString('hex');
+  const job: FirmwareJob = { id, kind, state: 'running', progress: 0, error: null, started: Date.now() };
+  jobs.set(id, job);
+  const oldest = jobs.keys().next().value;
+  if (jobs.size > 20 && oldest) jobs.delete(oldest);
+  return job;
+}
 
 async function waitControl(timeoutMs = 60000) {
   const end = Date.now() + timeoutMs;
@@ -267,8 +300,8 @@ async function waitControl(timeoutMs = 60000) {
   }
 }
 
-async function installFirmware(job, files, { keep = false, bundleDir = null, variant } = {}) {
-  let completed = 'succeeded';
+async function installFirmware(job: FirmwareJob, files: FirmwareFiles, { keep = false, bundleDir = null, variant }: FirmwareOptions = {}) {
+  let completed: JobState = 'succeeded';
   try {
     await stopInstance();
     await startInstance({ saveKey: null, maintenance: true });
@@ -281,7 +314,8 @@ async function installFirmware(job, files, { keep = false, bundleDir = null, var
     const start = await control('POST', '/v1/devices?async=1', body, 30000);
     if (start.status !== 202 && start.status !== 200) throw Object.assign(new Error(start.body?.error?.message ?? `install request failed (HTTP ${start.status})`), { code: start.body?.error?.code });
     if (start.status === 202) {
-      const jid = start.body.id;
+      const jid = start.body?.id;
+      if (!jid) throw new Error('the emulator did not return a firmware job ID');
       for (;;) {
         await new Promise((r) => setTimeout(r, 2000));
         const j = await control('GET', `/v1/jobs/${jid}`, undefined, 10000);
@@ -295,14 +329,15 @@ async function installFirmware(job, files, { keep = false, bundleDir = null, var
     writeDevices((list.body?.devices ?? []).map((d) => ({ code: d.code, manufacturer: d.manufacturer, model: d.model })));
     job.progress = 1;
   } catch (e) {
-    completed = 'failed'; job.error = String(e.message ?? e).slice(0, 400); job.errorCode = e.code ?? null; log('firmware job failed:', job.kind, job.errorCode ?? '', job.error); // kept in the service log for the diagnostics report
+    const error = errorDetails(e);
+    completed = 'failed'; job.error = error.message.slice(0, 400); job.errorCode = error.code ?? null; log('firmware job failed:', job.kind, job.errorCode ?? '', job.error); // kept in the service log for the diagnostics report
   } finally {
     try {
       await stopInstance();
       if (!keep && bundleDir) rmSync(bundleDir, { recursive: true, force: true });
       else if (!keep) for (const f of Object.values(files)) rmSync(f, { force: true });
     } catch (e) {
-      completed = 'failed'; job.error ??= String(e.message ?? e).slice(0, 400); job.errorCode ??= 'cleanup_failed';
+      completed = 'failed'; job.error ??= errorDetails(e).message.slice(0, 400); job.errorCode ??= 'cleanup_failed';
     } finally {
       if (bundleDir) installingBundles.delete(bundleDir);
       // A completed job means its instance and staged files are gone: the UI
@@ -313,15 +348,19 @@ async function installFirmware(job, files, { keep = false, bundleDir = null, var
 }
 
 // ------------------------------------------------------------------ HTTP
-async function readJson(req, max = 64 * 1024) {
-  const chunks = []; let n = 0;
+async function readJson(req: IncomingMessage, max = 64 * 1024): Promise<RequestBody> {
+  const chunks: Buffer[] = []; let n = 0;
   for await (const c of req) { n += c.length; if (n > max) throw Object.assign(new Error('body too large'), { status: 413, code: 'too_large' }); chunks.push(c); }
   if (!n) return {};
-  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw Object.assign(new Error('invalid JSON'), { status: 400, code: 'bad_request' }); }
+  try {
+    const value: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('a JSON object is required');
+    return value as RequestBody;
+  } catch { throw Object.assign(new Error('invalid JSON'), { status: 400, code: 'bad_request' }); }
 }
 
 /** Streams the request body to a file, refusing more than `max` bytes. The file is only moved into place when it is complete. */
-async function saveUpload(req, dest, max) {
+async function saveUpload(req: IncomingMessage, dest: string, max: number) {
   const declared = Number(req.headers['content-length'] ?? 0);
   if (declared > max) throw Object.assign(new Error('file too large'), { status: 413, code: 'too_large' });
   const noRoom = needSpace(declared);
@@ -330,7 +369,7 @@ async function saveUpload(req, dest, max) {
   const tmp = dest + '.part';
   let n = 0;
   let checked = 0;
-  const limiter = async function* (src) {
+  const limiter = async function* (src: AsyncIterable<Buffer>) {
     for await (const c of src) {
       n += c.length;
       if (n > max) throw Object.assign(new Error('file too large'), { status: 413, code: 'too_large' });
@@ -343,7 +382,7 @@ async function saveUpload(req, dest, max) {
   return n;
 }
 
-async function extractCard(zip, outDir) {
+async function extractCard(zip: string, outDir: string) {
   // list first: a game card is a few thousand files at most; refuse zip bombs and anything with a path that leaves the directory
   const { stdout } = await run('unzip', ['-Z1', '--', zip], { maxBuffer: 16 * 1024 * 1024 });
   const names = stdout.split('\n').filter(Boolean);
@@ -359,12 +398,12 @@ async function extractCard(zip, outDir) {
   return root;
 }
 
-const childNamed = (dir, re) => { try { return readdirSync(dir).find((n) => re.test(n) && statSync(path.join(dir, n)).isDirectory()) ?? null; } catch { return null; } };
+const childNamed = (dir: string, re: RegExp) => { try { return readdirSync(dir).find((n) => re.test(n) && statSync(path.join(dir, n)).isDirectory()) ?? null; } catch { return null; } };
 /** The folder that holds `system/apps` (any case, up to three levels down, so a zip with a wrapping folder works); renamed to lower case, as EKA2L1 looks for it. */
-function findCardRoot(top) {
-  const queue = [[top, 0]];
+function findCardRoot(top: string) {
+  const queue: [string, number][] = [[top, 0]];
   while (queue.length) {
-    const [dir, depth] = queue.shift();
+    const [dir, depth] = queue.shift()!;
     const sys = childNamed(dir, /^system$/i);
     if (sys) {
       const apps = childNamed(path.join(dir, sys), /^apps$/i);
@@ -379,11 +418,11 @@ function findCardRoot(top) {
   return null;
 }
 
-function proxy(req, res, pathname, search, bodyBuf) {
-  const headers = {};
+function proxy(req: IncomingMessage, res: ServerResponse, pathname: string, search: string, bodyBuf: Buffer | null) {
+  const headers: OutgoingHttpHeaders = {};
   if (bodyBuf?.length) { headers['content-type'] = 'application/json'; headers['content-length'] = bodyBuf.length; }
   const up = http.request({ host: '127.0.0.1', port: CONTROL_PORT, method: req.method, path: pathname + search, headers, timeout: 10 * 60_000 }, (r) => {
-    const h = {};
+    const h: OutgoingHttpHeaders = {};
     for (const k of ['content-type', 'content-length', 'x-frame-count', 'x-job-id', 'x-log-offset']) if (r.headers[k]) h[k] = r.headers[k];
     res.writeHead(r.statusCode ?? 502, h);
     r.pipe(res);
@@ -408,15 +447,16 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && p === '/agent/log') {
       if (instance) return json(res, 200, { live: true, agent: ring.slice(-120), output: instance.log.slice(-120), eka2l1Log: tailFile(emulatorLogFile(instance), 300) });
-      let last = null; try { last = JSON.parse(readFileSync(LAST_RUN, 'utf8')); } catch { /* none yet */ }
+      let last: { output?: string[]; eka2l1Log?: string[]; savedAt?: string; maintenance?: boolean } | null = null; try { last = JSON.parse(readFileSync(LAST_RUN, 'utf8')); } catch { /* none yet */ }
       return json(res, 200, { live: false, agent: ring.slice(-120), output: last?.output ?? [], eka2l1Log: last?.eka2l1Log ?? [], lastRun: last ? { savedAt: last.savedAt, maintenance: last.maintenance } : null });
     }
     if (req.method === 'POST' && p === '/agent/instance') {
       const b = await readJson(req);
-      if (!b.maintenance && !SAVE_KEY.test(b.saveKey ?? '')) return err(res, 400, 'bad_request', 'saveKey must be 32 hex characters');
+      const saveKey = typeof b.saveKey === 'string' ? b.saveKey : null;
+      if (!b.maintenance && (!saveKey || !SAVE_KEY.test(saveKey))) return err(res, 400, 'bad_request', 'saveKey must be 32 hex characters');
       if (!b.maintenance && readDevices().length === 0) return err(res, 412, 'no_firmware', 'no device is installed');
-      const inst = await startInstance({ saveKey: b.saveKey, maintenance: !!b.maintenance });
-      let app = null;
+      const inst = await startInstance({ saveKey, maintenance: !!b.maintenance });
+      let app: { uid: string } | null = null;
       try { app = JSON.parse(readFileSync(path.join(SAVES, inst.saveKey ?? '-', 'mgo-app.json'), 'utf8')); } catch { /* first run */ }
       return json(res, 200, { id: inst.id, app });
     }
@@ -424,14 +464,15 @@ const server = http.createServer(async (req, res) => {
 
     let m;
     if (req.method === 'PUT' && (m = /^\/agent\/upload\/(package|card)$/.exec(p))) {
-      if (!instance || instance.maintenance) return err(res, 409, 'no_instance', 'start an instance first');
+      const inst = instance;
+      if (!inst || inst.maintenance) return err(res, 409, 'no_instance', 'start an instance first');
       const name = safeName(url.searchParams.get('name'));
       if (!name) return err(res, 400, 'bad_request', 'invalid file name');
       if (m[1] === 'package' && !/\.(sisx?|n-gage)$/i.test(name)) return err(res, 400, 'bad_request', 'a package is .sis, .sisx or .n-gage');
-      const dest = path.join(instance.dir, 'in', m[1] === 'card' ? 'card.zip' : name);
+      const dest = path.join(inst.dir, 'in', m[1] === 'card' ? 'card.zip' : name);
       await saveUpload(req, dest, MAX_PACKAGE);
       if (m[1] === 'card') {
-        try { return json(res, 200, { path: await extractCard(dest, path.join(instance.dir, 'in', 'card')) }); } finally { rmSync(dest, { force: true }); }
+        try { return json(res, 200, { path: await extractCard(dest, path.join(inst.dir, 'in', 'card')) }); } finally { rmSync(dest, { force: true }); }
       }
       return json(res, 200, { path: dest });
     }
@@ -469,7 +510,7 @@ const server = http.createServer(async (req, res) => {
       }
       const fromInbox = b.source === 'inbox';
       const dir = fromInbox ? INBOX : FIRMWARE_IN;
-      const pick = (k) => {
+      const pick = (k: 'archive' | 'rom' | 'rpkg') => {
         if (!b[k]) return null;
         const n = path.basename(String(b[k]));
         const f = path.join(dir, n);
@@ -478,9 +519,9 @@ const server = http.createServer(async (req, res) => {
         }
         return f;
       };
-      const files = { ...(pick('archive') ? { archive: pick('archive') } : { rom: pick('rom'), ...(pick('rpkg') ? { rpkg: pick('rpkg') } : {}) }) };
-      if (Object.values(files).some((f) => !f || !existsSync(f))) return err(res, 400, 'bad_request', fromInbox ? 'those files are not in the inbox folder' : 'upload the firmware files first (rom, and rpkg or an archive)');
-      if (!files.archive && !files.rom) return err(res, 400, 'bad_request', 'a ROM or an archive is required');
+      const archive = pick('archive'), rom = pick('rom'), rpkg = pick('rpkg');
+      if ((!archive && !rom) || [archive, rom, rpkg].some(f => f && !existsSync(f))) return err(res, 400, 'bad_request', fromInbox ? 'those files are not in the inbox folder' : 'upload the firmware files first (rom, and rpkg or an archive)');
+      const files: FirmwareFiles = archive ? { archive } : { rom: rom!, ...(rpkg ? { rpkg } : {}) };
       if ([...jobs.values()].some((j) => j.state === 'running')) return err(res, 409, 'busy', 'a firmware installation is already running');
       const roomPlain = needSpace(Math.round(Object.values(files).reduce((n, f) => n + treeSize(f), 0) * INSTALL_SPACE_FACTOR));
       if (roomPlain) return err(res, 507, 'insufficient_storage', roomPlain);
@@ -496,7 +537,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'PUT' && p === '/agent/defaults') {
       const b = await readJson(req);
-      if (!PLATFORMS.has(b.platform)) return err(res, 400, 'bad_request', 'platform must be symbian, ngage or ngage2');
+      if (typeof b.platform !== 'string' || !PLATFORMS.has(b.platform)) return err(res, 400, 'bad_request', 'platform must be symbian, ngage or ngage2');
       const d = readDefaults();
       if (b.code === null) delete d[b.platform];
       else {
@@ -507,42 +548,43 @@ const server = http.createServer(async (req, res) => {
       writeDefaults(d);
       return json(res, 200, { defaults: d });
     }
-    if (req.method === 'GET' && (m = /^\/agent\/jobs\/([a-f0-9]{12})$/.exec(p))) { const j = jobs.get(m[1]); return j ? json(res, 200, j) : err(res, 404, 'not_found', 'no such job'); }
+    if (req.method === 'GET' && (m = /^\/agent\/jobs\/([a-f0-9]{12})$/.exec(p))) { const j = jobs.get(m[1]!); return j ? json(res, 200, j) : err(res, 404, 'not_found', 'no such job'); }
     if (req.method === 'PUT' && (m = /^\/agent\/saves\/([0-9a-f]{32})\/app$/.exec(p))) {
       const b = await readJson(req);
-      if (!/^0x[0-9A-Fa-f]{1,8}$/.test(b.uid ?? '')) return err(res, 400, 'bad_request', 'uid must look like 0x1000ABCD');
-      mkdirSync(path.join(SAVES, m[1]), { recursive: true, mode: 0o700 });
-      writeFileSync(path.join(SAVES, m[1], 'mgo-app.json'), JSON.stringify({ uid: b.uid }));
+      if (typeof b.uid !== 'string' || !/^0x[0-9A-Fa-f]{1,8}$/.test(b.uid)) return err(res, 400, 'bad_request', 'uid must look like 0x1000ABCD');
+      mkdirSync(path.join(SAVES, m[1]!), { recursive: true, mode: 0o700 });
+      writeFileSync(path.join(SAVES, m[1]!, 'mgo-app.json'), JSON.stringify({ uid: b.uid }));
       return json(res, 200, { ok: true });
     }
     if (req.method === 'DELETE' && (m = /^\/agent\/saves\/([0-9a-f]{32})$/.exec(p))) {
       if (instance?.saveKey === m[1]) return err(res, 409, 'busy', 'the game is running');
-      rmSync(path.join(SAVES, m[1]), { recursive: true, force: true });
+      rmSync(path.join(SAVES, m[1]!), { recursive: true, force: true });
       return json(res, 200, { ok: true });
     }
     if (req.method === 'DELETE' && (m = /^\/agent\/firmware\/([A-Za-z0-9._-]{1,32})$/.exec(p))) {
       // removing a device is a maintenance run: the emulator deletes it from its base directory
       if (instance) return err(res, 409, 'busy', 'stop the running game first');
+      const code = m[1]!;
       const job = newJob('delete_device');
       void (async () => {
         try {
           await startInstance({ saveKey: null, maintenance: true });
           await waitControl(90000);
           const cur = await control('GET', '/v1/devices', undefined, 10000);
-          const others = (cur.body?.devices ?? []).filter((d) => String(d.code).toLowerCase() !== m[1].toLowerCase());
-          if (others.length && cur.body?.current?.code?.toLowerCase() === m[1].toLowerCase()) await control('POST', `/v1/devices/${encodeURIComponent(others[0].code)}/boot`, {}, 5 * 60_000);
-          const r = await control('DELETE', `/v1/devices/${encodeURIComponent(m[1])}`, undefined, 120000);
+          const others = (cur.body?.devices ?? []).filter((d) => String(d.code).toLowerCase() !== code.toLowerCase());
+          if (others.length && cur.body?.current?.code?.toLowerCase() === code.toLowerCase()) await control('POST', `/v1/devices/${encodeURIComponent(others[0]!.code)}/boot`, {}, 5 * 60_000);
+          const r = await control('DELETE', `/v1/devices/${encodeURIComponent(code)}`, undefined, 120000);
           if (r.status !== 200) throw new Error(r.body?.error?.message ?? `HTTP ${r.status}`);
           const list = await control('GET', '/v1/devices', undefined, 10000);
           writeDevices((list.body?.devices ?? []).map((d) => ({ code: d.code, manufacturer: d.manufacturer, model: d.model })));
           job.state = 'succeeded';
-        } catch (e) { job.state = 'failed'; job.error = String(e.message ?? e).slice(0, 400); log('device removal failed:', job.error); } finally { await stopInstance(); }
+        } catch (e) { job.state = 'failed'; job.error = errorDetails(e).message.slice(0, 400); log('device removal failed:', job.error); } finally { await stopInstance(); }
       })();
       return json(res, 202, job);
     }
     if (req.method === 'GET' && p === '/agent/audio') {
       if (!instance) return err(res, 409, 'no_instance', 'no instance is running');
-      const cmd = spawn(AUDIO_CMD[0], AUDIO_CMD.slice(1), { stdio: ['ignore', 'pipe', 'pipe'], env: audioEnvironment(env) });
+      const cmd = spawn(AUDIO_CMD[0]!, AUDIO_CMD.slice(1), { stdio: ['ignore', 'pipe', 'pipe'], env: audioEnvironment(env) });
       let started = false;
       cmd.stderr.on('data', b => { audioCapture.lastError = b.toString('utf8').trim().slice(0, 400); log('audio capture:', audioCapture.lastError); });
       audioCapture.streams++;
@@ -557,18 +599,20 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/v1' || p.startsWith('/v1/')) {
       if (!instance) return err(res, 409, 'no_instance', 'no instance is running');
-      let bodyBuf = null, body = null;
+      const inst = instance;
+      let bodyBuf: Buffer | null = null, body: RequestBody | null = null;
       if (req.method === 'POST' || req.method === 'PUT') { body = await readJson(req); bodyBuf = Buffer.from(JSON.stringify(body)); }
-      const verdict = checkControl({ method: req.method ?? 'GET', pathname: p, body, inputDir: instance.maintenance ? null : path.join(instance.dir, 'in') });
+      const verdict = checkControl({ method: req.method ?? 'GET', pathname: p, body, inputDir: inst.maintenance ? null : path.join(inst.dir, 'in') });
       if (verdict) return err(res, verdict.status, verdict.code, verdict.message);
       return proxy(req, res, p, url.search, bodyBuf);
     }
     return err(res, 404, 'not_found', 'unknown route');
   } catch (e) {
     if (res.headersSent) return res.destroy();
-    err(res, e.status ?? 500, e.code ?? 'error', String(e.message ?? e).slice(0, 300));
+    const error = errorDetails(e);
+    err(res, error.status ?? 500, error.code ?? 'error', error.message.slice(0, 300));
   }
 });
 server.requestTimeout = 0; server.headersTimeout = 20000; server.keepAliveTimeout = 5000;
 server.listen(PORT, HOST, () => log(`mgo-symbian agent on ${HOST}:${PORT}`));
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { await stopInstance(); process.exit(0); });
+for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, async () => { await stopInstance(); process.exit(0); });

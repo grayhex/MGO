@@ -12,7 +12,7 @@ import { after, before, describe, it } from 'node:test';
 import { cleanup, root, sleep, startApp, waitFor, type TestEnv } from './helpers.ts';
 
 const nginxBin = ['/usr/sbin/nginx', '/usr/local/sbin/nginx', '/usr/bin/nginx'].find((p) => existsSync(p));
-const AGENT = path.join(root, 'symbian/agent/agent.mjs');
+const AGENT = path.join(root, 'symbian/agent/agent.mts');
 const FAKE = path.join(root, 'tests/fixtures/fake-eka2l1/fake-eka2l1.mjs');
 const free = () => new Promise<number>((res, rej) => { const s = createServer(); s.listen(0, '127.0.0.1', () => { const p = (s.address() as { port: number }).port; s.close(() => res(p)); }); s.on('error', rej); });
 const MB = 1048576;
@@ -53,7 +53,7 @@ describe('gateway (nginx) and large uploads', { skip: nginxBin ? false : 'nginx 
     tmp = mkdtempSync(path.join(tmpdir(), 'mgo-gw-'));
     agentData = path.join(tmp, 'agent');
     const agentPort = await free();
-    agent = spawn(process.execPath, [AGENT], { env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: 'gateway-token-0123456789', AGENT_PORT: String(agentPort), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(await free()), DATA_DIR: agentData, EKA2L1_BIN: FAKE }, stdio: 'ignore' });
+    agent = spawn(process.execPath, ['--experimental-strip-types', AGENT], { env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: 'gateway-token-0123456789', AGENT_PORT: String(agentPort), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(await free()), DATA_DIR: agentData, EKA2L1_BIN: FAKE }, stdio: 'ignore' });
     await waitFor(async () => { try { return (await fetch(`http://127.0.0.1:${agentPort}/agent/ping`)).ok; } catch { return false; } }, 'agent', 10000);
     env = await startApp({ SYMBIAN_AGENT_URL: `http://127.0.0.1:${agentPort}`, SYMBIAN_AGENT_TOKEN: 'gateway-token-0123456789' });
     const appPort = Number(new URL(env.base).port);

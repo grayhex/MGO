@@ -17,7 +17,7 @@ const dir = mkdtempSync(path.join(tmpdir(), 'mgo-phones-'));
 const token = 'e2e-token-0123456789abcdef';
 const ap = await free(), port = await free(), cp = await free();
 const fx = path.join(cwd, 'tests/fixtures/fake-eka2l1');
-const agent = spawn(process.execPath, ['symbian/agent/agent.mjs'], { cwd, env: { PATH: process.env.PATH, AGENT_TOKEN: token, AGENT_PORT: String(ap), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(cp), DATA_DIR: path.join(dir, 'a'), EKA2L1_BIN: path.join(fx, 'fake-eka2l1.mjs'), AUDIO_CMD: `${process.execPath} ${path.join(fx, 'pcm.mjs')}` }, stdio: 'ignore' });
+const agent = spawn(process.execPath, ['--experimental-strip-types', 'symbian/agent/agent.mts'], { cwd, env: { PATH: process.env.PATH, AGENT_TOKEN: token, AGENT_PORT: String(ap), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(cp), DATA_DIR: path.join(dir, 'a'), EKA2L1_BIN: path.join(fx, 'fake-eka2l1.mjs'), AUDIO_CMD: `${process.execPath} ${path.join(fx, 'pcm.mjs')}` }, stdio: 'ignore' });
 mkdirSync(path.join(dir, 'app'));
 const server = spawn('node', ['apps/api/dist/server.js'], { cwd, env: { ...process.env, PORT: String(port), DATA_DIR: path.join(dir, 'app'), HOST: '127.0.0.1', LOG_LEVEL: 'warn', SYMBIAN_AGENT_URL: `http://127.0.0.1:${ap}`, SYMBIAN_AGENT_TOKEN: token }, stdio: 'ignore' });
 const base = `http://127.0.0.1:${port}`;

@@ -39,4 +39,4 @@ pactl set-default-source "$PULSE_SOURCE"
 pactl info > /tmp/mgo-audio-info.txt
 
 # only the agent listens on the network; EKA2L1's own control port is bound to 127.0.0.1 inside this container
-exec node /opt/mgo-symbian/agent.mjs
+exec node --experimental-strip-types /opt/mgo-symbian/agent.mts

@@ -19,7 +19,7 @@ await new Promise(r=>source.listen(0,'127.0.0.1',r));
 const port = await free(), agentPort = await free();
 const base = `http://127.0.0.1:${port}`;
 const fx = path.resolve('tests/fixtures/fake-eka2l1');
-const agent = spawn(process.execPath,['symbian/agent/agent.mjs'],{env:{PATH:process.env.PATH,AGENT_TOKEN:'readiness-token-0123456789',AGENT_HOST:'127.0.0.1',AGENT_PORT:String(agentPort),CONTROL_PORT:String(await free()),DATA_DIR:path.join(dir,'agent'),EKA2L1_BIN:path.join(fx,'fake-eka2l1.mjs'),AUDIO_CMD:`${process.execPath} ${path.join(fx,'pcm.mjs')}`},stdio:'ignore'});
+const agent = spawn(process.execPath,['--experimental-strip-types','symbian/agent/agent.mts'],{env:{PATH:process.env.PATH,AGENT_TOKEN:'readiness-token-0123456789',AGENT_HOST:'127.0.0.1',AGENT_PORT:String(agentPort),CONTROL_PORT:String(await free()),DATA_DIR:path.join(dir,'agent'),EKA2L1_BIN:path.join(fx,'fake-eka2l1.mjs'),AUDIO_CMD:`${process.execPath} ${path.join(fx,'pcm.mjs')}`},stdio:'ignore'});
 for(const kind of ['java','ngage','sis'])mkdirSync(path.join(dir,kind));
 const server = spawn(process.execPath,['apps/api/dist/server.js'],{env:{...process.env,HOST:'127.0.0.1',PORT:String(port),LOG_LEVEL:'warn',DATA_DIR:path.join(dir,'data'),RUN_DIR:path.join(dir,'run'),KEM_DIR:path.join(dir,'no-java'),LIBRARY_ROOTS:dir,SYMBIAN_AGENT_URL:`http://127.0.0.1:${agentPort}`,SYMBIAN_AGENT_TOKEN:'readiness-token-0123456789',AAS_PROXY_URL:`http://127.0.0.1:${source.address().port}`},stdio:['ignore','inherit','inherit']});
 let browser;

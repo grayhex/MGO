@@ -1,4 +1,4 @@
-// Symbian / N-Gage through the optional mgo-symbian service. The service is the real agent (symbian/agent/agent.mjs); the emulator
+// Symbian / N-Gage through the optional mgo-symbian service. The service is the real agent (symbian/agent/agent.mts); the emulator
 // behind it is the FAKE EKA2L1 in tests/fixtures/fake-eka2l1. So this proves MGO's side end to end (library, session, WebSocket
 // protocol, firmware upload, saves); it says nothing about what the real EKA2L1 does with a real game or firmware.
 import assert from 'node:assert/strict';
@@ -11,7 +11,7 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { cleanup, openStream, root, sleep, startApp, waitFor, type TestEnv } from './helpers.ts';
 
-const AGENT = path.join(root, 'symbian/agent/agent.mjs');
+const AGENT = path.join(root, 'symbian/agent/agent.mts');
 const FAKE = path.join(root, 'tests/fixtures/fake-eka2l1/fake-eka2l1.mjs');
 const PCM = path.join(root, 'tests/fixtures/fake-eka2l1/pcm.mjs');
 const TOKEN = 'integration-token-0123456789';
@@ -88,7 +88,7 @@ describe('Symbian service (real agent, fake EKA2L1)', () => {
   before(async () => {
     agentData = mkdtempSync(path.join(tmpdir(), 'mgo-symbian-it-'));
     const port = await free();
-    agent = spawn(process.execPath, [AGENT], {
+    agent = spawn(process.execPath, ['--experimental-strip-types', AGENT], {
       env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: TOKEN, AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(await free()), DATA_DIR: agentData, EKA2L1_BIN: FAKE, AUDIO_CMD: `${process.execPath} ${PCM}`, MAX_FIRMWARE_BYTES: String(64 * 1024) },
       stdio: 'ignore',
     });

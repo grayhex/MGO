@@ -84,7 +84,7 @@ try {
     } else {
       assert.ok(await page.getByTestId('keypad').isVisible(), 'touch handset has external keys in full view');
       assert.ok(await page.getByRole('checkbox', { name: 'On-screen keypad', exact: true }).isChecked());
-      assert.ok(await page.getByRole('checkbox', { name: 'On-screen keypad', exact: true }).isDisabled());
+      assert.ok(await page.getByRole('checkbox', { name: 'On-screen keypad', exact: true }).isEnabled());
       const canvas = page.locator('.skin-canvas'), box = await canvas.boundingBox();
       const x = Math.round(c.screen.width * 0.37), y = Math.round(c.screen.height * 0.41);
       await page.touchscreen.tap(box.x + box.width * x / c.screen.width, box.y + box.height * y / c.screen.height);

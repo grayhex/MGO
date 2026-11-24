@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
+import { GENRES } from '@mgo/protocol';
 
 const { makeJar } = await import(pathToFileURL(path.join(process.cwd(), 'apps/api/src/dev/testing.ts')).href);
 const dir = mkdtempSync(path.join(tmpdir(), 'mgo-gen-'));
@@ -86,6 +87,30 @@ try {
   assert.equal(await p.locator('.game-card').count(), 1, 'the chosen genre is remembered');
   await p.getByTestId('genre-filter').selectOption('all');
   assert.equal(await p.locator('.game-card').count(), 4);
+  await p.getByRole('radio', { name: 'Tiles', exact: true }).click();
+  const artwork = p.locator('.java-cover-fallback[data-genre="Racing"]');
+  await artwork.getByText('Racing', { exact: true }).waitFor();
+  assert.match(await artwork.evaluate(el => getComputedStyle(el).backgroundImage), /library-java-template\.webp/);
+  assert.equal(await p.locator('.java-cover-fallback[data-genre="unknown"]').innerText(), 'Unknown genre');
+  const accents = await p.evaluate(genres => genres.map(genre => {
+    const test = document.createElement('span');
+    test.classList.add('java-cover-fallback');
+    test.dataset.genre = genre;
+    document.body.append(test);
+    const accent = getComputedStyle(test).getPropertyValue('--genre-accent').trim();
+    test.remove();
+    return accent;
+  }), [...GENRES, 'unknown']);
+  assert.equal(new Set(accents).size, 14, 'the thirteen genres and unknown genre have distinct CSS colors');
+  await p.screenshot({ path: 'test-results/java-cover-tiles.png' });
+  await p.setViewportSize({ width: 390, height: 844 });
+  await p.locator('.header .theme-toggle').click();
+  await p.waitForFunction(() => document.documentElement.dataset.theme === 'dark'
+    && getComputedStyle(document.querySelector('.content')).marginLeft === '0px');
+  const labelFits = await artwork.locator('.java-cover-genre').evaluate(label => label.scrollWidth <= label.clientWidth && label.scrollHeight <= label.clientHeight);
+  assert.ok(labelFits && await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'the cover label fits in dark mode at mobile width');
+  await p.screenshot({ path: 'test-results/java-cover-mobile-dark.png', fullPage: true });
+  await p.setViewportSize({ width: 1440, height: 1000 });
   assert.equal(await p.locator('.game-card h3', { hasText: '<img src=x onerror=alert(1)>' }).count(), 1, 'shown as text');
   assert.equal(await p.locator('.game-card img[src="x"]').count(), 0);
   console.log('✔ the genre drop-down with counts filters the library:', bar);

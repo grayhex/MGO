@@ -1,6 +1,7 @@
 // Browser e2e of the first-run wizard, the settings page, the library import and the MobyGames lookup.
 // Real Chromium -> built web UI -> API; MobyGames is a local stand-in server. Needs `npm run build`.
 // Usage: node tests/e2e/setup.mjs
+import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -136,8 +137,8 @@ try {
     throw e;
   });
   ok('the folder was imported: 5 files, one duplicate, two versions of Snake => 3 games', true);
-  await page.waitForSelector('article.game-card .cover.art', { timeout: 20000 });
-  ok('the matched game shows its cover, served by this server', (await page.locator('article.game-card .cover.art img').first().getAttribute('src')).startsWith('/api/games/'));
+  await page.waitForSelector('article.game-card .java-cover-media img[src$="/cover"]', { timeout: 20000 });
+  ok('the matched game shows its cover, served by this server', (await page.locator('article.game-card .java-cover-media img[src$="/cover"]').first().getAttribute('src')).startsWith('/api/games/'));
   await page.waitForSelector('article.game-card .badge:has-text("review")', { timeout: 20000 });
   ok('an ambiguous title is flagged for a manual decision', true);
   await page.screenshot({ path: path.join(outDir, 'setup-05-library.png') });
@@ -154,6 +155,15 @@ try {
   await info.locator('.cand').nth(1).getByRole('button', { name: 'This one' }).click();
   await info.locator('.attrib').waitFor();
   ok('after the choice the info and the MobyGames attribution link are shown', /MobyGames/.test(await info.locator('.attrib').innerText()) && (await info.locator('.attrib a').getAttribute('href')).startsWith('https://www.mobygames.com/'));
+  const screenshot = info.locator('.game-shot a');
+  await screenshot.waitFor();
+  const firstShot = await screenshot.getAttribute('href');
+  await info.getByRole('button', { name: 'Next screenshot' }).click();
+  const secondShot = await screenshot.getAttribute('href');
+  assert.notEqual(secondShot, firstShot);
+  await info.getByRole('button', { name: 'Previous screenshot' }).click();
+  assert.equal(await screenshot.getAttribute('href'), firstShot);
+  assert.equal(await info.locator('.game-shot-strip').count(), 0);
   await page.screenshot({ path: path.join(outDir, 'setup-07-info.png') });
   await info.getByRole('button', { name: 'Close' }).click();
 

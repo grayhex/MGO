@@ -1,6 +1,6 @@
 // Use one explicit Pulse socket for the daemon, EKA2L1's isolated HOME and capture.
 // Empty PULSE_* values override libpulse discovery and must never be forwarded.
-export function audioEnvironment(env) {
+export function audioEnvironment(env: NodeJS.ProcessEnv) {
   const runtime = env.XDG_RUNTIME_DIR || '/tmp/mgo-runtime';
   return {
     PATH: env.PATH,

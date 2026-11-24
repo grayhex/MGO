@@ -51,7 +51,7 @@ describe('a Symbian start that fails says exactly why (agent + fake EKA2L1)', ()
     data = mkdtempSync(path.join(tmpdir(), 'mgo-fail-'));
     const port = await free();
     const base = `http://127.0.0.1:${port}`;
-    proc = spawn(process.execPath, [path.join(root, 'symbian/agent/agent.mjs')], { env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: TOKEN, AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(await free()), DATA_DIR: data, EKA2L1_BIN: path.join(root, 'tests/fixtures/fake-eka2l1/fake-eka2l1.mjs'), AUDIO_CMD: `${process.execPath} ${path.join(root, 'tests/fixtures/fake-eka2l1/pcm.mjs')}` }, stdio: 'ignore' });
+    proc = spawn(process.execPath, ['--experimental-strip-types', path.join(root, 'symbian/agent/agent.mts')], { env: { PATH: process.env.PATH ?? '', AGENT_TOKEN: TOKEN, AGENT_PORT: String(port), AGENT_HOST: '127.0.0.1', CONTROL_PORT: String(await free()), DATA_DIR: data, EKA2L1_BIN: path.join(root, 'tests/fixtures/fake-eka2l1/fake-eka2l1.mjs'), AUDIO_CMD: `${process.execPath} ${path.join(root, 'tests/fixtures/fake-eka2l1/pcm.mjs')}` }, stdio: 'ignore' });
     for (let i = 0; i < 100; i++) { try { if ((await fetch(`${base}/agent/ping`)).ok) break; } catch { /* wait */ } await new Promise((r) => setTimeout(r, 100)); }
     agent = new AgentClient({ baseUrl: base, token: TOKEN });
     const up = await fetch(`${base}/agent/firmware/rom?name=RM-84.rom`, { method: 'PUT', headers: { authorization: `Bearer ${TOKEN}` }, body: 'x' });
