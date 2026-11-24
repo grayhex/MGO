@@ -1,13 +1,13 @@
 import { api } from '../api';
 import { t as translateUI } from '../i18n';
-import type { GameMeta, HealthStatus, SymbianStatus } from '@mgo/protocol';
+import type { HealthStatus, SymbianStatus } from '@mgo/protocol';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
 import { PlatformTag } from './PlatformTag';
 import { useTheme } from '../theme';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageSwitch } from './LanguageSwitch';
-import { useLastGame } from '../lastGame';
+import { getLastGame, setLastGame, useLastGame } from '../lastGame';
 
 export function Link({ to, children, className, onNavigate, ...rest }: { to: string; children: ReactNode; className?: string; onNavigate: (to: string) => void } & Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href' | 'onClick'>) {
   return (
@@ -43,8 +43,16 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
 }) {
   const theme = useTheme();
   const lastGame = useLastGame();
-  const [loadedGame, setLoadedGame] = useState<GameMeta | null>(null);
-  useEffect(() => { let dead = false; if (!lastGame) { setLoadedGame(null); return; } void api.games().then(games => { if (!dead) setLoadedGame(games.find(g => g.id === lastGame.id) ?? null); }, () => undefined); return () => { dead = true; }; }, [lastGame?.id, lastGame?.name]);
+  const inPlayer = path.startsWith('/play/');
+  useEffect(() => {
+    if (!lastGame || lastGame.platform || inPlayer) return;
+    const request = new AbortController();
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(5000)]);
+    void api.gameMeta(lastGame.id, signal).then(game => {
+      if (!request.signal.aborted && getLastGame()?.id === game.id) setLastGame({ id: game.id, name: game.name, platform: game.platform ?? 'j2me' });
+    }, () => undefined);
+    return () => request.abort();
+  }, [lastGame, inPlayer]);
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(COLLAPSE) === '1'; } catch { return false; } });
   const [drawer, setDrawer] = useState(false);
   useEffect(() => { try { localStorage.setItem(COLLAPSE, collapsed ? '1' : '0'); } catch { /* private mode */ } }, [collapsed]);
@@ -62,8 +70,6 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
       <span className="nav-label">{translateUI(label)}</span>
     </Link>
   );
-  const inPlayer = path.startsWith('/play/');
-
   return (
     <div className={`app ${collapsed ? 'shell-collapsed' : ''} ${drawer ? 'shell-drawer' : ''}`}>
       <aside className="sidebar glass" aria-label={translateUI("Main navigation")}>
@@ -76,7 +82,7 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
           {item('/', 'library', 'Library', path === '/')}
           {lastGame && <Link to={`/play/${lastGame.id}`} onNavigate={go} data-testid="current-game" className={`nav-item current-game ${inPlayer ? 'active' : ''}`} title={lastGame.name} aria-label={translateUI('Current game: {name}', { name: lastGame.name })}>
             <Icon name="play" />
-            <span className="nav-label"><small>{translateUI('Current game')}</small><strong>{lastGame.name}</strong><small><PlatformTag platform={loadedGame?.platform ?? 'j2me'} size="sm" className="bare" /></small></span>
+            <span className="nav-label"><small>{translateUI('Current game')}</small><strong>{lastGame.name}</strong>{lastGame.platform && <small><PlatformTag platform={lastGame.platform} size="sm" className="bare" /></small>}</span>
           </Link>}
           {item('/phones', 'phone', 'Phones', path === '/phones')}
           {item('/settings', 'sliders', 'Settings', path === '/settings')}

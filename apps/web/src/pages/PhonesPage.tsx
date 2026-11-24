@@ -104,10 +104,17 @@ export function PhonesPage({ toast }: { toast: (k: Toast['kind'], t: string) => 
 
   useEffect(() => {
     const id = getLastGame()?.id ?? null;
-    api.games().then((gs) => setGame(gs.find((g) => g.id === id) ?? null), () => undefined).finally(() => setGamesLoaded(true));
+    const request = new AbortController();
+    if (id) {
+      const signal = AbortSignal.any([request.signal, AbortSignal.timeout(8000)]);
+      void api.gameMeta(id, signal).then(game => {
+        if (!request.signal.aborted) setGame(game);
+      }, () => undefined).finally(() => { if (!request.signal.aborted) setGamesLoaded(true); });
+    } else setGamesLoaded(true);
     api.devices().then((d) => setDevices(d.presets), () => undefined);
     api.phones().then(setCatalog, () => undefined);
     api.settings().then((s) => { setDefaultSkin(s.settings.phone.skinId); setMyPhones(s.settings.myPhones ?? null); }, () => undefined);
+    return () => request.abort();
   }, []);
   const frame = useGameFrame(game?.id ?? null);
 

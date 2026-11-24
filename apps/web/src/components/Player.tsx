@@ -260,7 +260,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     if (!loaded) void api.gameMeta(gameId, signal).then(g => {
       if (request.signal.aborted) return;
       setGame(g);
-      setLastGame({ id: g.id, name: g.name });
+      setLastGame({ id: g.id, name: g.name, platform: g.platform ?? 'j2me' });
       const settings = g.settings;
       setLayout(settings.layout);
       setRes({ width: settings.width, height: settings.height });

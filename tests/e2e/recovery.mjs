@@ -19,6 +19,8 @@ try{
  const stalledGame = new Promise(resolve => { releaseGame = resolve; });
  const gameRoute = '**/api/games/' + game.id;
  const unrelatedConfig = '**/phones/nokia-6100/config.json';
+ let libraryRequests = 0;
+ p.on('request', request => { if (new URL(request.url()).pathname === '/api/games') libraryRequests++; });
  let unrelatedRequests = 0;
  await p.route(unrelatedConfig, r => { unrelatedRequests++; return r.abort(); });
  await p.route(gameRoute, async route => {
@@ -38,6 +40,7 @@ try{
  await p.getByRole('button', { name: 'Retry phone skin', exact: true }).click();
  await p.locator('.skin-box[data-skin="nokia-n95"]').waitFor();
  assert.equal(unrelatedRequests, 0, 'the initial player presentation only needs the selected phone');
+ assert.equal(libraryRequests, 0, 'neither the player nor its sidebar fetches the whole library');
  await p.unroute(unrelatedConfig);
  await p.locator('.ctrl-col').getByRole('button',{name:'Start',exact:true}).click();
  await p.waitForFunction(()=>document.querySelector('[data-testid=state-badge]')?.textContent.includes('running'));

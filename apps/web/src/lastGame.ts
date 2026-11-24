@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react';
+import { isGamePlatform, type GamePlatform } from '@mgo/protocol';
 
 /** The game opened last in the player: the sidebar's "Game" item returns to it, /phones changes its phone. */
-export interface LastGame { id: string; name: string }
+export interface LastGame { id: string; name: string; platform?: GamePlatform }
 
 const KEY = 'j2me-web.lastGame';
 const EVENT = 'j2me-web:lastgame';
@@ -12,7 +13,9 @@ export function getLastGame(): LastGame | null {
     if (!raw) return null;
     if (raw.startsWith('{')) {
       const v = JSON.parse(raw) as Partial<LastGame>;
-      return typeof v.id === 'string' && typeof v.name === 'string' ? { id: v.id, name: v.name } : null;
+      return typeof v.id === 'string' && typeof v.name === 'string'
+        ? { id: v.id, name: v.name, ...(isGamePlatform(v.platform) ? { platform: v.platform } : {}) }
+        : null;
     }
     return { id: raw, name: raw }; // an id stored by an older build
   } catch {
@@ -23,7 +26,7 @@ export function getLastGame(): LastGame | null {
 export function setLastGame(g: LastGame | null): void {
   try {
     const cur = getLastGame();
-    if (cur?.id === g?.id && cur?.name === g?.name) return;
+    if (cur?.id === g?.id && cur?.name === g?.name && cur?.platform === g?.platform) return;
     if (g) localStorage.setItem(KEY, JSON.stringify(g)); else localStorage.removeItem(KEY);
     window.dispatchEvent(new Event(EVENT));
   } catch { /* storage unavailable */ }
