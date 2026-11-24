@@ -105,7 +105,8 @@ try {
   await p.screenshot({ path: 'test-results/java-cover-tiles.png' });
   await p.setViewportSize({ width: 390, height: 844 });
   await p.locator('.header .theme-toggle').click();
-  await p.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+  await p.waitForFunction(() => document.documentElement.dataset.theme === 'dark'
+    && getComputedStyle(document.querySelector('.content')).marginLeft === '0px');
   const labelFits = await artwork.locator('.java-cover-genre').evaluate(label => label.scrollWidth <= label.clientWidth && label.scrollHeight <= label.clientHeight);
   assert.ok(labelFits && await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'the cover label fits in dark mode at mobile width');
   await p.screenshot({ path: 'test-results/java-cover-mobile-dark.png', fullPage: true });
