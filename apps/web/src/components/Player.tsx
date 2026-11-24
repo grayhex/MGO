@@ -15,7 +15,7 @@ import { downloadBlob, fileSafe, framePng } from '../snapshot';
 import { GamepadPoller, loadPadProfile, type PadAction, type PadState } from '../gamepad';
 import { GamepadSettings } from './GamepadSettings';
 import { phoneHasTouch, KEY_LAYOUTS, SCREEN_PRESETS, type PhoneCatalog, type DevicePreset, type EmulationTweaks, type GameMeta, type HealthStatus, type LayoutId, type ServerEvent, type SessionState, type SessionStatus } from '@mgo/protocol';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { api, ApiError, type JarAnalysisView } from '../api';
 import type { Toast } from '../App';
 import { PcmAudio } from '../audio';
@@ -536,6 +536,12 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const external = keypadRequired || showKeypad;
   const keypadReady = loaded && skin !== null && (j2me || !!native.data || !!native.error);
   const crop = skin && external ? keypadCut(skin) : undefined;
+  const skinViews = skin?.config.views;
+  const screenView = skinViews?.screen;
+  const fullView = skinViews?.full;
+  const keypadLayout = crop !== undefined && fullView && screenView ? {
+    '--full-lcd-width-factor': (fullView.width / fullView.height) * (fullView.screenRect.width / screenView.screenRect.width),
+  } as CSSProperties : undefined;
   const skinScreen = skin?.config.screen;
 
   const overlay = !running ? (
@@ -585,7 +591,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           </div>
         </div>
 
-        <div className={`stage-row${external && keypadReady ? ' with-keypad' : ''}`}>
+        <div className={`stage-row${external && keypadReady ? ' with-keypad' : ''}`} style={keypadLayout}>
           {external && keypadReady && (
             <div className="stage-foot side">
               {skin && crop !== undefined

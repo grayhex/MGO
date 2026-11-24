@@ -135,6 +135,7 @@ textarea.text-editor-field { resize: vertical; min-height: 84px; }
     height: calc(100dvh - var(--header-h) - 24px);
     grid-template-rows: auto minmax(0, 1fr) auto;
   }
+  .player-grid:not(.lights-out) .stage-card:not(:fullscreen) .stage-row { container-type: size; }
   .player-grid:not(.lights-out) .stage-card:not(:fullscreen) .stage { height: 100%; }
   .player-grid:not(.lights-out) .stage-card:not(:fullscreen) .stage-foot.side {
     overflow: auto;
@@ -164,6 +165,12 @@ button.chip-link:hover { border-color: var(--primary-warm); }
 
 .stage-foot .physical-keypad { height: clamp(240px, 70dvh, 652px); }
 .stage-foot.side:has(.physical-keypad) { width: clamp(210px, 49%, 396px); }
+@media (min-width: 981px) and (min-height: 600px) {
+  /* Leave enough space for the close-up LCD to grow beyond its full-phone width. */
+  .player-grid:not(.lights-out) .stage-card:not(:fullscreen) .stage-foot.side:has(.physical-keypad) {
+    width: clamp(min(210px, 35cqw), calc(100cqw - (100cqh - 12px) * var(--full-lcd-width-factor, 0) - 36px), min(49cqw, 396px));
+  }
+}
 .lights-out.touch-controls .stage-foot.side:has(.physical-keypad) { width: clamp(250px, 44%, 468px); }
 .lights-out .stage-foot .physical-keypad { height: min(87dvh, 870px); }
 .view-keypad { overflow: hidden; border-radius: var(--r-sm); }
