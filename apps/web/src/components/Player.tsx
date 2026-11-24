@@ -534,7 +534,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const res_ = session?.resources ?? null;
   const keypadRequired = view === 'screen' || skin?.config.input?.externalKeypad === true;
   const external = keypadRequired || showKeypad;
-  const keypadReady = loaded && skin !== null;
+  const keypadReady = loaded && skin !== null && (j2me || !!native.data || !!native.error);
   const crop = skin && external ? keypadCut(skin) : undefined;
   const skinScreen = skin?.config.screen;
 
@@ -711,7 +711,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         </Panel>
         )}
 
-        {j2me && (
+        {loaded && j2me && (
         <Panel icon="sliders" title={translateUI("Game compatibility options")}>
           <EmulationTweaksForm pointerDefault={phoneHasTouch(prefs.skinId)} value={tweaks} onChange={setTweaks} />
         </Panel>

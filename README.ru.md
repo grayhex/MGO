@@ -1,5 +1,8 @@
 <div align="center">
-  <img src="apps/web/public/graphics/brand/logo-horizontal.svg" alt="MGO" width="420">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="apps/web/public/graphics/brand/logo-light.svg">
+    <img src="apps/web/public/graphics/brand/logo-horizontal.svg" alt="MGO" width="420">
+  </picture>
 
   <h1>Mobile Games Online</h1>
 
