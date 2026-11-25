@@ -135,7 +135,7 @@ try {
   const mob = await (await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })).newPage();
   await mob.goto(base + '/');
   await mob.locator('.game-card').first().waitFor();
-  await mob.getByText('240×320', { exact: true }).waitFor();
+  await mob.locator('.game-card .resolution-tag:visible').filter({ hasText: '240×320' }).waitFor();
   assert.equal(await mob.locator('header.header').isVisible(), true);
   await mob.getByRole('button', { name: 'Open menu' }).click();
   await mob.locator('.header .seg.lang').waitFor({ state: 'visible' });

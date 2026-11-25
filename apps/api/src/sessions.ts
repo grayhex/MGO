@@ -112,7 +112,7 @@ export class Session {
     private cfg: Config,
     private onEnded: (s: Session) => void,
     private onPlayedResolution?: (width: number, height: number) => void,
-    private onGameResolution?: (resolution: NonNullable<GameMeta['nativeResolution']>) => void,
+    private onGameResolution?: (resolution: NonNullable<GameMeta['nativeResolution']>) => boolean,
   ) {
     this.logFile = logFile;
     this.resolutionDetector = onGameResolution && !game.nativeResolution ? new FrameResolution() : null;
@@ -201,10 +201,13 @@ export class Session {
     if (this.resolutionDetector && this.state === 'running' && this.displayable === 'canvas' && Date.now() - this.createdAt > 1200) {
       const detected = this.resolutionDetector.sample(f, width, height, performance.now());
       if (detected) {
-        this.game.nativeResolution = detected;
-        try { this.onGameResolution?.(detected); }
+        try {
+          if (this.onGameResolution?.(detected)) {
+            this.game.nativeResolution = detected;
+            this.broadcastText({ t: 'game-resolution', resolution: detected });
+          }
+        }
         catch { this.pushLog('[session] Could not save the detected game resolution in the library.'); }
-        this.broadcastText({ t: 'game-resolution', resolution: detected });
       }
     }
     const hdr = encodeFrameHeader(f.seq, f.enc, width, height, Date.now() & 0xffffffff);

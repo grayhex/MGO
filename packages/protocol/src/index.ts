@@ -94,9 +94,9 @@ export interface GameMeta {
   lastPlayedAt: string | null;
   /** Time this version has been running, in seconds (counted while its session runs). */
   playSeconds?: number;
-  /** Known target display size, independent of the selected emulator profile. */
+  /** Target display size, declared or estimated from game data, independent of the emulator output size. */
   nativeResolution?: { width: number; height: number; source: string };
-  /** Emulator output when no target resolution is known. Older Java sessions have a saved-profile estimate. */
+  /** Last emulator output size. Older Java sessions have a saved-profile estimate. */
   playedResolution?: { width: number; height: number; source: 'played' | 'saved-profile' };
   /** Other uploaded versions of the same (vendor, name). */
   groupKey: string;

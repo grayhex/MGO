@@ -57,6 +57,7 @@ try {
   await page.fill('input[aria-label=Search]', 'kemt');
   ok('search finds by name', (await page.locator('article.game-card').count()) === 1);
   await page.click('button[aria-label="Add to favorites"]');
+  await page.getByRole('button', { name: 'Remove from favorites' }).waitFor();
   await page.getByRole('radio', { name: 'Favorites' }).click();
   ok('favorite toggle + filter', (await page.locator('article.game-card').count()) === 1);
 

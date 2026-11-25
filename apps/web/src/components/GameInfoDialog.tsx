@@ -10,19 +10,18 @@ import { PlatformTag } from './PlatformTag';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
 import { JavaCover } from './JavaCover';
+import { resolutionKey } from '../libraryView';
 
-export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onChanged }: {
+export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onChanged, onDetails }: {
   game: GameMeta; toast: (k: 'info' | 'error', text: string) => void;
-  onClose: () => void; onPlay: (id: string) => void; playDisabled: boolean; onChanged: () => void;
+  onClose: () => void; onPlay: (id: string) => void; playDisabled: boolean; onChanged: () => void; onDetails: (details: GameMeta) => void;
 }) {
   const hasKey = useServerSettings()?.secrets.mobygames.configured ?? false;
   const [info, setInfo] = useState<GameInfo | null>(null);
   const java = (game.platform ?? 'j2me') === 'j2me';
   const [catalog, setCatalog] = useState<JavaCatalogInfo | null>(null);
-  const [resolution, setResolution] = useState(game.nativeResolution);
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [catalogEmpty, setCatalogEmpty] = useState(false);
-  const [filename, setFilename] = useState(game.fileName);
   const [checksums, setChecksums] = useState<{ sha1: string; crc32: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
@@ -33,16 +32,22 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
     let alive = true;
     void api.gameInfo(game.id).then(result => { if (alive) setInfo(result); }, () => undefined);
     if (java) void api.javaCatalogInfo(game.id).then(result => { if (alive) setCatalog(result.info); }, () => undefined);
-    if (!game.fileName) void api.gameMeta(game.id).then(meta => { if (alive) setFilename(meta.fileName); }, () => undefined);
     return () => { alive = false; };
-  }, [game.id, game.fileName, game.info?.hasCover, game.info?.screenshots, game.javaCatalog?.screenshots, java]);
+  }, [game.id, game.info?.hasCover, game.info?.screenshots, game.javaCatalog?.screenshots, java]);
+  useEffect(() => {
+    const request = new AbortController();
+    void api.gameMeta(game.id, request.signal).then(meta => {
+      if (!request.signal.aborted) onDetails(meta);
+    }, () => undefined);
+    return () => request.abort();
+  }, [game.id, onDetails]);
 
   const lookupCatalog = async () => {
     setCatalogBusy(true); setCatalogEmpty(false);
     try {
       const { info: result, resolution: knownResolution } = await api.javaCatalogLookup(game.id);
-      if (knownResolution) setResolution(knownResolution);
-      if (result) { setCatalog(result); setSelected(null); setBroken([]); onChanged(); }
+      if (result || knownResolution) onChanged();
+      if (result) { setCatalog(result); setSelected(null); setBroken([]); }
       else setCatalogEmpty(true);
     } catch (error) { toast('error', t((error as Error).message)); }
     finally { setCatalogBusy(false); }
@@ -72,12 +77,16 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
   const stepShot = (step: number) => setSelected(shots[(shotIndex + step + shots.length) % shots.length] ?? null);
   const ngage = game.ngageInfo;
   const played = game.playedResolution;
+  const resolution = game.nativeResolution;
+  const estimate = resolution?.source === 'frame' ? t('Estimated from game frames')
+    : resolution?.source === 'JAR images' ? t('JAR images') : null;
   const fields: [string, string | undefined][] = [
     ['Name', game.name],
-    ['File name', filename],
+    ['File name', game.fileName],
     ['Size', archiveSize(game.sizeBytes)],
-    ['Resolution', resolution ? `${resolution.width}×${resolution.height}` : played ?
-      `${played.source === 'saved-profile' ? '≈' : ''}${played.width}×${played.height} · ${t(played.source === 'played' ? 'Emulator output on the last run' : 'Estimated from the saved emulator profile')}` : undefined],
+    ['Game resolution', resolution ? (estimate ? `≈${resolutionKey(resolution)} · ${estimate}` : resolutionKey(resolution)) : undefined],
+    ...(played?.source === 'played' && (!resolution || resolutionKey(played) !== resolutionKey(resolution))
+      ? [['Emulator output on the last run', resolutionKey(played)] as [string, string]] : []),
     ['Version', game.version],
     ['Genre', (!game.classification?.unconfirmed && game.classification?.primaryGenre) || ngage?.genre || info?.genres.join(', ') || catalog?.genres.map(t_ => t(t_)).join(', ') || undefined],
     ['Publisher', game.vendor !== 'Unknown' ? game.vendor : ngage?.publisher || info?.publishers.join(', ')],

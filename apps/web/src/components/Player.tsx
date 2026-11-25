@@ -212,7 +212,10 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           if (ev.state === 'failed') toast('error', translateUI('Emulator stopped: {detail}', {detail:ev.detail ?? translateUI('unknown error')}));
         }
         break;
-      case 'game-resolution': setGame(current => current ? { ...current, nativeResolution: ev.resolution } : current); break;
+      case 'game-resolution': setGame(current => {
+        if (!current || (ev.resolution.source === 'frame' && current.nativeResolution && current.nativeResolution.source !== 'frame')) return current;
+        return { ...current, nativeResolution: ev.resolution };
+      }); break;
       case 'softkeys': setSoftkeys({ left: ev.left, right: ev.right }); break;
       case 'title': setTitle(ev.title); break;
       case 'log': setLog((l) => [...l.slice(-199), ev.line]); break;
@@ -549,8 +552,9 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     setRotation(r);
   };
   const sizeHint = (() => {
-    const h = analysis?.analysis.screenHints[0];
-    return h && res && (h.width !== res.width || h.height !== res.height) ? h : null;
+    const h = game?.nativeResolution;
+    if (!h?.source.startsWith('attribute ')) return null;
+    return res && (h.width !== res.width || h.height !== res.height) ? h : null;
   })();
   const matched = useMemo(() => {
     if (!j2me || advanced || !devices.length) return null;
@@ -585,14 +589,18 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const [phoneCatalog, setPhoneCatalog] = useState<PhoneCatalog | null>(null);
   useEffect(() => { if (game && !j2me) api.phones().then(setPhoneCatalog, () => undefined); }, [game?.id, j2me, native.data?.plan.firmwareCode]);
   const [tipHidden, setTipHidden] = useState<string | null>(null);
-  const actualGameSize = game?.nativeResolution ?? analysis?.analysis.screenHints[0];
+  const actualGameSize = game?.nativeResolution;
+  const sizeEstimate = actualGameSize?.source === 'frame' ? 'Estimated from game frames'
+    : actualGameSize?.source === 'JAR images' ? 'JAR images' : null;
+  const gameSizeLabel = sizeEstimate ?? (actualGameSize ? 'Native game resolution' : 'Native resolution unknown');
   const displayProfile = live && session ? { width: session.width, height: session.height } : res;
   const mismatch = j2me && actualGameSize && displayProfile &&
     (actualGameSize.width !== displayProfile.width || actualGameSize.height !== displayProfile.height);
   const physicalScreen = skin?.config.screen;
   const skinMismatch = actualGameSize && physicalScreen &&
     (actualGameSize.width !== physicalScreen.width || actualGameSize.height !== physicalScreen.height);
-  const { skins } = useCatalog(j2me ? !!skinMismatch : !!phoneCatalog);
+  const { skins, error: catalogError } = useCatalog(j2me ? !!skinMismatch : !!phoneCatalog);
+  const waitingForPhoneFit = j2me && ((!skin && !skinError) || (skinMismatch && !skins && !catalogError));
   const suggestion = useMemo(() => {
     if (!game || !skins) return null;
     const mine = getServerSettings()?.settings.myPhones;
@@ -608,13 +616,13 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     else { try { setGame(await api.patchGame(game.id, { settings: { skinId: id } })); native.refresh(); } catch (e) { toast('error', (e as Error).message); } }
   };
   const running = state === 'running' || state === 'starting' || state === 'stopping';
-  // A game that names the screen it was made for (manifest or JAD) is set up for it once, without asking.
+  // Use the declared size on the first launch unless the player already selected a handset.
   const hintApplied = useRef<string | null>(null);
   useEffect(() => {
-    if (!loaded || !j2me || running || advanced || game?.nativeResolution?.source === 'frame' || !sizeHint || hintApplied.current === gameId) return;
+    if (!loaded || !j2me || running || advanced || game?.settings.skinId || !sizeHint || hintApplied.current === gameId) return;
     hintApplied.current = gameId;
     setAdvanced(true); setDevice(''); setRes({ width: sizeHint.width, height: sizeHint.height });
-  }, [loaded, j2me, running, advanced, sizeHint?.width, sizeHint?.height, gameId, game?.nativeResolution?.source]);
+  }, [loaded, j2me, running, advanced, sizeHint?.width, sizeHint?.height, gameId, game?.settings.skinId]);
   const canStart = !!game && loaded && sessionsChecked && !running && !busy && (j2me ? health?.ok !== false && (advanced || !!matched) : native.data?.plan.ready === true);
   useEffect(() => {
     if (!autoStart || autoStarted.current || !sessionsChecked) return;
@@ -796,7 +804,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           {state === 'failed' && <div className="note err">{translateUI("The emulator stopped unexpectedly. The log below has the details.")}</div>}
           {j2me && health?.ok === false && <div className="note warn">{translateUI("The emulator runtime is not ready on this server.")}</div>}
         </Panel>
-        {(mismatch || suggestion) && tipHidden !== `${game?.id}:${suggestion?.id ?? prefs.skinId}` && (
+        {!waitingForPhoneFit && (mismatch || suggestion) && tipHidden !== `${game?.id}:${suggestion?.id ?? prefs.skinId}` && (
           <div className="note info phone-tip" role="status" data-testid="phone-suggestion">
             {mismatch && !suggestion && <p>{translateUI('The game and emulator use different resolutions.')}</p>}
             {suggestion && <p>{translateUI('Better screen fit: {phone} ({w}×{h}).', { phone: suggestion.label, w: suggestion.width, h: suggestion.height })}</p>}
@@ -863,8 +871,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
 
         <Panel icon="layers" title={translateUI("Display")}>
           <div className="chips player-chips">
-            <span className="chip" title={translateUI(sameResolution ? 'Game and emulator resolution' : game?.nativeResolution?.source === 'frame' ? 'Estimated from game frames' : 'Native game resolution')}>
-              <span>{translateUI(sameResolution ? 'Game + output' : 'Game')} <b data-testid="game-resolution"><span data-testid={sameResolution ? outputTestId : undefined}>{actualGameSize ? `${actualGameSize.width}×${actualGameSize.height}` : '—'}</span></b></span>
+            <span className="chip" title={translateUI(sameResolution ? 'Game and emulator resolution' : gameSizeLabel)}>
+              <span>{translateUI(sameResolution ? 'Game + output' : 'Game')} {sizeEstimate && <span aria-hidden="true">≈</span>}<b data-testid="game-resolution"><span data-testid={sameResolution ? outputTestId : undefined}>{actualGameSize ? `${actualGameSize.width}×${actualGameSize.height}` : '—'}</span></b></span>
             </span>
             {outputSize && !sameResolution && <span className="chip" title={translateUI('Emulator output resolution')}><span>{translateUI('Emulator')} <b data-testid={outputTestId}>{outputSize.width}×{outputSize.height}</b></span></span>}
             <button type="button" className="chip chip-link phone-chip" onClick={() => navigate('/phones')} title={skinName ? `${translateUI("Change the phone")}: ${skinName}` : translateUI("Change the phone")} data-testid="change-phone"><Icon name="phone" /><span>{(j2me && skin?.config.model) || translateUI('Phone')}</span></button>

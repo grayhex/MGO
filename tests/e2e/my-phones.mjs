@@ -73,6 +73,10 @@ try {
   // ---- the Java game made for 240x320 on an N-Gage phone: a reminder with a one-click switch ----
   await p.addInitScript(() => { try { localStorage.setItem('j2me-web.skin.v1', JSON.stringify({ skinId: 'nokia-n-gage-classic', view: 'full', integer: true })); } catch {} });
   await api('/api/games/' + made.id, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ settings: { skinId: 'nokia-n-gage-classic' } }) });
+  await p.route('**/phones/nokia-n95/config.json', async route => {
+    await sleep(400);
+    await route.continue();
+  });
   await p.goto(base + '/play/' + made.id);
   await p.locator('.skin-box').waitFor();
   const tip = p.getByTestId('phone-suggestion');

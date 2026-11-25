@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { emulatedDevice, PHONE_COMPATIBILITY, isPlatform, nativeGameDefaults, sisFormatOf, skinSupportsPlatform, type PackageFormat, type Platform, DEFAULT_SETTINGS, EMULATION_LIMITS, type EmulationTweaks, type GameInfoSummary, type GameMeta, type GameSettings, KEY_LAYOUTS, SCREEN_PRESETS, type LayoutId, type MetaStatus } from '@mgo/protocol';
 import { parseJad, parseJar, readJarIcon, sanitizeText, UploadError } from './jar.js';
 import { readAttributes } from './analysis/analyze.js';
-import { readScreenHints, type ScreenHint } from './analysis/screenHints.js';
+import { readScreenHints, resolutionPriority, screenHintFromImages, type ScreenHint } from './analysis/screenHints.js';
 import { Classifications } from './classification.js';
 import { cleanTitle, cleanVendor } from './title.js';
 import { sniffImage } from './image.js';
@@ -216,6 +216,7 @@ export class Library {
     if (!cols.includes('download_json')) this.db.exec('ALTER TABLE games ADD COLUMN download_json TEXT');
     if (!cols.includes('native_resolution_json')) this.db.exec('ALTER TABLE games ADD COLUMN native_resolution_json TEXT');
     if (!cols.includes('played_resolution_json')) this.db.exec('ALTER TABLE games ADD COLUMN played_resolution_json TEXT');
+    if (!cols.includes('screen_probed')) this.db.exec('ALTER TABLE games ADD COLUMN screen_probed INTEGER NOT NULL DEFAULT 0');
     this.dropStaleNativeSkins();
     this.fillPackageFormats();
     this.db.exec(`
@@ -331,10 +332,39 @@ export class Library {
     this.db.close();
   }
 
-  recordGameResolution(id: string, resolution: NonNullable<GameMeta['nativeResolution']>): void {
-    this.db.prepare(`UPDATE games SET native_resolution_json = ?
-      WHERE id = ? AND platform = 'j2me' AND (native_resolution_json IS NULL OR native_resolution_json = 'null')`)
-      .run(JSON.stringify(resolution), id);
+  recordGameResolution(id: string, resolution: ScreenHint): boolean {
+    const row = this.db.prepare("SELECT native_resolution_json FROM games WHERE id = ? AND platform = 'j2me'").get(id);
+    if (!row) return false;
+    const current = row.native_resolution_json ? JSON.parse(String(row.native_resolution_json)) as ScreenHint | null : null;
+    if (resolutionPriority(resolution) <= resolutionPriority(current ?? undefined)) return false;
+    const result = this.db.prepare('UPDATE games SET native_resolution_json = ? WHERE id = ? AND native_resolution_json IS ?')
+      .run(JSON.stringify(resolution), id, row.native_resolution_json ?? null);
+    return result.changes > 0;
+  }
+
+  /** Reuse an in-memory package during import or a full rescan. Cache an inconclusive probe too. */
+  probeGameResolution(game: GameMeta, jar: Uint8Array, jad?: Uint8Array | null, filename = game.fileName ?? game.name): void {
+    if ((game.platform ?? 'j2me') !== 'j2me' || (resolutionPriority(game.nativeResolution) >= 5 && !jad)) return;
+    const row = this.db.prepare('SELECT screen_probed FROM games WHERE id = ?').get(game.id);
+    if (!row) return;
+    if (row.screen_probed && !jad && filename === (game.fileName ?? game.name)) return;
+    const hint = readScreenHints(readAttributes(jar, jad ?? undefined), filename)[0]
+      ?? (!row.screen_probed ? screenHintFromImages(jar) : undefined);
+    if (hint) this.recordGameResolution(game.id, hint);
+    if (!row.screen_probed) this.db.prepare('UPDATE games SET screen_probed = 1 WHERE id = ?').run(game.id);
+  }
+
+  /** Older libraries do the extra work on opening the game, so startup and list requests stay cheap. */
+  async inspectGameResolution(game: GameMeta): Promise<GameMeta> {
+    if ((game.platform ?? 'j2me') !== 'j2me' || resolutionPriority(game.nativeResolution) >= 5) return game;
+    const row = this.db.prepare('SELECT screen_probed FROM games WHERE id = ?').get(game.id);
+    if (row?.screen_probed !== 0) return game;
+    const files = this.paths(game.id);
+    try {
+      const [jar, jad] = await Promise.all([readFile(files.jar), files.jad ? readFile(files.jad).catch(() => null) : null]);
+      this.probeGameResolution(game, jar, jad);
+    } catch { return game; } // an unavailable package should not make game details unavailable
+    return this.get(game.id) ?? game;
   }
 
   recordPlayedResolution(id: string, width: number, height: number): void {
@@ -345,16 +375,16 @@ export class Library {
   /** Cache the result for games already on disk, including games with no usable hint. */
   private fillNativeResolutions(): void {
     const rows = this.db.prepare(`
-      SELECT id, name, platform,
+      SELECT id, name, file_name, platform,
         (SELECT rel_path FROM sources WHERE game_id = games.id ORDER BY missing, rel_path LIMIT 1) AS source_path
       FROM games WHERE native_resolution_json IS NULL
-    `).all() as unknown as { id: string; name: string; platform: string; source_path: string | null }[];
+    `).all() as unknown as { id: string; name: string; file_name: string | null; platform: string; source_path: string | null }[];
     if (!rows.length) return;
     const update = this.db.prepare('UPDATE games SET native_resolution_json = ? WHERE id = ?');
     this.db.exec('BEGIN');
     try {
       for (const row of rows) {
-        const name = row.source_path ? path.basename(row.source_path) : row.name;
+        const name = row.file_name ?? (row.source_path ? path.basename(row.source_path) : row.name);
         let resolution = this.packageResolution(row.platform, name);
         if (row.platform === 'j2me') {
           const files = this.paths(row.id);
@@ -379,6 +409,7 @@ export class Library {
 
   private toMeta(r: Row): GameMeta {
     const settings: GameSettings = JSON.parse(r.settings_json);
+    const resolution = r.native_resolution_json ? JSON.parse(r.native_resolution_json) as ScreenHint | null : null;
     const playedResolution: GameMeta['playedResolution'] = r.played_resolution_json
       ? JSON.parse(r.played_resolution_json)
       : r.last_played_at && r.play_seconds && (!r.platform || r.platform === 'j2me') && settings.width && settings.height
@@ -407,7 +438,7 @@ export class Library {
       origin: r.origin === 'import' ? 'import' : 'upload',
       ...(r.download_json ? { downloadedFrom: (JSON.parse(r.download_json) as DownloadedJar).provider } : {}),
       platform: isPlatform(r.platform) ? r.platform : 'j2me',
-      ...(r.native_resolution_json && r.native_resolution_json !== 'null' ? { nativeResolution: JSON.parse(r.native_resolution_json) } : {}),
+      ...(resolution && resolutionPriority(resolution) ? { nativeResolution: resolution } : {}),
       ...(playedResolution ? { playedResolution } : {}),
       ...(r.package_format ? { packageFormat: r.package_format as PackageFormat } : {}),
     };
@@ -548,7 +579,10 @@ export class Library {
   add(jar: Uint8Array, jadBytes: Uint8Array | null, quotaBytes: number, opts: AddOptions = {}): { game: GameMeta; duplicate: boolean } {
     const sha = createHash('sha256').update(jar).digest('hex');
     const dup = this.db.prepare('SELECT * FROM games WHERE sha256 = ?').get(sha) as unknown as Row | undefined;
-    if (dup) return { game: this.toMeta(dup), duplicate: true };
+    if (dup) {
+      this.probeGameResolution(this.toMeta(dup), jar, jadBytes, opts.fileName);
+      return { game: this.get(dup.id)!, duplicate: true };
+    }
     if (this.totalBytes() + jar.length > quotaBytes) throw new UploadError('quota_exceeded', 'Library quota exceeded; delete some games first', 507);
 
     const jad = jadBytes ? parseJad(jadBytes) : undefined;
@@ -566,16 +600,17 @@ export class Library {
     const firstMidlet = info.midlets[0];
     if (info.midlets.length > 1 && firstMidlet) settings.midlet = firstMidlet.className;
     const groupKey = javaGroupKey(name, vendor);
+    const resolution = readScreenHints(info.attributes, opts.fileName ?? name)[0] ?? screenHintFromImages(jar);
     this.db
       .prepare(
         `INSERT INTO games (id, sha256, name, vendor, version, group_key, midlets_json, class_version, size_bytes, has_icon, has_jad,
-          favorite, created_at, last_played_at, settings_json, warnings_json, origin, native_resolution_json, file_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,?,?,?)`,
+          favorite, created_at, last_played_at, settings_json, warnings_json, origin, native_resolution_json, file_name, screen_probed) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,?,?,?,1)`,
       )
       .run(
         id, sha, name, vendor, sanitizeText(info.version, 40), groupKey,
         JSON.stringify(info.midlets.map((m) => ({ name: sanitizeText(m.name), className: m.className }))),
         info.classVersion, jar.length, info.icon ? 1 : -2, jadBytes ? 1 : 0,
-        new Date().toISOString(), JSON.stringify(settings), JSON.stringify(info.warnings), opts.origin ?? 'upload', JSON.stringify(readScreenHints(info.attributes, opts.fileName ?? name)[0] ?? null), originalFileName(opts.fileName),
+        new Date().toISOString(), JSON.stringify(settings), JSON.stringify(info.warnings), opts.origin ?? 'upload', JSON.stringify(resolution ?? null), originalFileName(opts.fileName),
       );
     return { game: this.get(id)!, duplicate: false };
   }

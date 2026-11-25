@@ -87,6 +87,16 @@ try {
   await p.goto(base + '/play/' + game.id);
   const panel = p.locator('.ctrl-col');
   await panel.getByTestId('change-phone').getByText('K790i', { exact: true }).waitFor();
+  await p.getByRole('radio', { name: 'Screen', exact: true }).click();
+  const toolbar = p.locator('.stage-bar');
+  const toolbarFits = () => toolbar.evaluate(bar => {
+    const bounds = bar.getBoundingClientRect();
+    const buttons = bar.querySelectorAll('.stage-left > button, .stage-view > *, .stage-status > *, .stage-tools > *');
+    return bounds.height <= 54 && [...buttons].every(button => {
+      const rect = button.getBoundingClientRect();
+      return rect.left >= bounds.left && rect.right <= bounds.right && Math.abs((rect.top + rect.bottom - bounds.top - bounds.bottom) / 2) < 3;
+    });
+  });
   for (const language of ['RU', 'EN']) {
     await panel.locator('.seg.lang').getByRole('radio', { name: language }).click();
     await panel.locator('.resource-meters').getByText('4.8%').waitFor();
@@ -109,6 +119,7 @@ try {
       return { bottom: panel.bottom, height: innerHeight, documentHeight: document.documentElement.scrollHeight, nested: getComputedStyle(el).overflowY === 'auto', oneLine };
     });
     assert.ok(fits.bottom <= fits.height && fits.documentHeight <= fits.height + 1 && !fits.nested && fits.oneLine, `compact side panel fits at Full HD in ${language}: ${JSON.stringify(fits)}`);
+    assert.ok(await toolbarFits(), `the player toolbar is one line at Full HD in ${language}`);
     assert.equal(await panel.getByText('Game files', { exact: true }).count(), 0);
   }
   const frameLimitButton = p.locator('.stage-fps-limit summary');
@@ -125,7 +136,10 @@ try {
   assert.ok(await p.locator('.stage').evaluate(el => document.activeElement === el && getComputedStyle(el).outlineStyle === 'none'), 'the keyboard keeps focus on the phone without drawing an outline');
   for (const [width, height] of [[1920, 1080], [1536, 864]]) {
     await p.setViewportSize({ width, height });
+    assert.ok(await toolbarFits(), `the running player toolbar stays in one row at ${width}×${height}`);
+    await p.getByRole('radio', { name: 'Phone', exact: true }).click();
     assert.ok(await p.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), `running player fits ${width}×${height}`);
+    await p.getByRole('radio', { name: 'Screen', exact: true }).click();
   }
   await p.setViewportSize({ width: 1920, height: 1080 });
   const firstGame = await (await fetch(base + '/api/games/' + game.id)).json();
@@ -155,6 +169,25 @@ try {
     .replace('MIDlet-1: KemTest, , kemtest.KemTest', 'MIDlet-1: Small viewport, , MissingMain\r\nMGO-Padded-Test: true'));
   const padded = await upload(zipSync(files));
   assert.equal(padded.nativeResolution, undefined);
+  const handset = (id, skinId) => fetch(`${base}/api/games/${id}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ settings: { skinId, profileMode: 'auto' } }),
+  });
+  assert.ok((await handset(padded.id, 'siemens-s65')).ok);
+  await p.goto(base + '/play/' + padded.id);
+  await panel.getByTestId('change-phone').getByText('S65', { exact: true }).waitFor();
+  await panel.getByRole('button', { name: 'Start', exact: true }).click();
+  await wait(async () => (await running())?.framesReceived > 5, 'the larger game draws on the S65');
+  const clipped = await (await fetch(base + '/api/games/' + padded.id)).json();
+  assert.deepEqual(clipped.playedResolution, { width: 132, height: 176, source: 'played' });
+  assert.equal(clipped.nativeResolution, undefined, 'a clipped picture is not evidence of the native resolution');
+  await panel.getByRole('button', { name: 'Stop', exact: true }).click();
+  await p.getByTestId('state-badge').filter({ hasText: 'exited' }).waitFor();
+  await p.locator('.stage-left').getByRole('button', { name: 'Library' }).click();
+  await p.waitForURL(base + '/');
+  await p.locator(`[data-library-group="${padded.groupKey}"]`).getByLabel('Native resolution unknown').waitFor();
+  assert.match(await p.getByTestId('phone-resolution-filter').innerText(), /132×176/);
+  assert.ok((await handset(padded.id, 'sony-ericsson-k790i')).ok);
   await p.goto(base + '/play/' + padded.id);
   await panel.getByRole('progressbar', { name: 'Memory' }).waitFor();
   await panel.getByRole('button', { name: 'Start', exact: true }).click();

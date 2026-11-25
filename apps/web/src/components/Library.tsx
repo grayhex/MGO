@@ -1,5 +1,5 @@
 import { t as translateUI } from '../i18n';
-import { GENRES, PACKAGE_FORMAT_LABEL, GAME_PLATFORMS, GAME_PLATFORM_LABELS, isGamePlatform, type GamePlatform, type GameMeta, type HealthStatus, type ScanReport } from '@mgo/protocol';
+import { GENRES, PACKAGE_FORMAT_LABEL, GAME_PLATFORMS, GAME_PLATFORM_LABELS, emulatedDevice, isGamePlatform, javaDeviceId, type GamePlatform, type GameMeta, type HealthStatus, type ScanReport } from '@mgo/protocol';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../api';
 import type { Toast } from '../App';
@@ -8,7 +8,9 @@ import { useServerSettings } from '../serverSettings';
 import { GameInfoDialog } from './GameInfoDialog';
 import { GenreDialog } from './GenreDialog';
 import { splitPlayTime } from '../playTime';
-import { compareGroups, matchesStatus, SORT_KEYS, STATUS_FILTERS, totalPlaySeconds, type SortKey, type StatusFilter } from '../libraryView';
+import { compareGroups, matchesResolution, resolutionKey, SORT_KEYS, totalPlaySeconds, type SortKey } from '../libraryView';
+import { getLastGame } from '../lastGame';
+import { isSkinId, loadPrefs } from '../skin/registry';
 import { GameSettingsDialog } from './GameSettingsDialog';
 import { ArchiveBrowser } from './ArchiveBrowser';
 import { archiveMatchLabel } from './ArchiveSettings';
@@ -20,11 +22,8 @@ import { JavaLibraryThumbnail } from './JavaCover';
 type Filter = 'all' | 'favorites' | 'recent';
 type GenreFilter = 'all' | 'unclassified' | (typeof GENRES)[number];
 const SORT_STORE = 'j2me-web.library.sort';
-const STATUS_STORE = 'j2me-web.library.status';
 const loadSort = (): SortKey => { try { const v = localStorage.getItem(SORT_STORE) as SortKey; return SORT_KEYS.includes(v) ? v : 'name'; } catch { return 'name'; } };
-const loadStatus = (): StatusFilter => { try { const v = localStorage.getItem(STATUS_STORE) as StatusFilter; return STATUS_FILTERS.includes(v) ? v : 'all'; } catch { return 'all'; } };
 const SORT_LABEL: Record<SortKey, string> = { name: 'Name A–Z', 'name-desc': 'Name Z–A', added: 'Recently added', played: 'Recently played', time: 'Most played', genre: 'Genre' };
-const STATUS_LABEL: Record<StatusFilter, string> = { all: 'Any status', unplayed: 'Not played', played: 'Played', gone: 'File gone', unconfirmed: 'Genre not confirmed' };
 const GENRE_KEY = 'j2me-web.library.genre';
 const loadGenre = (): GenreFilter => { try { const v = localStorage.getItem(GENRE_KEY); return v === 'unclassified' || (GENRES as readonly string[]).includes(v ?? '') ? (v as GenreFilter) : 'all'; } catch { return 'all'; } };
 type View = 'tiles' | 'list';
@@ -42,13 +41,12 @@ function playTime(seconds: number): string | null {
 
 function ResolutionTag({ resolution }: { resolution: GameMeta['nativeResolution'] }) {
   if (!resolution) return <span className="resolution-tag muted" title={translateUI('Native resolution unknown')} aria-label={translateUI('Native resolution unknown')}>—</span>;
-  const label = `${resolution.width}×${resolution.height}`;
+  const label = resolutionKey(resolution);
   const tone = { '240×320': 'blue', '176×208': 'green', '176×220': 'green', '128×128': 'red', '128×160': 'red' }[label] ?? 'neutral';
   const source = resolution.source === 'frame' ? translateUI('Estimated from game frames') : resolution.source.startsWith('attribute ') ? resolution.source.slice(10) : translateUI(resolution.source);
-  const hint = resolution.source === 'played' ? translateUI('Emulator output on the last run')
-    : resolution.source === 'saved-profile' ? translateUI('Estimated from the saved emulator profile')
-    : translateUI('Native resolution: {source}', { source });
-  return <span className={`resolution-tag ${tone}`} title={hint} aria-label={`${label} · ${hint}`}>{resolution.source === 'saved-profile' ? '≈' : ''}{label}</span>;
+  const estimated = resolution.source === 'JAR images' || resolution.source === 'frame';
+  const hint = estimated ? source : translateUI('Native resolution: {source}', { source });
+  return <span className={`resolution-tag ${tone}`} title={hint} aria-label={`${label} · ${hint}`}>{estimated ? '≈' : ''}{label}</span>;
 }
 
 function Cover({ g, compact = false }: { g: GameMeta; compact?: boolean }) {
@@ -85,13 +83,22 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
   const [genreFor, setGenreFor] = useState<GameMeta | null>(null);
   const [sort, setSortState] = useState<SortKey>(loadSort);
   const setSort = (v: SortKey) => { setSortState(v); try { localStorage.setItem(SORT_STORE, v); } catch { /* storage unavailable */ } };
-  const [status, setStatusState] = useState<StatusFilter>(loadStatus);
-  const setStatus = (v: StatusFilter) => { setStatusState(v); try { localStorage.setItem(STATUS_STORE, v); } catch { /* storage unavailable */ } };
+  const [resolutionFilter, setResolutionFilter] = useState('all');
   const [genre, setGenreState] = useState<GenreFilter>(loadGenre);
   const setGenre = (g: GenreFilter) => { setGenreState(g); try { localStorage.setItem(GENRE_KEY, g); } catch { /* storage unavailable */ } };
   const [scan, setScan] = useState<ScanReport | null>(null);
   const server = useServerSettings();
   const libraryPath = server?.settings.libraryPath || Object.values(server?.settings.libraryPaths ?? {}).find(Boolean) || null;
+  const lastGameId = getLastGame()?.id;
+  const currentGame = games?.find(game => game.id === lastGameId);
+  const chosenSkin = currentGame?.settings.skinId ?? (currentGame ? undefined : server?.settings.phone.skinId);
+  const phoneScreen = emulatedDevice(javaDeviceId(isSkinId(chosenSkin) ? chosenSkin : loadPrefs().skinId))?.screen;
+  const phoneResolution = phoneScreen ? resolutionKey(phoneScreen) : 'unknown';
+  const resolutionChoices = useMemo(() => {
+    const sizes = new Map<string, NonNullable<GameMeta['nativeResolution']>>();
+    for (const game of games ?? []) if (game.nativeResolution) sizes.set(resolutionKey(game.nativeResolution), game.nativeResolution);
+    return [...sizes.values()].sort((a, b) => a.width - b.width || a.height - b.height).map(resolutionKey);
+  }, [games]);
   const [chosen, setChosen] = useState<Record<string, string>>({}); // groupKey -> selected version id
   const fileInput = useRef<HTMLInputElement>(null);
   const depth = useRef(0);
@@ -100,6 +107,10 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
     try { setGames(await api.games()); } catch (e) { toast('error', (e as Error).message); setGames([]); }
   }, [toast]);
   useEffect(() => { void reload(); }, [reload]);
+  const updateDetails = useCallback((details: GameMeta) => {
+    setGames(current => current?.map(game => game.id === details.id
+      ? { ...game, nativeResolution: details.nativeResolution, fileName: details.fileName } : game) ?? null);
+  }, []);
   useEffect(() => {
     const f = () => void reload();
     window.addEventListener('j2me:library-changed', f);
@@ -202,7 +213,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
       .filter((vs) => !needle || vs.some((g) => `${g.name} ${g.vendor} ${g.classification?.canonicalTitle ?? ''} ${g.classification?.primaryGenre ?? ''} ${(g.classification?.tags ?? []).join(' ')}`.toLowerCase().includes(needle)))
       .filter((vs) => genre === 'all' || (genre === 'unclassified' ? !vs[0]!.classification : vs[0]!.classification?.primaryGenre === genre || !!vs[0]!.classification?.genres.includes(genre)))
       .filter((vs) => (filter === 'favorites' ? vs.some((g) => g.favorite) : filter === 'recent' ? vs.some((g) => g.lastPlayedAt) : true))
-      .filter((vs) => matchesStatus(vs, status))
+      .map(vs => vs.filter(game => matchesResolution(game, resolutionFilter === 'phone' ? phoneResolution : resolutionFilter)))
       .map(vs => downloadedOnly ? vs.filter(game => game.downloadedFrom) : vs)
       .filter(vs => vs.length > 0)
       .filter((vs) => archiveFilter === 'all' || vs.some(g => {
@@ -211,15 +222,15 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
         return state === archiveFilter || (archiveFilter === 'exact' && state === 'manual');
       }))
       .sort((a, b) => compareGroups(a, b, filter === 'recent' && sort === 'name' ? 'played' : sort)); // "Recent" keeps its order unless another one is chosen
-  }, [games, query, filter, genre, status, sort, platform, archiveFilter, downloadedOnly]);
+  }, [games, query, filter, genre, resolutionFilter, phoneResolution, sort, platform, archiveFilter, downloadedOnly]);
 
   useEffect(() => {
     if (!focusGame || focused.current || !games) return;
     const game = games.find(g => g.id === focusGame);
     if (!game) return;
-    if (!groups.some(versions => versions[0]?.groupKey === game.groupKey)) {
+    if (!groups.some(versions => versions.some(version => version.id === game.id))) {
       if (query) onQuery('');
-      setFilter('all'); setPlatform('all'); setStatusState('all'); setGenreState('all'); setArchiveFilter('all'); setDownloadedOnly(false);
+      setFilter('all'); setPlatform('all'); setResolutionFilter('all'); setGenreState('all'); setArchiveFilter('all'); setDownloadedOnly(false);
       return;
     }
     const row = document.querySelector<HTMLButtonElement>(`[data-library-group="${game.groupKey}"] .card-main`);
@@ -280,9 +291,19 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
         <select className="select compact" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label={translateUI("Sort by")} data-testid="sort">
           {SORT_KEYS.map((k) => <option key={k} value={k}>{translateUI(SORT_LABEL[k])}</option>)}
         </select>
-        <select className="select compact" value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)} aria-label={translateUI("Show games")} data-testid="status-filter">
-          {STATUS_FILTERS.map((k) => <option key={k} value={k}>{translateUI(STATUS_LABEL[k])}</option>)}
-        </select>
+        <div className="resolution-filter">
+          <select className="select compact" value={resolutionFilter === 'phone' ? phoneResolution : resolutionFilter} onChange={event => setResolutionFilter(event.target.value)}
+            aria-label={translateUI('Filter by resolution')} data-testid="resolution-filter">
+            <option value="all">{translateUI('All resolutions')}</option>
+            {resolutionChoices.map(size => <option key={size} value={size}>{size}</option>)}
+            {resolutionFilter === 'phone' && phoneResolution !== 'unknown' && !resolutionChoices.includes(phoneResolution) && <option value={phoneResolution}>{phoneResolution}</option>}
+            <option value="unknown">{translateUI('Unknown resolution')}</option>
+          </select>
+          <button type="button" className="btn sm" aria-pressed={resolutionFilter === 'phone'} disabled={!phoneScreen}
+            onClick={() => setResolutionFilter(value => value === 'phone' ? 'all' : 'phone')} data-testid="phone-resolution-filter">
+            <Icon name="phone" /> {translateUI('Current phone · {size}', { size: phoneResolution })}
+          </button>
+        </div>
         {(games ?? []).some(game => game.downloadedFrom) && <button type="button" className="btn sm" aria-pressed={downloadedOnly} onClick={() => setDownloadedOnly(value => !value)}><Icon name="download" /> {translateUI('Downloaded by MGO')}</button>}
         <Seg<Filter> label={translateUI("Filter")} value={filter} onChange={setFilter} options={[{ value: 'all', label: 'All' }, { value: 'favorites', label: 'Favorites' }, { value: 'recent', label: 'Recent' }]} />
         <Seg<View> label={translateUI("View")} value={view} onChange={setView} options={[{ value: 'tiles', label: 'Tiles', title: 'Large tiles with covers' }, { value: 'list', label: 'List', title: 'Compact list, one game per line' }]} />
@@ -365,7 +386,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
               <span className="cell c-vendor muted" title={sel.vendor}>{translateUI(sel.info?.year ? `${sel.vendor} · ${sel.info.year}` : sel.vendor)}</span>
               <span className="cell c-genre">{genreButton}</span>
               <span className="cell c-version">{versionControl}</span>
-              <span className="cell c-resolution"><ResolutionTag resolution={sel.nativeResolution ?? sel.playedResolution} /></span>
+              <span className="cell c-resolution"><ResolutionTag resolution={sel.nativeResolution} /></span>
               <span className="cell c-time">{time}</span>
               <span className="cell actions">{actions}</span>
             </article>
@@ -378,7 +399,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
                   <h3>{sel.name} {archiveMark}</h3>
                   <p className="muted">{translateUI(sel.info?.year ? `${sel.vendor} · ${sel.info.year}` : sel.vendor)}</p>
                   {sel.ngageInfo && <p className="ngage-card-facts">{[sel.ngageInfo.publisher, sel.ngageInfo.year, sel.ngageInfo.rating !== null ? `${sel.ngageInfo.rating}%` : null].filter(Boolean).join(' · ')}</p>}
-                  <p className="card-resolution"><ResolutionTag resolution={sel.nativeResolution ?? sel.playedResolution} />{time}</p>
+                  <p className="card-resolution"><ResolutionTag resolution={sel.nativeResolution} />{time}</p>
                 </div>
               </button>
               {sel.ngageInfo && <div className="ngage-attribution"><span>{sel.ngageInfo.multiplayer ?? sel.ngageInfo.developer}</span><a href={sel.ngageInfo.sourceUrl} target="_blank" rel="noreferrer">{sel.ngageInfo.attribution} ↗</a>{sel.ngageInfo.coverSourceUrl && <a href={sel.ngageInfo.coverSourceUrl} target="_blank" rel="noreferrer">LaunchBox ↗</a>}</div>}
@@ -398,7 +419,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
       {dragging && <div className="dropzone"><div><strong>{translateUI("Drop to add")}</strong><br />{translateUI(".jar, .jad, .sis, .sisx, .n-gage files")}</div></div>}
       {genreFor && <GenreDialog game={genreFor} toast={toast} onClose={() => setGenreFor(null)} onChanged={() => { setGenreFor(null); void reload(); }} />}
       {archiveOpen && <ArchiveBrowser onClose={() => setArchiveOpen(false)} onImported={reload} onPlay={id => { setArchiveOpen(false); onPlay(id); }} />}
-      {infoGame && <GameInfoDialog game={infoGame} toast={toast} onClose={() => setInfoFor(null)} onPlay={id => { setInfoFor(null); onPlay(id); }} playDisabled={(infoGame.platform ?? 'j2me') === 'j2me' && (infoGame.classVersion >= 49 || health?.ok === false)} onChanged={() => void reload()} />}
+      {infoGame && <GameInfoDialog game={infoGame} toast={toast} onClose={() => setInfoFor(null)} onPlay={id => { setInfoFor(null); onPlay(id); }} playDisabled={(infoGame.platform ?? 'j2me') === 'j2me' && (infoGame.classVersion >= 49 || health?.ok === false)} onChanged={() => void reload()} onDetails={updateDetails} />}
       {editing && <GameSettingsDialog game={editing} toast={toast} onClose={() => setEditing(null)} onChanged={() => { setEditing(null); void reload(); }} />}
     </div>
   );

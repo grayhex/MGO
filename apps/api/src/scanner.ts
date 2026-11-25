@@ -262,6 +262,7 @@ export class ScanManager {
     let gameId: string;
     if (existing) {
       gameId = existing.id;
+      this.library.probeGameResolution(existing, bytes, jadBytes, path.basename(jar.rel));
       if (prev && prev.sha256 === sha) r.unchanged++;
       else if (prev) r.updated++;
       else if (this.library.sourcesOf(existing.id).some((s) => !s.missing && s.rel_path !== jar.rel)) r.unchanged++; // counted as a duplicate when the groups are collected

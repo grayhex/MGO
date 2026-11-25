@@ -159,6 +159,8 @@ button.genre-badge.unconfirmed { color: var(--muted); font-weight: 500; font-sty
 }
 .game-card .archive-mark.downloaded { color: var(--primary); }
 .lib-toolbar .btn[aria-pressed="true"] { background: var(--primary-tint); border-color: var(--primary); }
+.resolution-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.resolution-filter .btn { white-space: nowrap; }
 .lib-grid.list .row-cover { all: unset; cursor: pointer; display: block; width: 40px; height: 40px; }
 .lib-grid.list .row-cover .cover, .lib-grid.list .row-cover .cover.art { width: 40px; height: 40px; aspect-ratio: 1; border-radius: var(--r-sm); }
 .lib-grid.list .row-cover .cover img { width: 28px; height: 28px; }

@@ -1,4 +1,4 @@
-// Library tools: genres from the folder names, titles without release-group tags, sort and status filters, "file gone" clean-up,
+// Library tools: genres from the folder names, titles without release-group tags, sorting, resolution filters, "file gone" clean-up,
 // emptying the library, and two small player fixes (no "review draft" badge, the gamepad button stays inside its panel).
 // Real API + Chromium. Run with `node --import tsx`.
 import assert from 'node:assert/strict';
@@ -13,8 +13,8 @@ const { makeJar } = await import(pathToFileURL(path.join(process.cwd(), 'apps/ap
 const dir = mkdtempSync(path.join(tmpdir(), 'mgo-lt-'));
 const lib = mkdtempSync(path.join(tmpdir(), 'mgo-lt-lib-'));
 const put = (rel, jar) => { mkdirSync(path.dirname(path.join(lib, rel)), { recursive: true }); writeFileSync(path.join(lib, rel), jar); };
-put('MGO-Top500/Racing/Turbo.jar', makeJar('Turbo Rally **MASYAKA**', { vendor: 'ACME' }));
-put('MGO-Top500/Puzzle/Blocks.jar', makeJar('BlocksOfColorAndShape', { vendor: 'ACME' }));
+put('MGO-Top500/Racing/Turbo.jar', makeJar('Turbo Rally **MASYAKA**', { vendor: 'ACME', extra: 'SEMC-Screen-Size: 240,320' }));
+put('MGO-Top500/Puzzle/Blocks.jar', makeJar('BlocksOfColorAndShape', { vendor: 'ACME', extra: 'SEMC-Screen-Size: 176,220' }));
 put('MGO-Top500/Other/Mystery.jar', makeJar('Mystery', { vendor: 'ACME' }));
 put('MGO-Top500/Action/Gone One.jar', makeJar('Gone One', { vendor: 'ACME' }));
 put('MGO-Top500/Action/Gone Two.jar', makeJar('Gone Two -zub-', { vendor: 'ACME' }));
@@ -54,16 +54,24 @@ try {
   assert.match(bar, /Action \(2\)/);
   assert.equal(await p.getByTestId('playtime').first().innerText(), '0', 'a game never started shows 0, not a sentence');
 
-  // ---- sorting and the status filter ----
+  // ---- sorting and the resolution filter ----
   await p.getByTestId('sort').selectOption('name-desc');
   assert.deepEqual(await titles(), ['Turbo Rally', 'Mystery', 'Gone Two', 'Gone One', 'Blocks Of Color And Shape']);
   await p.getByTestId('sort').selectOption('genre');
   assert.equal((await titles())[0], 'Gone One', 'genre order: Action first, then by name');
-  await p.getByTestId('status-filter').selectOption('unconfirmed');
-  assert.deepEqual(await titles(), ['Mystery'], '"Other" is a genre that is not confirmed');
-  await p.getByTestId('status-filter').selectOption('all');
+  const filter = p.getByTestId('resolution-filter');
+  await filter.selectOption('176×220');
+  assert.deepEqual(await titles(), ['Blocks Of Color And Shape']);
+  await filter.selectOption('unknown');
+  assert.deepEqual((await titles()).sort(), ['Gone One', 'Gone Two', 'Mystery']);
+  const phoneFilter = p.getByTestId('phone-resolution-filter');
+  await phoneFilter.click();
+  assert.equal(await phoneFilter.getAttribute('aria-pressed'), 'true');
+  assert.deepEqual(await titles(), ['Turbo Rally']);
+  await filter.selectOption('all');
+  assert.equal(await phoneFilter.getAttribute('aria-pressed'), 'false');
   await p.getByTestId('sort').selectOption('name');
-  console.log('✔ sorting and the status filter work');
+  console.log('✔ sorting, native resolution and current-phone filtering work');
 
   // ---- the files of two games disappear ----
   rmSync(path.join(lib, 'MGO-Top500/Action/Gone One.jar'));
@@ -72,10 +80,6 @@ try {
   await wait(async () => (await games()).filter((g) => g.sourceMissing).length === 2, 'two games lost their files');
   await p.reload();
   await p.locator('.game-card').first().waitFor();
-  await p.getByTestId('status-filter').selectOption('gone');
-  assert.deepEqual(await titles(), ['Gone One', 'Gone Two']);
-  await p.getByTestId('status-filter').selectOption('all');
-
   await p.goto(base + '/settings#library');
   await p.locator('summary', { hasText: 'More:' }).click();
   await p.getByTestId('cleanup-panel').waitFor();
