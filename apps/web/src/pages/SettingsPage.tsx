@@ -20,9 +20,9 @@ type Toaster = (kind: 'info' | 'error', text: string) => void;
 
 function Section({ id, icon, title, children, hint }: { id: string; icon: IconName; title: string; children: ReactNode; hint?: string }) {
   return (
-    <section className="card card-pad settings-section" id={id} aria-labelledby={`${id}-h`}>
+    <section className="card card-pad settings-section" data-section-icon={icon} id={id} aria-labelledby={`${id}-h`}>
       <header>
-        <h2 id={`${id}-h`}><Icon name={icon} /> {translateUI(title)}</h2>
+        <h2 id={`${id}-h`}><span className="settings-glyph"><Icon name={icon} /></span> {translateUI(title)}</h2>
         {hint && <p className="muted small">{translateUI(hint)}</p>}
       </header>
       {children}
@@ -49,13 +49,13 @@ export function SettingsPage({ toast, onRunWizard, onLibraryChanged }: { toast: 
 
   return (
     <div className="settings">
-      <div className="page-head">
+      <div className="page-head settings-hero">
         <div>
           <h1>{translateUI("Settings")}</h1>
           <p>{translateUI("Library, emulators and server preferences.")}</p>
         </div>
         <span className="spacer" />
-        <button className="btn" type="button" onClick={onRunWizard}>{translateUI("Run the setup wizard again")}</button>
+        <button className="btn settings-wizard-btn" type="button" onClick={onRunWizard}><Icon name="sliders" />{translateUI("Run the setup wizard again")}</button>
       </div>
       <nav className="settings-nav settings-tabs" role="tablist" aria-label={translateUI("Settings sections")}>
         {SECTIONS.map((s, index) => <button type="button" role="tab" id={`tab-${s.id}`} aria-controls={`panel-${s.id}`} aria-selected={tab === s.id} tabIndex={tab === s.id ? 0 : -1} key={s.id} onClick={() => { setTab(s.id); history.replaceState(null, '', `#${s.id}`); }} onKeyDown={e => {

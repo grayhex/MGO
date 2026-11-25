@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 const server = http.createServer(async (req, res) => {
+  if (req.url === '/slow-image') return;
   let bytes = 0; for await (const chunk of req) bytes += chunk.length;
   res.setHeader('content-type','application/json');
   res.end(JSON.stringify({ received: bytes, proto: req.headers['x-forwarded-proto'] }));

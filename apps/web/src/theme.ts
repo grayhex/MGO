@@ -19,7 +19,7 @@ const getPreference = () => selected;
 function apply() {
   const theme = selected;
   document.documentElement.dataset.theme = theme;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0f172a' : '#f8fafc');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#050507' : '#f4f7f5');
   for (const listener of listeners) listener();
 }
 

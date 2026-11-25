@@ -1,6 +1,6 @@
 /* Settings, first-run wizard, library import, MobyGames */
 .stack { display: grid; gap: 12px; min-width: 0; }
-.settings { display: grid; gap: var(--s-xl); }
+.settings { display: grid; gap: 16px; }
 .settings > * { min-width: 0; }
 /* wide screens: the forms of a section sit side by side instead of one long column */
 @media (min-width: 1100px) {
@@ -11,14 +11,21 @@
 .settings-nav a { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--r-pill); border: 1px solid var(--outline); background: var(--surface-elevated); color: var(--fg); text-decoration: none; font-size: 0.8125rem; font-weight: 600; }
 .settings-nav a:hover { border-color: var(--primary-warm); color: var(--primary); }
 .settings-nav .icon-svg { width: 16px; height: 16px; }
-.settings-section { display: grid; gap: 14px; scroll-margin-top: 56px; }
+.settings-section { display: grid; gap: 16px; scroll-margin-top: 56px; border-radius: 16px; }
+.settings-section > header { display: grid; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--outline); }
 .settings-section h2 { display: flex; align-items: center; gap: 8px; font-size: 1.125rem; }
+.settings-section[data-section-icon='info'] { --settings-tone: var(--panel-violet); }
+.settings-section[data-section-icon='phone'] { --settings-tone: var(--panel-blue); }
+.settings-section[data-section-icon='gamepad'] { --settings-tone: var(--panel-teal); }
+.settings-section[data-section-icon='sliders'] { --settings-tone: var(--panel-amber); }
+.settings-glyph { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 10px; background: color-mix(in srgb, var(--settings-tone, var(--panel-green)) 13%, var(--surface)); }
+.settings-section h2 .settings-glyph .icon-svg { color: var(--settings-tone, var(--panel-green)); }
 .settings-section h3, .wizard-body h3 { display: flex; align-items: center; gap: 8px; font-size: 1rem; margin-top: 4px; }
 .settings-section h2 .icon-svg, .settings-section h3 .icon-svg, .wizard-body h3 .icon-svg { width: 18px; height: 18px; color: var(--primary); }
 .codeblock { background: var(--surface-soft); border: 1px solid var(--outline); border-radius: var(--r-md); padding: 10px 12px; font: 0.8125rem/1.4 var(--mono); overflow-x: auto; white-space: pre; margin: 6px 0; }
 .switch-line { display: flex; align-items: center; gap: 10px; font-size: 0.875rem; }
 .sound-control-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; align-items: start; }
-.sound-controls-section { padding: 14px; border: 1px solid var(--outline); border-radius: var(--r-md); }
+.sound-controls-section { padding: 14px; border: 1px solid var(--outline); border-radius: 12px; background: var(--surface-soft); }
 .small { font-size: 0.8125rem; }
 .mono { font-family: var(--mono); }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -82,23 +89,26 @@
 
 /* Settings tabs preserve mounted drafts and provide keyboard navigation. */
 .settings [hidden] { display: none !important; }
-.settings-tabs { position: static; gap: 4px; border-bottom: 1px solid var(--outline); padding-bottom: 10px; }
-.settings-tabs button { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 10px 14px; text-align: left; line-height: 1.35; background: transparent; color: var(--muted); border: 1px solid transparent; border-radius: var(--r-md); font: inherit; cursor: pointer; }
+.settings-tabs { position: static; gap: 4px; border: 1px solid var(--outline); border-radius: 13px; background: var(--surface-elevated); padding: 5px; }
+.settings-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 0; flex: 1 0 auto; padding: 9px 11px; text-align: left; line-height: 1.3; background: transparent; color: var(--muted); border: 1px solid transparent; border-radius: 9px; font-size: .875rem; font-weight: 650; cursor: pointer; transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast); }
 .settings-tabs button:hover { background: var(--surface-soft); }
-.settings-tabs button[aria-selected=true] { color: var(--on-accent-tint); background: var(--accent-tint); border-color: transparent; }
+.settings-tabs button[aria-selected=true] { color: var(--on-accent-tint); background: var(--accent-tint); border-color: color-mix(in srgb, var(--panel-green) 30%, var(--outline)); }
 .catalog-source { padding: 20px; border: 1px solid var(--outline); border-radius: var(--r-md); margin-bottom: 20px; }
 .system-dashboard { display: grid; gap: 12px; }
 .system-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .system-toolbar button { margin-left: auto; }
 .system-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
-.metric { background: var(--surface-soft); border: 1px solid var(--outline); border-radius: var(--r-sm); padding: 16px; display: grid; gap: 8px; overflow: hidden; position: relative; }
+.metric { background: linear-gradient(140deg, color-mix(in srgb, var(--metric-color, var(--panel-green)) 8%, var(--surface)), var(--surface)); border: 1px solid var(--outline); border-radius: 12px; padding: 16px; display: grid; gap: 8px; overflow: hidden; position: relative; }
+.metric:nth-child(2) { --metric-color: var(--panel-violet); }
+.metric:nth-child(3) { --metric-color: var(--panel-blue); }
+.metric:nth-child(4) { --metric-color: var(--panel-amber); }
 .metric > span { color: var(--muted); font-size: .82rem; }
 .metric strong { font-family: var(--mono); line-height: 1.25; font-size: clamp(1.3rem,2.2vw,2rem); font-variant-numeric: tabular-nums; }
 .metric small { color: var(--muted); }
-.metric svg { height: 42px; width: 100%; color: var(--accent); }
-.metric progress { margin-top: 12px; width: 100%; height: 7px; accent-color: var(--accent); }
+.metric svg { height: 42px; width: 100%; color: var(--metric-color, var(--panel-green)); }
+.metric progress { margin-top: 12px; width: 100%; height: 7px; accent-color: var(--metric-color, var(--panel-green)); }
 .system-engines { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; }
-.system-engines article { border: 1px solid var(--outline); padding: 12px; border-radius: var(--r-sm); overflow-wrap: anywhere; }
+.system-engines article { background: var(--surface-soft); border: 1px solid var(--outline); padding: 12px; border-radius: 12px; overflow-wrap: anywhere; }
 .system-engines h3 { display: flex; flex-wrap: wrap; gap: 8px; }
 .system-engines p { color: var(--muted); font-size: .8rem; margin: 5px 0; }
 .system-session { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 8px 12px; border: 1px solid var(--outline); border-radius: 10px; font-size: .8rem; }
@@ -123,11 +133,12 @@
   .system-engines article > a { font-size: .8125rem; }
 }
 @media(max-width: 800px) { .system-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-@media(max-width: 480px) { .settings-tabs { display: grid; grid-template-columns: 1fr 1fr; } .settings-tabs button { padding: 9px; font-size: .8rem; } }
+@media(max-width: 480px) { .settings-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .settings-tabs button { justify-content: flex-start; padding: 8px; font-size: .8rem; overflow-wrap: anywhere; } }
 
-.settings .page-head { flex-wrap: nowrap; margin-bottom: 0; align-items: center; }
+.settings .page-head { flex-wrap: nowrap; margin-bottom: 0; align-items: center; padding: clamp(14px, 2vw, 25px); border: 1px solid var(--outline); border-radius: 16px; background: radial-gradient(ellipse at 90% 0, var(--accent-tint), transparent 65%), var(--surface-elevated); }
 .settings .page-head > div { min-width: 0; }
 .settings .page-head .btn { flex-shrink: 0; }
+.settings-wizard-btn .icon-svg { color: var(--link); }
 @media(max-width: 600px) { .settings .page-head { flex-wrap: wrap; } }
 
 /* Game library: three folders, one row each */

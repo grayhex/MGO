@@ -62,11 +62,11 @@ describe('library scan', () => {
 
   it('recovers missing thumbnails from JARs already in the library', async () => {
     const { cfg, library } = setup();
-    const icon = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+    const icon = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
     const withIcon = library.add(makeJar('With icon', { icon }), null, cfg.libraryQuotaBytes).game;
     const withoutIcon = library.add(makeJar('Without icon'), null, cfg.libraryQuotaBytes).game;
     rmSync(library.paths(withIcon.id).icon!);
-    library.db.prepare('UPDATE games SET has_icon = 0').run();
+    library.db.prepare('UPDATE games SET has_icon = -1').run();
     assert.equal(library.get(withIcon.id)?.iconPending, true);
     assert.deepEqual(Buffer.from((await library.readIcon(withIcon.id))!), icon);
     assert.equal(library.get(withIcon.id)?.hasIcon, true);

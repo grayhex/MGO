@@ -4,6 +4,7 @@ body {
   margin: 0; background: var(--bg); color: var(--fg);
   font: 400 1rem/1.6 var(--font); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
 }
+:root[data-theme='dark'] body { background-image: radial-gradient(ellipse min(88vw, 1100px) 650px at 92% 0, #0a2015 0%, transparent 76%); background-repeat: no-repeat; }
 h1, h2, h3, h4, p, dl, dd, figure { margin: 0; }
 h1, h2, h3, h4 { font-family: var(--heading); overflow-wrap: anywhere; }
 h1 { font-size: 2rem; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; }

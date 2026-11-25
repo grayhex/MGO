@@ -53,8 +53,7 @@ try {
   await halves.nth(1).waitFor();
   assert.equal(await p.getByTestId('keypad').count(), 0, 'the native N-Gage player uses its real keypad');
   await p.getByRole('button', { name: 'Lights Out', exact: true }).click();
-  await p.getByTestId('lights-options').click();
-  await p.getByRole('menuitemcheckbox', { name: /On-screen keypad/ }).click();
+  await p.getByRole('group', { name: 'Lights Out controls' }).getByRole('button', { name: 'On-screen keypad' }).click();
   await halves.nth(1).waitFor();
   await p.waitForFunction(() => [...document.querySelectorAll('.split-keypad .skin-body')].every(img => Number(getComputedStyle(img).opacity) < .25));
   assert.equal(await p.locator('.stage canvas').evaluate(canvas => getComputedStyle(canvas).opacity), '1');

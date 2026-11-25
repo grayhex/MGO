@@ -1,32 +1,34 @@
-/* Verdana Health palette and type scale, adapted to MGO's compact player. */
+/* MGO surfaces and controls shared by the player, library and settings. */
 :root {
   color-scheme: light;
-  --bg: #f8fafc;
-  --fg: #0f172a;
+  --bg: #f4f7f5;
+  --fg: #17251e;
   --surface: #fff;
-  --surface-soft: #f1f5f9;
+  --surface-soft: #edf3ef;
   --surface-elevated: #fff;
-  --muted: #475569;
-  --subtle: #64748b;
-  --outline: #e2e8f0;
-  --outline-strong: #cbd5e1;
+  --muted: #475a50;
+  --subtle: #586c60;
+  --outline: #dce7df;
+  --outline-strong: #becfc4;
 
-  --primary: #0f172a;
-  --primary-strong: #020617;
-  --primary-warm: #334155;
-  --primary-focus: #0f172a;
+  --primary: #097541;
+  --primary-strong: #065a32;
+  --primary-warm: #235b46;
+  --primary-focus: #126f40;
   --on-primary: #fff;
-  --primary-tint: #0f172a0a;
-  --primary-tint-strong: #0f172a18;
-  --accent: #059669;
-  --link: #047857;
-  --accent-tint: #eaf7f1;
-  --on-accent-tint: #065f46;
+  --primary-tint: #09754110;
+  --primary-tint-strong: #09754124;
+  --accent: #098855;
+  --link: #086c47;
+  --accent-tint: #e5f6ea;
+  --on-accent-tint: #095c36;
+  --panel-green: #097541; --panel-teal: #087879; --panel-blue: #265f9f;
+  --panel-violet: #67469e; --panel-amber: #9c580e; --panel-pink: #a13b68;
 
   --shell-bg: #fff;
-  --shell-border: #e2e8f0;
-  --on-shell: #0f172a;
-  --on-shell-muted: #475569;
+  --shell-border: var(--outline);
+  --on-shell: var(--fg);
+  --on-shell-muted: var(--muted);
   --scrim: #0f172a66;
 
   --success: #22c55e;
@@ -51,7 +53,7 @@
   --platform-ngage: #3f6212; --platform-ngage2: #9d174d;
 
   --lcd: #0b100e;
-  --stage-bg: radial-gradient(ellipse at 50% 26%, #f7f9fc, #e2e8f0);
+  --stage-bg: radial-gradient(ellipse at 50% 26%, #f7fcf8, #e3ede6);
   --phone-shadow: drop-shadow(0 14px 22px #0f172a2e);
   --glow: none;
 
@@ -71,32 +73,34 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #0f172a;
-  --fg: #f1f5f9;
-  --surface: #172134;
-  --surface-soft: #202d42;
-  --surface-elevated: #172134;
-  --muted: #bac7d8;
-  --subtle: #a2b1c5;
-  --outline: #2e3d53;
-  --outline-strong: #4f617a;
+  --bg: #050507;
+  --fg: #eef3ee;
+  --surface: #101412;
+  --surface-soft: #171e1a;
+  --surface-elevated: #101412;
+  --muted: #b1bfb6;
+  --subtle: #9baaa0;
+  --outline: #26332b;
+  --outline-strong: #405247;
 
-  --primary: #e2e8f0;
-  --primary-strong: #f8fafc;
-  --primary-warm: #cbd5e1;
-  --primary-focus: #cbd5e1;
-  --on-primary: #0f172a;
-  --primary-tint: #e2e8f014;
-  --primary-tint-strong: #e2e8f026;
-  --accent: #5dc9a1;
-  --link: #78d8b6;
-  --accent-tint: #12362f;
-  --on-accent-tint: #a0e4c9;
+  --primary: #32dc83;
+  --primary-strong: #72f3a7;
+  --primary-warm: #8ae7af;
+  --primary-focus: #70eaa4;
+  --on-primary: #05160d;
+  --primary-tint: #32dc8316;
+  --primary-tint-strong: #32dc832d;
+  --accent: #38df89;
+  --link: #79e6a7;
+  --accent-tint: #132e20;
+  --on-accent-tint: #a5edbf;
+  --panel-green: #4ce992; --panel-teal: #66dcd1; --panel-blue: #93bff7;
+  --panel-violet: #c6acf9; --panel-amber: #f7bc6c; --panel-pink: #f4a5ca;
 
-  --shell-bg: #141e30;
-  --shell-border: #2e3d53;
-  --on-shell: #f1f5f9;
-  --on-shell-muted: #bac7d8;
+  --shell-bg: #0b0e0c;
+  --shell-border: var(--outline);
+  --on-shell: var(--fg);
+  --on-shell-muted: var(--muted);
   --scrim: #020617a8;
 
   --ok: #86dca8;
@@ -106,7 +110,7 @@
   --danger-hover: #991b1b;
   --alert-bg: #41232f;
   --badge-mock-bg: #382e1d; --badge-mock-fg: #fde68a;
-  --badge-planned-bg: #27364c; --badge-planned-fg: #cbd5e1;
+  --badge-planned-bg: #232b27; --badge-planned-fg: #c2d0c8;
   --badge-dev-bg: #1d364c; --badge-dev-fg: #b2dfff;
   --badge-integrated-bg: #303357; --badge-integrated-fg: #d7d8ff;
   --badge-prod-bg: #17392f; --badge-prod-fg: #a1dfb6;
@@ -118,7 +122,7 @@
   --platform-java: #fdba74; --platform-symbian: #93c5fd;
   --platform-ngage: #bef264; --platform-ngage2: #f9a8d4;
 
-  --stage-bg: radial-gradient(ellipse at 50% 26%, #273750, #111a2a);
+  --stage-bg: radial-gradient(ellipse at 66% 16%, #0f271a, #080f0b 62%, #050507);
   --phone-shadow: drop-shadow(0 14px 22px #02061770);
   --shadow-subtle: 0 1px 3px #02061726;
   --shadow-raised: 0 4px 16px #02061740;

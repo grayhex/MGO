@@ -28,9 +28,9 @@ export function Seg<T extends string>({ value, options, onChange, label, block, 
 
 export function Panel({ icon, title, children, open = true, right }: { icon: IconName; title: string; children: ReactNode; open?: boolean; right?: ReactNode }) {
   return (
-    <details className="panel" open={open}>
+    <details className="panel" data-panel-icon={icon} open={open}>
       <summary>
-        <Icon name={icon} />
+        <span className="panel-glyph"><Icon name={icon} /></span>
         <span>{translateUI(title)}</span>
         {right}
         <Icon name="chevron" className="chev" />

@@ -8,7 +8,7 @@ const classOf = (major: number) => {
   b.set([0xca, 0xfe, 0xba, 0xbe, 0, 0, major >> 8, major & 255]);
   return b;
 };
-const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+const png = Buffer.from('89504e470d0a1a0a0000000d', 'hex');
 
 function jar(files: Record<string, Uint8Array>, manifest: string) {
   return zipSync({ 'META-INF/MANIFEST.MF': strToU8(manifest), ...files });
@@ -82,5 +82,13 @@ describe('parseJar', () => {
   it('uses the embedded MIDlet icon when an old JAD points at a missing icon', () => {
     const j = jar({ 'a/G.class': classOf(46), 'art/Icon.PNG': png }, 'MIDlet-1: x, /art/icon.png, a.G\n');
     assert.equal(parseJar(j, { 'MIDlet-Icon': '/missing.png', 'MIDlet-1': 'x,,a.G' }).icon?.path, 'art/Icon.PNG');
+  });
+
+  it('reads a quoted JAD icon path with Windows separators and uses the actual image format', () => {
+    const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+    const j = jar({ 'a/G.class': classOf(46), 'gfx/Logo.dat': gif }, 'MIDlet-1: x,,a.G\n');
+    const icon = parseJar(j, { 'MIDlet-Icon': '".\\gfx\\logo.dat"' }).icon;
+    assert.equal(icon?.path, 'gfx/Logo.dat');
+    assert.deepEqual(Buffer.from(icon!.bytes), gif);
   });
 });
