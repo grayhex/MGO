@@ -233,11 +233,16 @@ test('a slow screenshot provider cannot delay the library and shares its cache w
   const pending = Promise.withResolvers();
   const png = Buffer.from('89504e470d0a1a0a0000000d', 'hex');
   const requests = [];
+  let active = 0, peak = 0;
   const service = new JavaCatalog(library, () => null, async (url, init) => {
     requests.push(url.pathname);
-    await pending.promise;
-    init.signal.throwIfAborted();
-    return new Response(png);
+    peak = Math.max(peak, ++active);
+    try {
+      await pending.promise;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      init.signal.throwIfAborted();
+      return new Response(png);
+    } finally { active--; }
   });
   t.after(async () => { pending.resolve(); await service.close(); library.close(); rmSync(dir, { recursive: true, force: true }); });
   const games = Array.from({ length: 6 }, (_, i) => {
@@ -246,14 +251,18 @@ test('a slow screenshot provider cannot delay the library and shares its cache w
     return game;
   });
   const results = await Promise.all(games.map(game => service.thumbnail(game)));
-  assert.deepEqual(results, games.map(() => null), 'all library callers can immediately fall back while the provider is still pending');
+  assert.deepEqual(results, games.map(() => 'pending'), 'all library callers can immediately fall back while the provider is still pending');
   assert.equal(requests.length, 2, 'only two thumbnail downloads may be outstanding');
   const firstPath = requests[0];
   const firstGame = games[Number(firstPath.match(/game-(\d+)/)[1])];
   const gallery = service.screenshot(firstGame, 1);
   pending.resolve();
   assert.deepEqual(await gallery, { bytes: png, type: 'image/png' });
-  assert.deepEqual(await service.thumbnail(firstGame), { bytes: png, type: 'image/png' });
+  const hasDrained = async () => (await Promise.all(games.map(game => service.thumbnail(game)))).every(result => result?.type === 'image/png');
+  for (let i = 0; i < 80 && !await hasDrained(); i++) await new Promise(resolve => setTimeout(resolve, 30));
+  assert.ok(await hasDrained(), 'all six images get scheduled and become available');
+  assert.equal(peak, 2);
+  assert.equal(requests.length, 6);
   assert.equal(requests.filter(url => url === firstPath).length, 1);
 });
 

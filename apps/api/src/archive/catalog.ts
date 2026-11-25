@@ -80,6 +80,7 @@ export class JavaCatalog {
   private preferredOrigin = origin;
   private getInfo: StatementSync;
   private imageLoads = new Map<string, Promise<Screenshot | null>>();
+  private thumbnailQueue = new Set<string>();
   private imageRetryAfter = new Map<string, number>();
 
   constructor(private library: Library, private exactBuild: (sha: string) => ArchiveBuild | null, private fetcher: typeof fetch = fetch) {
@@ -226,16 +227,25 @@ export class JavaCatalog {
     return await this.cachedScreenshot(file) ?? await this.loadScreenshot(file, 4, false);
   }
 
-  async thumbnail(game: GameMeta): Promise<Screenshot | null> {
+  async thumbnail(game: GameMeta): Promise<Screenshot | 'pending' | null> {
     const files = this.stored(game.groupKey)?.images.filter(safeScreenshot) ?? [];
     for (const file of files) {
       const cached = await this.cachedScreenshot(file);
       if (cached) return cached;
     }
     const candidate = files.find(file => (this.imageRetryAfter.get(file) ?? 0) <= Date.now());
-    const task = candidate ? this.loadScreenshot(candidate, 2, true) : null;
-    // Give fast sources one short opportunity to supply art while the local icon is already visible.
-    return task ? Promise.race([task, delay(300, null)]) : null;
+    if (!candidate) return null;
+    if (!this.imageLoads.has(candidate) && this.thumbnailQueue.size < 24) this.thumbnailQueue.add(candidate);
+    this.pumpThumbnails();
+    return 'pending';
+  }
+
+  private pumpThumbnails() {
+    while (!this.shutdown.signal.aborted && this.imageLoads.size < 2 && this.thumbnailQueue.size) {
+      const file = this.thumbnailQueue.values().next().value!;
+      this.thumbnailQueue.delete(file);
+      void this.loadScreenshot(file, 2, true);
+    }
   }
 
   private screenshotFile(file: string) {
@@ -253,6 +263,7 @@ export class JavaCatalog {
     const existing = this.imageLoads.get(file);
     if (existing) return existing;
     if (this.shutdown.signal.aborted || this.imageLoads.size >= slots) return null;
+    this.thumbnailQueue.delete(file);
     const task = this.downloadScreenshot(file, background).catch(() => null).then(image => {
       if (image) this.imageRetryAfter.delete(file);
       else {
@@ -260,7 +271,10 @@ export class JavaCatalog {
         this.imageRetryAfter.set(file, Date.now() + 5 * 60_000);
       }
       return image;
-    }).finally(() => this.imageLoads.delete(file));
+    }).finally(() => {
+      this.imageLoads.delete(file);
+      this.pumpThumbnails();
+    });
     this.imageLoads.set(file, task);
     return task;
   }

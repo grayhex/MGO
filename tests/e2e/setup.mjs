@@ -247,6 +247,30 @@ try {
   const games = await (await fetch(base + '/api/games', { headers: { authorization: `Bearer ${TOKEN}` } })).json();
   ok('removing the MobyGames data keeps the games', games.length === 4 && games.every((g) => !g.info));
 
+  // A background thumbnail must replace the embedded image in the current view when it arrives.
+  const archiveGame = games.find(game => game.name === 'Unknown Thing');
+  const catalogImageUrl = `**/api/games/${archiveGame.id}/java-catalog/thumbnail`;
+  let screenshotReady = false;
+  await page.route('**/api/games', async route => {
+    const response = await route.fetch();
+    const list = await response.json();
+    const game = list.find(game => game.id === archiveGame.id);
+    game.javaCatalog = { genres: [], year: null, screenshots: 1 };
+    await route.fulfill({ response, json: list });
+  });
+  await page.route(catalogImageUrl, route => route.fulfill(!screenshotReady ? { status: 202 }
+    : { status: 200, contentType: 'image/gif', ...(route.request().method() === 'GET' ? { body: embeddedGif } : {}) }));
+  const pendingThumb = page.waitForResponse(response => response.url().endsWith('/java-catalog/thumbnail') && response.status() === 202);
+  await page.goto(base);
+  await pendingThumb;
+  const archiveArt = page.locator('article.game-card', { hasText: 'Unknown Thing' }).locator('.java-library-thumbnail');
+  await archiveArt.locator('.embedded').waitFor();
+  screenshotReady = true;
+  await archiveArt.locator('.thumbnail-shot[data-ready=true]').waitFor();
+  ok('the library switches to the background screenshot as soon as a later check finds it', await archiveArt.locator('.embedded').isHidden());
+  await page.unroute(catalogImageUrl);
+  await page.unroute('**/api/games');
+
   // ---- sign out: back to the login page, and the old cookie no longer works
   await page.getByTestId('sign-out').click();
   await page.waitForSelector('input[aria-label="Access token"]');

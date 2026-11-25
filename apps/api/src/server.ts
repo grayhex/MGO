@@ -569,6 +569,7 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
   });
   app.get<{ Params: { id: string } }>('/api/games/:id/java-catalog/thumbnail', async (req, reply) => {
     const shot = await javaCatalog.thumbnail(catalogGame(req.params.id));
+    if (shot === 'pending') return reply.header('Cache-Control', 'no-store').code(202).send();
     if (!shot) return reply.header('Cache-Control', 'no-store').code(204).send();
     return reply.header('Cache-Control', 'private, max-age=300').type(shot.type).send(shot.bytes);
   });
