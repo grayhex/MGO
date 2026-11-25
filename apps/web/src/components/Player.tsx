@@ -113,7 +113,6 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const gamepad = useRef<GamepadPoller | null>(null);
   const [lights, setLights] = useState(() => { try { return localStorage.getItem('j2me-web.lights.v1') === 'true'; } catch { return false; } });
   const [awake, setAwake] = useState(true);
-  const [hudMenu, setHudMenu] = useState(false);
   const [touchControls, setTouchControls] = useState(false);
   const wakeTimer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(()=>()=>clearTimeout(wakeTimer.current),[]);
@@ -653,15 +652,13 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     <div className={`player-grid ${lightsActive ? 'lights-out' : ''} ${awake ? 'hud-awake' : ''} ${touchControls ? 'touch-controls' : ''}`} onPointerMove={wake} onPointerDown={wake}>
       <section className={`card stage-card ${view === 'screen' ? 'is-screen' : ''}`} ref={card} aria-label={translateUI("Phone")}>
         {lightsActive && (
-          <div className="lights-hud">
-            <button className="btn lights-opts" aria-haspopup="menu" aria-expanded={hudMenu} onClick={() => setHudMenu((v) => !v)} data-testid="lights-options"><Icon name="sliders" /> {translateUI("Options")}</button>
-            {hudMenu && (
-              <div className="lights-menu" role="menu" aria-label={translateUI("Options")}>
-                <button className="btn" role="menuitem" onClick={() => { setHudMenu(false); setLights(false); }} aria-label={translateUI("Exit Lights Out")}><Icon name="sun" /> {translateUI("Exit Lights Out")} <kbd>Esc</kbd></button>
-                <button className="btn" role="menuitem" onClick={() => { setHudMenu(false); fullscreen(); }}><Icon name="fullscreen" /> {translateUI("Fullscreen")}</button>
-                <button className="btn" role="menuitemcheckbox" aria-checked={touchControls} onClick={() => setTouchControls((v) => !v)}><Icon name="keypad" /> {translateUI("On-screen keypad")} <span className="menu-state">{translateUI(touchControls ? 'on' : 'off')}</span></button>
-              </div>
-            )}
+          <div className="lights-hud" role="group" aria-label={translateUI('Lights Out controls')}>
+            <button className="lights-action" type="button" aria-pressed={touchControls} onClick={() => setTouchControls(v => !v)}
+              aria-label={translateUI('On-screen keypad')} title={translateUI('On-screen keypad')}><Icon name="keypad" /></button>
+            <button className="lights-action" type="button" onClick={fullscreen}
+              aria-label={translateUI('Fullscreen')} title={translateUI('Fullscreen')}><Icon name="fullscreen" /></button>
+            <button className="lights-action" type="button" onClick={() => { setLights(false); stage.current?.focus({ preventScroll: true }); }}
+              aria-label={translateUI('Exit Lights Out')} title={`${translateUI('Exit Lights Out')} · Esc`}><Icon name="sun" /></button>
           </div>
         )}
         <div className="stage-bar">

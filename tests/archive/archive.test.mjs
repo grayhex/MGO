@@ -227,6 +227,45 @@ test('free metadata uses Java ME screenshots and only a verified build for displ
   assert.equal(await service.screenshot(game, 2), null);
 });
 
+test('a slow screenshot provider cannot delay the library and shares its cache with the gallery', async t => {
+  const dir = tmpDir();
+  const library = new Library(dir);
+  const pending = Promise.withResolvers();
+  const png = Buffer.from('89504e470d0a1a0a0000000d', 'hex');
+  const requests = [];
+  let active = 0, peak = 0;
+  const service = new JavaCatalog(library, () => null, async (url, init) => {
+    requests.push(url.pathname);
+    peak = Math.max(peak, ++active);
+    try {
+      await pending.promise;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      init.signal.throwIfAborted();
+      return new Response(png);
+    } finally { active--; }
+  });
+  t.after(async () => { pending.resolve(); await service.close(); library.close(); rmSync(dir, { recursive: true, force: true }); });
+  const games = Array.from({ length: 6 }, (_, i) => {
+    const game = library.add(makeJar(`Thumbnail ${i}`), null, 1000000).game;
+    library.db.prepare('INSERT INTO java_catalog VALUES (?,?)').run(game.groupKey, JSON.stringify({ images: [`/media/screenshots/a/game-${i}.png`] }));
+    return game;
+  });
+  const results = await Promise.all(games.map(game => service.thumbnail(game)));
+  assert.deepEqual(results, games.map(() => 'pending'), 'all library callers can immediately fall back while the provider is still pending');
+  assert.equal(requests.length, 2, 'only two thumbnail downloads may be outstanding');
+  const firstPath = requests[0];
+  const firstGame = games[Number(firstPath.match(/game-(\d+)/)[1])];
+  const gallery = service.screenshot(firstGame, 1);
+  pending.resolve();
+  assert.deepEqual(await gallery, { bytes: png, type: 'image/png' });
+  const hasDrained = async () => (await Promise.all(games.map(game => service.thumbnail(game)))).every(result => result?.type === 'image/png');
+  for (let i = 0; i < 80 && !await hasDrained(); i++) await new Promise(resolve => setTimeout(resolve, 30));
+  assert.ok(await hasDrained(), 'all six images get scheduled and become available');
+  assert.equal(peak, 2);
+  assert.equal(requests.length, 6);
+  assert.equal(requests.filter(url => url === firstPath).length, 1);
+});
+
 test('an unavailable metadata provider keeps index facts and the next lookup can be cancelled and retried', async t => {
   const dir = tmpDir();
   const library = new Library(dir);

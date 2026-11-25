@@ -5,11 +5,12 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { emulatedDevice, PHONE_COMPATIBILITY, isPlatform, nativeGameDefaults, sisFormatOf, skinSupportsPlatform, type PackageFormat, type Platform, DEFAULT_SETTINGS, EMULATION_LIMITS, type EmulationTweaks, type GameInfoSummary, type GameMeta, type GameSettings, KEY_LAYOUTS, SCREEN_PRESETS, type LayoutId, type MetaStatus } from '@mgo/protocol';
-import { parseJad, parseJar, sanitizeText, UploadError } from './jar.js';
+import { parseJad, parseJar, readJarIcon, sanitizeText, UploadError } from './jar.js';
 import { readAttributes } from './analysis/analyze.js';
 import { readScreenHints, type ScreenHint } from './analysis/screenHints.js';
 import { Classifications } from './classification.js';
 import { cleanTitle, cleanVendor } from './title.js';
+import { sniffImage } from './image.js';
 
 function originalFileName(name?: string): string | null {
   return name ? sanitizeText(path.basename(name.replaceAll('\\', '/')), 255) || null : null;
@@ -27,7 +28,7 @@ interface Row {
   size_bytes: number;
   file_name?: string | null;
   download_json?: string | null;
-  /** 1 = extracted, 0 = legacy entry awaiting a check, -1 = checked and absent. */
+  /** 1 = extracted, 0/-1 = legacy entries, -2 = checked with multi-format icon extraction. */
   has_icon: number;
   has_jad: number;
   favorite: number;
@@ -390,7 +391,7 @@ export class Library {
       sizeBytes: r.size_bytes,
       ...(r.file_name ? { fileName: r.file_name } : {}),
       hasIcon: r.has_icon === 1,
-      ...((r.platform ?? 'j2me') === 'j2me' && r.has_icon === 0 ? { iconPending: true } : {}),
+      ...((r.platform ?? 'j2me') === 'j2me' && (r.has_icon === 0 || r.has_icon === -1) ? { iconPending: true } : {}),
       hasJad: !!r.has_jad,
       favorite: !!r.favorite,
       createdAt: r.created_at,
@@ -569,7 +570,7 @@ export class Library {
       .run(
         id, sha, name, vendor, sanitizeText(info.version, 40), groupKey,
         JSON.stringify(info.midlets.map((m) => ({ name: sanitizeText(m.name), className: m.className }))),
-        info.classVersion, jar.length, info.icon ? 1 : -1, jadBytes ? 1 : 0,
+        info.classVersion, jar.length, info.icon ? 1 : -2, jadBytes ? 1 : 0,
         new Date().toISOString(), JSON.stringify(settings), JSON.stringify(info.warnings), opts.origin ?? 'upload', JSON.stringify(readScreenHints(info.attributes, opts.fileName ?? name)[0] ?? null), originalFileName(opts.fileName),
       );
     return { game: this.get(id)!, duplicate: false };
@@ -662,21 +663,22 @@ export class Library {
     if (!/^[0-9a-f]{16}$/.test(id)) return null;
     const getIconRow = this.db.prepare('SELECT has_icon, has_jad FROM games WHERE id = ? AND platform = ?');
     const row = getIconRow.get(id, 'j2me');
-    if (!row || row.has_icon === -1) return null;
+    if (!row || row.has_icon === -2) return null;
     const dir = path.join(this.gamesDir, id);
     const file = path.join(dir, 'icon.png');
     if (row.has_icon === 1) {
-      try { return await readFile(file); } catch { /* Recover an absent cached icon from the JAR. */ }
+      const cached = await readFile(file).catch(() => null);
+      if (cached && sniffImage(cached)) return cached;
     }
     try {
       const [jar, jad] = await Promise.all([
         readFile(path.join(dir, 'game.jar')),
         row.has_jad ? readFile(path.join(dir, 'game.jad')).catch(() => null) : null,
       ]);
-      const icon = parseJar(jar, jad ? parseJad(jad) : undefined).icon;
+      const icon = readJarIcon(jar, jad ? parseJad(jad) : undefined);
       if (!getIconRow.get(id, 'j2me')) return null;
       if (icon) writeFileSync(file, icon.bytes, { mode: 0o600 });
-      this.db.prepare('UPDATE games SET has_icon = ? WHERE id = ?').run(icon ? 1 : -1, id);
+      this.db.prepare('UPDATE games SET has_icon = ? WHERE id = ?').run(icon ? 1 : -2, id);
       return icon?.bytes ?? null;
     } catch { return null; }
   }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { request as httpsRequest } from 'node:https';
+import { connect as http2Connect } from 'node:http2';
 import { chmodSync, copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -33,6 +34,19 @@ try {
   let response;
   for(let i=0;i<100;i++) { try { response=await request(`https://127.0.0.1:${httpsPort}/api/health`); if(response.status===200)break; } catch {} await new Promise(r=>setTimeout(r,100)); }
   assert.equal(response?.status,200); assert.equal(JSON.parse(response.body).proto,'https');
+  const h2 = http2Connect(`https://127.0.0.1:${httpsPort}`, { ca: readFileSync(path.join(dir, 'server.crt')) });
+  try {
+    for (let i = 0; i < 6; i++) h2.request({ ':path': '/slow-image' }).on('error', () => undefined);
+    const playerRoutes = ['/api/games/0123456789abcdef', '/api/devices', '/phones/nokia-n95/config.json'];
+    const statuses = await Promise.all(playerRoutes.map(url => new Promise((resolve, reject) => {
+      const stream = h2.request({ ':path': url });
+      stream.on('response', headers => { stream.resume(); resolve(headers[':status']); });
+      stream.on('error', reject);
+      stream.setTimeout(5000, () => stream.destroy(new Error(`Request blocked behind images: ${url}`)));
+    })));
+    assert.equal(h2.alpnProtocol, 'h2');
+    assert.deepEqual(statuses, playerRoutes.map(() => 200));
+  } finally { h2.destroy(); }
   const redirect=await fetch(`http://127.0.0.1:${httpPort}/play/test`,{redirect:'manual'});
   assert.equal(redirect.status,308); assert.equal(redirect.headers.get('location'),`https://127.0.0.1:${httpsPort}/play/test`);
   await new Promise((resolve,reject)=>{const ws=new WebSocket(`wss://127.0.0.1:${httpsPort}/live`,{ca:readFileSync(path.join(dir,'server.crt'))});ws.on('error',reject);ws.on('message',data=>{try{assert.equal(data.toString(),'MGO WSS!');ws.terminate();resolve();}catch(e){reject(e);}});});
@@ -47,7 +61,7 @@ try {
   docker('restart',id+'-gateway');
   docker('cp',id+'-gateway:/certs/server.crt',path.join(dir,'server.crt'));
   assert.equal(readFileSync(path.join(dir,'server.crt'),'utf8'),certificate,'certificate persists across restart');
-  console.log('PASS HTTPS: trusted certificate, HTTP redirect, WSS upgrade, streamed firmware and SoundFont, persistent certificate');
+  console.log('PASS HTTPS: trusted certificate, HTTP/2 without blocked player requests, HTTP redirect, WSS upgrade, streamed uploads, persistent certificate');
 } catch(e) {
   try { const logs = spawnSync('docker',['logs',id+'-gateway'],{encoding:'utf8'}); console.error((logs.stdout + logs.stderr).slice(-5000)); }catch{}
   throw e;

@@ -7,7 +7,7 @@ import path from 'node:path';
 import type { Library } from '../library.js';
 import { UploadError } from '../jar.js';
 import { readScreenHints } from '../analysis/screenHints.js';
-import { sniffImage } from '../mobygames.js';
+import { imageType, sniffImage } from '../image.js';
 import { archiveTitleKey as key, MIB } from './index.js';
 import { readRemote, RemoteResponseError } from './remote.js';
 
@@ -25,6 +25,7 @@ const entities: Record<string, string> = { amp: '&', quot: '"', apos: "'", '#039
 const decode = (html: string) => html.replace(/&([#a-z0-9]+);/gi, (whole, entity: string) => entities[entity] ?? whole);
 type Listing = { id: string; title: string; aliases: string[]; genres: string[]; listed_year: string };
 type Stored = Omit<JavaCatalogInfo, 'screenshots'> & { images: string[] };
+type Screenshot = { bytes: Buffer; type: string };
 
 function screenshotPath(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -78,6 +79,9 @@ export class JavaCatalog {
   private shutdown = new AbortController();
   private preferredOrigin = origin;
   private getInfo: StatementSync;
+  private imageLoads = new Map<string, Promise<Screenshot | null>>();
+  private thumbnailQueue = new Set<string>();
+  private imageRetryAfter = new Map<string, number>();
 
   constructor(private library: Library, private exactBuild: (sha: string) => ArchiveBuild | null, private fetcher: typeof fetch = fetch) {
     library.db.exec('CREATE TABLE IF NOT EXISTS java_catalog (group_key TEXT PRIMARY KEY, payload TEXT NOT NULL)');
@@ -217,25 +221,77 @@ export class JavaCatalog {
     return { info: this.summary(data), ...(error ? { error, unavailable } : {}) };
   }
 
-  async screenshot(game: GameMeta, index: number) {
+  async screenshot(game: GameMeta, index: number): Promise<Screenshot | null> {
     const file = this.stored(game.groupKey)?.images[index - 1];
     if (!safeScreenshot(file)) return null;
-    const directory = path.join(this.library.dataDir, 'java-catalog-images');
-    const cached = path.join(directory, createHash('sha256').update(file).digest('hex'));
-    let bytes = await readFile(cached).catch(() => null);
-    if (!bytes || !sniffImage(bytes)) {
-      ({ bytes } = await this.site(file, safeScreenshot, 2 * MIB, 'image/*'));
-      if (sniffImage(bytes)) {
-        const partial = `${cached}.${randomUUID()}.part`;
-        try {
-          await mkdir(directory, { recursive: true, mode: 0o700 });
-          await writeFile(partial, bytes, { mode: 0o600 });
-          await rename(partial, cached);
-        } catch { await rm(partial, { force: true }).catch(() => undefined); }
-      }
+    return await this.cachedScreenshot(file) ?? await this.loadScreenshot(file, 4, false);
+  }
+
+  async thumbnail(game: GameMeta): Promise<Screenshot | 'pending' | null> {
+    const files = this.stored(game.groupKey)?.images.filter(safeScreenshot) ?? [];
+    for (const file of files) {
+      const cached = await this.cachedScreenshot(file);
+      if (cached) return cached;
     }
+    const candidate = files.find(file => (this.imageRetryAfter.get(file) ?? 0) <= Date.now());
+    if (!candidate) return null;
+    if (!this.imageLoads.has(candidate) && this.thumbnailQueue.size < 24) this.thumbnailQueue.add(candidate);
+    this.pumpThumbnails();
+    return 'pending';
+  }
+
+  private pumpThumbnails() {
+    while (!this.shutdown.signal.aborted && this.imageLoads.size < 2 && this.thumbnailQueue.size) {
+      const file = this.thumbnailQueue.values().next().value!;
+      this.thumbnailQueue.delete(file);
+      void this.loadScreenshot(file, 2, true);
+    }
+  }
+
+  private screenshotFile(file: string) {
+    const directory = path.join(this.library.dataDir, 'java-catalog-images');
+    return path.join(directory, createHash('sha256').update(file).digest('hex'));
+  }
+
+  private async cachedScreenshot(file: string): Promise<Screenshot | null> {
+    const bytes = await readFile(this.screenshotFile(file)).catch(() => null);
+    const ext = bytes && sniffImage(bytes);
+    return bytes && ext ? { bytes, type: imageType(ext) } : null;
+  }
+
+  private loadScreenshot(file: string, slots: number, background: boolean): Promise<Screenshot | null> | null {
+    const existing = this.imageLoads.get(file);
+    if (existing) return existing;
+    if (this.shutdown.signal.aborted || this.imageLoads.size >= slots) return null;
+    this.thumbnailQueue.delete(file);
+    const task = this.downloadScreenshot(file, background).catch(() => null).then(image => {
+      if (image) this.imageRetryAfter.delete(file);
+      else {
+        if (this.imageRetryAfter.size >= 512) this.imageRetryAfter.delete(this.imageRetryAfter.keys().next().value!);
+        this.imageRetryAfter.set(file, Date.now() + 5 * 60_000);
+      }
+      return image;
+    }).finally(() => {
+      this.imageLoads.delete(file);
+      this.pumpThumbnails();
+    });
+    this.imageLoads.set(file, task);
+    return task;
+  }
+
+  private async downloadScreenshot(file: string, background: boolean): Promise<Screenshot | null> {
+    const budget = AbortSignal.any([this.shutdown.signal, AbortSignal.timeout(background ? 5000 : 9000)]);
+    const { bytes } = await this.site(file, safeScreenshot, 2 * MIB, 'image/*', budget);
     const ext = sniffImage(bytes);
-    return ext ? { bytes, type: `image/${ext === 'jpg' ? 'jpeg' : ext}` } : null;
+    if (!ext) return null;
+    const cached = this.screenshotFile(file);
+    const partial = `${cached}.${randomUUID()}.part`;
+    try {
+      await mkdir(path.dirname(cached), { recursive: true, mode: 0o700 });
+      await writeFile(partial, bytes, { mode: 0o600 });
+      await rename(partial, cached);
+    } catch { await rm(partial, { force: true }).catch(() => undefined); }
+    return { bytes, type: imageType(ext) };
   }
 
   status() { return this.job; }
@@ -287,5 +343,5 @@ export class JavaCatalog {
     }
   }
 
-  async close() { this.shutdown.abort(); await this.active; }
+  async close() { this.shutdown.abort(); await Promise.allSettled([this.active, ...this.imageLoads.values()]); }
 }

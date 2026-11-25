@@ -1,5 +1,6 @@
 import { unzipSync } from 'fflate';
 import { readConstantPool } from './analysis/classfile.js';
+import { sniffImage } from './image.js';
 
 export class UploadError extends Error {
   constructor(
@@ -113,7 +114,7 @@ export function repairedJad(info: JarInfo): string {
   return attributes.map(([name, value]) => `${name}: ${value.replaceAll('\\', '\\\\')}`).join('\n') + '\n';
 }
 
-export function parseJar(buf: Uint8Array, jad?: Record<string, string>): JarInfo {
+function jarContents(buf: Uint8Array) {
   if (buf.length < 22 || buf[0] !== 0x50 || buf[1] !== 0x4b) throw new UploadError('not_a_jar', 'File is not a JAR/ZIP archive');
 
   // Pass 1: look at the central directory only (filter returns false -> nothing is inflated).
@@ -138,7 +139,6 @@ export function parseJar(buf: Uint8Array, jad?: Record<string, string>): JarInfo
   }
 
   const nameSet = new Set(names);
-  const fileHasClass = (name: string) => nameSet.has(classPath(name) + '.class');
   const manifestName = names.find((n) => n.toUpperCase() === 'META-INF/MANIFEST.MF');
   if (!manifestName) throw new UploadError('no_manifest', 'JAR has no META-INF/MANIFEST.MF');
 
@@ -156,14 +156,51 @@ export function parseJar(buf: Uint8Array, jad?: Record<string, string>): JarInfo
   const m = read([manifestName], MAX_MANIFEST)[manifestName];
   if (!m) throw new UploadError('no_manifest', 'Cannot read MANIFEST.MF');
   const manifest = parseAttributes(decoder.decode(m));
-  const attrs = { ...manifest, ...(jad ?? {}) };
+  return { names, nameSet, manifest, read };
+}
 
+function midletEntries(attrs: Record<string, string>): JarInfo['midlets'] {
   const midlets: JarInfo['midlets'] = [];
   for (let i = 1; i < 50; i++) {
     if (!attrs[`MIDlet-${i}`]) break;
     const midlet = entrypoint(attrs[`MIDlet-${i}`]);
     if (midlet) midlets.push(midlet);
   }
+  return midlets;
+}
+
+function findIcon({ names, nameSet, manifest, read }: ReturnType<typeof jarContents>, attrs: Record<string, string>, midlets: JarInfo['midlets']): JarInfo['icon'] {
+  const conventional = names.filter(name => /(?:^|\/)icon\.(?:png|gif|jpe?g|webp)$/i.test(name));
+  const candidates = [attrs['MIDlet-Icon'], ...midlets.map(midlet => midlet.icon), manifest['MIDlet-Icon'], entrypoint(manifest['MIDlet-1'])?.icon,
+    'icon.png', conventional.length === 1 ? conventional[0] : null];
+  for (const raw of new Set(candidates)) {
+    if (!raw) continue;
+    const requested = raw.replace(/^(['"])(.*)\1$/, '$2').replaceAll('\\', '/').replace(/^(?:\/|\.\/)+/, '');
+    if (!safeEntryName(requested)) continue;
+    const p = nameSet.has(requested) ? requested : names.find(n => n.toLowerCase() === requested.toLowerCase());
+    if (!p) continue;
+    try {
+      const bytes = read([p], MAX_ICON)[p];
+      if (bytes && sniffImage(bytes)) return { bytes, path: p };
+    } catch { /* Try the next icon declaration. */ }
+  }
+  return null;
+}
+
+/** Extract a missing image from an installed game without reading or rediscovering MIDlet classes. */
+export function readJarIcon(buf: Uint8Array, jad?: Record<string, string>): JarInfo['icon'] {
+  const contents = jarContents(buf);
+  const attrs = { ...contents.manifest, ...jad };
+  return findIcon(contents, attrs, midletEntries(attrs));
+}
+
+export function parseJar(buf: Uint8Array, jad?: Record<string, string>): JarInfo {
+  const contents = jarContents(buf);
+  const { names, nameSet, manifest, read } = contents;
+  const attrs = { ...manifest, ...jad };
+  const midlets = midletEntries(attrs);
+  const icon = findIcon(contents, attrs, midlets);
+  const fileHasClass = (name: string) => nameSet.has(classPath(name) + '.class');
   const warnings: string[] = [];
   if (!midlets.length) warnings.push('No MIDlet-n entry found; the emulator may not be able to pick a MIDlet class.');
   let missingMidlet: string | undefined;
@@ -193,20 +230,6 @@ export function parseJar(buf: Uint8Array, jad?: Record<string, string>): JarInfo
   if (classVersion >= 49)
     warnings.push(`Class files are version ${classVersion} (Java 5+). KEmulator only accepts J2ME-era classes (<= 48), so this JAR will not start.`);
   if (!classVersion) warnings.push('Could not read the class file version of the MIDlet class.');
-
-  // Icon
-  let icon: JarInfo['icon'] = null;
-  const candidates = [attrs['MIDlet-Icon'], ...midlets.map(midlet => midlet.icon), manifest['MIDlet-Icon'], entrypoint(manifest['MIDlet-1'])?.icon, 'icon.png'];
-  for (const raw of new Set(candidates)) {
-    if (!raw) continue;
-    const requested = raw.replace(/^\/+/, '');
-    const p = nameSet.has(requested) ? requested : names.find(n => n.toLowerCase() === requested.toLowerCase());
-    if (!p) continue;
-    try {
-      const bytes = read([p], MAX_ICON)[p];
-      if (bytes?.[0] === 0x89 && bytes[1] === 0x50) { icon = { bytes, path: p }; break; }
-    } catch { /* Try the next icon declaration. */ }
-  }
 
   return {
     name: attrs['MIDlet-Name'] ?? first?.name ?? 'Unnamed MIDlet',

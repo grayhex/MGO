@@ -1,6 +1,7 @@
 import { ArchiveService, type ArchiveWorker } from './archive/service.js';
 import { registerArchiveRoutes } from './archive/routes.js';
 import { JavaCatalog } from './archive/catalog.js';
+import { imageType, sniffImage } from './image.js';
 import { JarMirror } from './archive/mirror.js';
 import { javaSourceFetch } from './archive/remote.js';
 import { KemulatorUpdates } from './kemulator/updates.js';
@@ -274,8 +275,9 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
 
   app.get<{ Params: { id: string } }>('/api/games/:id/icon', async (req, reply) => {
     const icon = await library.readIcon(req.params.id);
-    if (!icon) throw new UploadError('not_found', 'No icon', 404);
-    return reply.header('Content-Type', 'image/png').header('Cache-Control', 'private, max-age=86400').send(icon);
+    const ext = icon && sniffImage(icon);
+    if (!icon || !ext) throw new UploadError('not_found', 'No icon', 404);
+    return reply.type(imageType(ext)).header('Cache-Control', 'private, max-age=86400').send(icon);
   });
 
   app.post('/api/games', async (req, reply) => {
@@ -564,6 +566,12 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
     const shot = await javaCatalog.screenshot(game, Number(req.params.number)).catch(() => null);
     if (!shot) return reply.code(404).send({ error: 'not_found' });
     return reply.header('X-Content-Type-Options', 'nosniff').header('Cache-Control', 'private, max-age=86400').type(shot.type).send(shot.bytes);
+  });
+  app.get<{ Params: { id: string } }>('/api/games/:id/java-catalog/thumbnail', async (req, reply) => {
+    const shot = await javaCatalog.thumbnail(catalogGame(req.params.id));
+    if (shot === 'pending') return reply.header('Cache-Control', 'no-store').code(202).send();
+    if (!shot) return reply.header('Cache-Control', 'no-store').code(204).send();
+    return reply.header('Cache-Control', 'private, max-age=300').type(shot.type).send(shot.bytes);
   });
 
   // --- static web UI (production) ---

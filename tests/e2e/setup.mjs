@@ -22,8 +22,10 @@ const KEY = 'moby_e2ekey_0001';
 const dataDir = mkdtempSync(path.join(tmpdir(), 'mgo-setup-data-'));
 const libDir = mkdtempSync(path.join(tmpdir(), 'mgo-setup-lib-'));
 const put = (rel, bytes) => { const p = path.join(libDir, rel); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, bytes); };
-put('Racing/Racer.jar', makeJar('Racer', { vendor: 'ACME' }));
-put('Backup/Racer copy.jar', makeJar('Racer', { vendor: 'ACME' }));
+const embeddedGif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+const racerJar = makeJar('Racer', { vendor: 'ACME', icon: embeddedGif });
+put('Racing/Racer.jar', racerJar);
+put('Backup/Racer copy.jar', racerJar);
 put('Puzzle/Snake.jar', makeJar('Snake', { vendor: 'Nokia', version: '1.0' }));
 put('Puzzle/Snake 2.jar', makeJar('Snake', { vendor: 'Nokia', version: '2.0' }));
 put('Misc/Unknown Thing.jar', makeJar('Unknown Thing', {
@@ -129,9 +131,13 @@ try {
   await dialog.getByRole('button', { name: 'Next' }).click();
   await dialog.locator('.wizard-body[data-step=done]').waitFor();
   await page.screenshot({ path: path.join(outDir, 'setup-04-done.png') });
-  await dialog.getByRole('button', { name: 'Finish' }).click();
 
   // ---- import + lookup
+  let releaseScreenshot;
+  const pendingScreenshot = new Promise(resolve => { releaseScreenshot = resolve; });
+  const firstScreenshot = '**/api/games/*/screenshots/1';
+  await page.route(firstScreenshot, async route => { await pendingScreenshot; await route.continue(); });
+  await dialog.getByRole('button', { name: 'Finish' }).click();
   await page.waitForSelector('article.game-card h3:has-text("Racer")', { timeout: 20000 });
   await page.waitForFunction(() => document.querySelectorAll('article.game-card').length === 3, null, { timeout: 20000 }).catch(async (e) => {
     await page.screenshot({ path: path.join(outDir, 'setup-fail.png') });
@@ -139,11 +145,20 @@ try {
     throw e;
   });
   ok('the folder was imported: 5 files, one duplicate, two versions of Snake => 3 games', true);
+  const pendingArt = page.locator('article.game-card', { hasText: 'Racer' }).locator('.java-library-thumbnail');
+  const embedded = pendingArt.locator('img.embedded');
+  await embedded.waitFor();
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('.java-library-thumbnail .embedded')).some(img => img.naturalWidth > 0 && !img.hidden));
+  const iconResponse = await page.request.get(new URL(await embedded.getAttribute('src'), base).href);
+  ok('the embedded GIF is visible while its screenshot request is still pending', await embedded.isVisible() && iconResponse.headers()['content-type'] === 'image/gif');
+  releaseScreenshot();
+  await pendingArt.locator('.thumbnail-shot[data-ready=true]').waitFor();
+  await page.unroute(firstScreenshot);
   for (const view of ['Tiles', 'List']) {
     await page.getByRole('radio', { name: view, exact: true }).click();
     const selector = (title) => page.locator('article.game-card').filter({ hasText: title }).locator('.java-library-thumbnail');
     const shot = selector('Racer').locator('img[src$="/screenshots/1"]');
-    const icon = selector('Unknown Thing').locator('img[src$="/icon"]');
+    const icon = selector('Unknown Thing').locator('img.embedded');
     await shot.waitFor({ timeout: 20000 });
     await icon.waitFor();
     await shot.scrollIntoViewIfNeeded();
@@ -231,6 +246,30 @@ try {
   await page.waitForSelector('text=MobyGames data removed');
   const games = await (await fetch(base + '/api/games', { headers: { authorization: `Bearer ${TOKEN}` } })).json();
   ok('removing the MobyGames data keeps the games', games.length === 4 && games.every((g) => !g.info));
+
+  // A background thumbnail must replace the embedded image in the current view when it arrives.
+  const archiveGame = games.find(game => game.name === 'Unknown Thing');
+  const catalogImageUrl = `**/api/games/${archiveGame.id}/java-catalog/thumbnail`;
+  let screenshotReady = false;
+  await page.route('**/api/games', async route => {
+    const response = await route.fetch();
+    const list = await response.json();
+    const game = list.find(game => game.id === archiveGame.id);
+    game.javaCatalog = { genres: [], year: null, screenshots: 1 };
+    await route.fulfill({ response, json: list });
+  });
+  await page.route(catalogImageUrl, route => route.fulfill(!screenshotReady ? { status: 202 }
+    : { status: 200, contentType: 'image/gif', ...(route.request().method() === 'GET' ? { body: embeddedGif } : {}) }));
+  const pendingThumb = page.waitForResponse(response => response.url().endsWith('/java-catalog/thumbnail') && response.status() === 202);
+  await page.goto(base);
+  await pendingThumb;
+  const archiveArt = page.locator('article.game-card', { hasText: 'Unknown Thing' }).locator('.java-library-thumbnail');
+  await archiveArt.locator('.embedded').waitFor();
+  screenshotReady = true;
+  await archiveArt.locator('.thumbnail-shot[data-ready=true]').waitFor();
+  ok('the library switches to the background screenshot as soon as a later check finds it', await archiveArt.locator('.embedded').isHidden());
+  await page.unroute(catalogImageUrl);
+  await page.unroute('**/api/games');
 
   // ---- sign out: back to the login page, and the old cookie no longer works
   await page.getByTestId('sign-out').click();

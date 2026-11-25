@@ -1,4 +1,5 @@
 import type { MobyCandidate } from '@mgo/protocol';
+import { sniffImage } from './image.js';
 
 /**
  * Client for the MobyGames API v2 (https://api.mobygames.com/v2, `api_key` query parameter).
@@ -429,13 +430,4 @@ export class MobyClient {
     }
     throw new MobyError('bad_response', 'Too many redirects', 502);
   }
-}
-
-export function sniffImage(b: Uint8Array): 'jpg' | 'png' | 'gif' | 'webp' | null {
-  if (b.length < 12) return null;
-  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpg';
-  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'png';
-  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return 'gif';
-  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'webp';
-  return null;
 }

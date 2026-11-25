@@ -57,10 +57,10 @@ try {
   const useDark = p.getByRole('button', { name: 'Use dark theme', exact: true });
   const useLight = p.getByRole('button', { name: 'Use light theme', exact: true });
   const palette = () => p.locator('body').evaluate(el => getComputedStyle(el).backgroundColor);
-  assert.equal(await palette(), 'rgb(248, 250, 252)');
+  assert.equal(await palette(), 'rgb(244, 247, 245)');
   await useDark.click();
   await useLight.waitFor();
-  assert.equal(await palette(), 'rgb(15, 23, 42)');
+  assert.equal(await palette(), 'rgb(5, 5, 7)');
   await p.reload();
   await useLight.waitFor();
   await useLight.click();

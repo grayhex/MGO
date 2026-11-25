@@ -85,19 +85,23 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  await p.keyboard.press('Escape');await p.waitForFunction(()=>!document.querySelector('.lights-out'));
  assert.equal(await widths.getByRole('radio', { name: '100%' }).getAttribute('aria-checked'), 'true', 'the keypad width survives a reload');
  await p.keyboard.press('Alt+KeyL');await p.locator('.lights-out').waitFor();
- // one Options button: exit, fullscreen and the keypad are in its menu
- assert.equal(await p.locator('.lights-hud button.lights-opts').count(),1);
- await p.getByTestId('lights-options').click();
- await p.getByRole('menuitem',{name:'Exit Lights Out'}).click();
+ const lights = p.getByRole('group', { name: 'Lights Out controls' });
+ const exitLights = lights.getByRole('button', { name: 'Exit Lights Out' });
+ const lightsKeypad = lights.getByRole('button', { name: 'On-screen keypad' });
+ assert.equal(await lights.getByRole('button').count(), 3);
+ await lightsKeypad.click();
+ assert.equal(await lightsKeypad.getAttribute('aria-pressed'), 'true');
+ await keypad.waitFor();
+ await lightsKeypad.click();
+ await keypad.waitFor({ state: 'hidden' });
+ await exitLights.click();
  await p.keyboard.press('Alt+KeyL');await p.locator('.lights-out').waitFor();
- await p.getByTestId('lights-options').click();
- await p.getByRole('menuitem',{name:'Fullscreen'}).click();
+ await lights.getByRole('button', { name: 'Fullscreen', exact: true }).click();
  await p.waitForFunction(()=>!!document.fullscreenElement);
  // in fullscreen the button still sits in the top-right corner of the screen
- const corner=await p.getByTestId('lights-options').evaluate(e=>{const r=e.getBoundingClientRect();return {right:innerWidth-r.right,top:r.top};});
- assert.ok(corner.right>=8&&corner.right<=24&&corner.top>=8&&corner.top<=24,'Options sits in the corner: '+JSON.stringify(corner));
- await p.getByTestId('lights-options').click();
- await p.getByRole('menuitem',{name:'Exit Lights Out'}).click();
+ const corner=await lights.evaluate(e=>{const r=e.getBoundingClientRect();return {right:innerWidth-r.right,top:r.top};});
+ assert.ok(corner.right>=8&&corner.right<=24&&corner.top>=8&&corner.top<=24,'Controls sit in the corner: '+JSON.stringify(corner));
+ await exitLights.click();
  await p.evaluate(()=>document.exitFullscreen());
  // Simulated button 0 must reach InputController and the real game.
  await p.evaluate(()=>window.padButtons=[0]);
@@ -140,7 +144,7 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  console.log('PASS: automatic profile, pending restart, Advanced persistence, unchanged LCD/Canvas/session in Lights Out, Escape/Alt+L, keyboard, simulated gamepad + rebind/save.');
  // Mobile layout, persisted presentation only; does not start/restart the game.
  await p.setViewportSize({width:390,height:844});await p.keyboard.press('Alt+KeyL');await p.locator('.lights-out').waitFor();
- assert.ok(await p.getByTestId('lights-options').isVisible());
+ assert.ok(await exitLights.isVisible());
  assert.equal((await sessions()).find(s=>s.state==='running').id,running);
  console.log('PASS: mobile exit remains visible.');
 

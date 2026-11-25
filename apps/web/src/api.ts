@@ -135,7 +135,7 @@ export const api = {
     if (downloaded) query.set('downloaded', '1');
     return req<void>(`/api/games/${id}?${query}`, { method: 'DELETE' });
   },
-  iconUrl: (id: string) => `/api/games/${id}/icon`,
+  iconUrl: (id: string) => `/api/games/${id}/icon?v=2`,
   startSession: (gameId: string, settings?: GameSettingsPatch) => req<SessionStatus>('/api/sessions', jsonInit('POST', { gameId, settings })),
   devices: (signal?: AbortSignal) => req<{ presets: DevicePreset[]; defaultName: string | null }>('/api/devices', signal ? { signal } : undefined),
   phones: () => req<import('@mgo/protocol').PhoneCatalog>('/api/phones'),
@@ -211,6 +211,7 @@ export const api = {
   javaCatalogStart: () => req<JavaCatalogJob>('/api/catalog/java', { method: 'POST' }),
   javaCatalogCancel: () => req<{ cancelled: boolean }>('/api/catalog/java', { method: 'DELETE' }),
   javaCatalogShotUrl: (id: string, n: number) => `/api/games/${id}/java-catalog/shot/${n}`,
+  javaCatalogThumbnailUrl: (id: string) => `/api/games/${id}/java-catalog/thumbnail`,
   infoRefresh: (id: string) => req<GameInfo>(`/api/games/${id}/info/refresh`, { method: 'POST' }),
   infoSearch: (id: string, query: string) => req<GameInfo>(`/api/games/${id}/info/search`, jsonInit('POST', { query })),
   infoChoose: (id: string, mobyId: number) => req<GameInfo>(`/api/games/${id}/info/choose`, jsonInit('POST', { mobyId })),
