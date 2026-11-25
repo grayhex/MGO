@@ -140,6 +140,11 @@
 .settings .page-head .btn { flex-shrink: 0; }
 .settings-wizard-btn .icon-svg { color: var(--link); }
 @media(max-width: 600px) { .settings .page-head { flex-wrap: wrap; } }
+@media (min-width: 1050px) and (max-height: 820px) {
+  .container:has(.settings #panel-system:not([hidden])) { padding-top: 12px; }
+  .settings:has(#panel-system:not([hidden])) .settings-hero { padding: 10px 14px; }
+  #system > header { padding-bottom: 6px; }
+}
 
 /* Game library: three folders, one row each */
 .lib-rows { display: grid; gap: 10px; }
