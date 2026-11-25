@@ -1127,5 +1127,7 @@
   "MGO app": "Приложение MGO",
   "HTTPS gateway": "Шлюз HTTPS",
   "Component resource usage": "Ресурсы компонентов",
-  "API key and data storage": "API-ключ и хранение данных"
+  "API key and data storage": "API-ключ и хранение данных",
+  "Pause": "Пауза",
+  "Resume": "Продолжить"
 }

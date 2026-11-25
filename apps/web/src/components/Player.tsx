@@ -644,7 +644,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const fullView = skinViews?.full;
   const keypadLayout = {
     '--keypad-scale': Number(keypadWidth) / 200,
-    ...(crops.length > 0 && fullView && screenView ? {
+    ...(fullView && screenView ? {
       '--full-lcd-width-factor': (fullView.width / fullView.height) * (fullView.screenRect.width / screenView.screenRect.width),
     } : {}),
   } as CSSProperties;
@@ -654,6 +654,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const outputTestId = !live && !j2me ? 'planned-frame-size' : 'frame-size';
   const sameResolution = outputSize && actualGameSize && outputSize.width === actualGameSize.width && outputSize.height === actualGameSize.height;
   const gameIcon = game && (game.hasIcon || game.iconPending) ? api.iconUrl(game.id) : null;
+  const pausedByPlayer = !!pauseInfo?.on && pauseInfo.reason === 'manual';
 
   const loadError = loadErrors.game || loadErrors.sessions || (j2me && !advanced ? loadErrors.devices : null);
   const checking = !loaded || !sessionsChecked || (j2me && !advanced && !devices.length && health?.ok !== false);
@@ -696,12 +697,12 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           </div>
           <div className="stage-view">
             {(!monoblock || skin?.config.id === 'nokia-n8') && <Seg label={translateUI("View")} value={prefs.view} onChange={(view) => setPrefs({ view })} options={[{ value: 'full', label: <><Icon name="phone" /> {translateUI("Phone")}</>, title: 'Whole phone, body keys active' }, { value: 'screen', label: <><Icon name="zoom" /> {translateUI("Screen")}</>, title: 'Enlarged display; controls below' }]} />}
-            {view === 'screen' && <button className="btn ghost sm" onClick={()=>setLights(v=>!v)} aria-label={translateUI("Lights Out")} aria-pressed={lights} title={translateUI("Lights Out · Alt+L")}>{translateUI("☾ Lights Out")}</button>}
+            {view === 'screen' && <button className="btn ghost sm stage-lights" onClick={() => setLights(v => !v)} aria-label={translateUI("Lights Out")} aria-pressed={lights} title={translateUI("Lights Out · Alt+L")}><Icon name="moon" /><span>{translateUI("Lights Out")}</span></button>}
           </div>
           <div className="stage-actions">
             <div className="stage-status">
               <span className={`badge ${STATE_BADGE[state] ?? ''} ${live ? 'live' : ''}`} data-testid="state-badge"><span className="dot" />{translateUI(state === 'idle' ? 'stopped' : state)}{translateUI(conn === 'reconnecting' ? ' · reconnecting…' : '')}{pauseInfo?.on && live ? translateUI(' · paused') : ''}</span>
-              {live && <button className="btn ghost sm" onClick={() => send({ t: 'pause', on: !(pauseInfo?.on && pauseInfo.reason === 'manual') })} aria-pressed={!!pauseInfo?.on && pauseInfo.reason === 'manual'} title={translateUI('Suspend the game: pauseApp is called, the picture stops')}>{translateUI(pauseInfo?.on && pauseInfo.reason === 'manual' ? '▶ Resume' : '⏸ Pause')}</button>}
+              {live && <button className="btn ghost sm stage-pause" onClick={() => send({ t: 'pause', on: !pausedByPlayer })} aria-pressed={pausedByPlayer} aria-label={translateUI(pausedByPlayer ? 'Resume' : 'Pause')} title={translateUI(pausedByPlayer ? 'Resume' : 'Suspend the game: pauseApp is called, the picture stops')}><Icon name={pausedByPlayer ? 'play' : 'pause'} /><span>{translateUI(pausedByPlayer ? 'Resume' : 'Pause')}</span></button>}
             </div>
             <div className="stage-tools">
               <button className="btn ghost sm stage-tool" onClick={() => turnTo(nextRotation(rotation))} aria-label={translateUI("Rotate the picture")} title={translateUI("Rotate the picture (for games made for landscape)")} data-testid="rotate"><Icon name="rotate" /><span>{translateUI("Rotate")}</span></button>
