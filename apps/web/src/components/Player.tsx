@@ -599,7 +599,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const physicalScreen = skin?.config.screen;
   const skinMismatch = actualGameSize && physicalScreen &&
     (actualGameSize.width !== physicalScreen.width || actualGameSize.height !== physicalScreen.height);
-  const { skins } = useCatalog(j2me ? !!skinMismatch : !!phoneCatalog);
+  const { skins, error: catalogError } = useCatalog(j2me ? !!skinMismatch : !!phoneCatalog);
+  const waitingForPhoneFit = j2me && ((!skin && !skinError) || (skinMismatch && !skins && !catalogError));
   const suggestion = useMemo(() => {
     if (!game || !skins) return null;
     const mine = getServerSettings()?.settings.myPhones;
@@ -803,7 +804,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           {state === 'failed' && <div className="note err">{translateUI("The emulator stopped unexpectedly. The log below has the details.")}</div>}
           {j2me && health?.ok === false && <div className="note warn">{translateUI("The emulator runtime is not ready on this server.")}</div>}
         </Panel>
-        {(mismatch || suggestion) && tipHidden !== `${game?.id}:${suggestion?.id ?? prefs.skinId}` && (
+        {!waitingForPhoneFit && (mismatch || suggestion) && tipHidden !== `${game?.id}:${suggestion?.id ?? prefs.skinId}` && (
           <div className="note info phone-tip" role="status" data-testid="phone-suggestion">
             {mismatch && !suggestion && <p>{translateUI('The game and emulator use different resolutions.')}</p>}
             {suggestion && <p>{translateUI('Better screen fit: {phone} ({w}×{h}).', { phone: suggestion.label, w: suggestion.width, h: suggestion.height })}</p>}
