@@ -4,6 +4,7 @@ import type { Toast } from '../App';
 import { api } from '../api';
 import { t as translateUI } from '../i18n';
 import { getLastGame } from '../lastGame';
+import { setServerSettings } from '../serverSettings';
 import { InfoChip, PlatformTag } from '../components/PlatformTag';
 import { Icon } from '../components/Icon';
 import { navigate } from '../router';
@@ -142,7 +143,7 @@ export function PhonesPage({ toast }: { toast: (k: Toast['kind'], t: string) => 
         toast('info', translateUI('{phone} is now the phone of “{game}”', { phone: id, game: game.name }));
         navigate(`/play/${game.id}`);
       } else {
-        await api.patchSettings({ phone: { skinId: id } });
+        setServerSettings(await api.patchSettings({ phone: { skinId: id } }));
         setDefaultSkin(id);
         toast('info', 'This phone is now the default for new games');
       }

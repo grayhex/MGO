@@ -270,7 +270,7 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
   app.get<{ Params: { id: string } }>('/api/games/:id', async (req) => {
     const g = library.get(req.params.id);
     if (!g) throw new UploadError('not_found', 'Game not found', 404);
-    return g;
+    return javaCatalog.findExactResolution(await library.inspectGameResolution(g));
   });
 
   app.get<{ Params: { id: string } }>('/api/games/:id/icon', async (req, reply) => {
@@ -468,8 +468,9 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
   app.addHook('onRequest',async(req,reply)=>{ if(draining && req.method==='POST' && req.url.split('?')[0]==='/api/sessions') return reply.code(503).send({error:'draining',message:'Server is shutting down. Reconnect after restart.'}); });
   // --- sessions ---
   app.post<{ Body: { gameId?: string; settings?: unknown } }>('/api/sessions', async (req, reply) => {
-    const game = typeof req.body?.gameId === 'string' ? library.get(req.body.gameId) : null;
-    if (!game) throw new UploadError('not_found', 'Game not found', 404);
+    const stored = typeof req.body?.gameId === 'string' ? library.get(req.body.gameId) : null;
+    if (!stored) throw new UploadError('not_found', 'Game not found', 404);
+    const game = javaCatalog.findExactResolution(await library.inspectGameResolution(stored));
     const requested = (req.body?.settings ?? {}) as Record<string, unknown>;
     const merged = validateSettings(req.body?.settings, game.settings);
     // a preset only rewrites size/layout when it is (re)selected in this request; otherwise the saved values stand

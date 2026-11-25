@@ -6,7 +6,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Library } from '../library.js';
 import { UploadError } from '../jar.js';
-import { readScreenHints } from '../analysis/screenHints.js';
+import { readScreenHints, resolutionPriority } from '../analysis/screenHints.js';
 import { imageType, sniffImage } from '../image.js';
 import { archiveTitleKey as key, MIB } from './index.js';
 import { readRemote, RemoteResponseError } from './remote.js';
@@ -168,10 +168,24 @@ export class JavaCatalog {
     const data = this.stored(game.groupKey);
     if (data) game.javaCatalog = { genres: data.genres, year: data.year, screenshots: data.images.length, ...(data.partial ? { partial: true } : {}) };
     // A title's image dimensions can describe a different port. Use a size hint from an exact binary match only.
-    if (!game.nativeResolution && game.archiveMatch?.state === 'exact' && game.archiveMatch.build?.sha256 === game.sha256) {
-      const build = game.archiveMatch.build;
-      const hint = readScreenHints({}, build.filename)[0] ?? readScreenHints({}, build.archivePath)[0];
-      if (hint) game.nativeResolution = { ...hint, source: 'J2ME Archive' };
+    if (game.archiveMatch?.state === 'exact' && game.archiveMatch.build?.sha256 === game.sha256)
+      this.applyArchiveResolution(game, game.archiveMatch.build);
+    return game;
+  }
+
+  private applyArchiveResolution(game: GameMeta, build: ArchiveBuild) {
+    if (resolutionPriority(game.nativeResolution) >= 4) return;
+    const hint = readScreenHints({}, build.filename)[0] ?? readScreenHints({}, build.archivePath)[0];
+    if (hint) game.nativeResolution = { ...hint, source: 'J2ME Archive' };
+  }
+
+  /** Look up the exact binary in an installed index without running a metadata job. */
+  findExactResolution(game: GameMeta): GameMeta {
+    if ((game.platform ?? 'j2me') !== 'j2me' || resolutionPriority(game.nativeResolution) >= 4) return game;
+    const build = this.exactBuild(game.sha256);
+    if (build?.sha256 === game.sha256) {
+      this.applyArchiveResolution(game, build);
+      if (game.nativeResolution?.source === 'J2ME Archive') this.library.recordGameResolution(game.id, game.nativeResolution);
     }
     return game;
   }
@@ -184,9 +198,9 @@ export class JavaCatalog {
     if ((game.platform ?? 'j2me') !== 'j2me') return { info: null };
     signal.throwIfAborted();
     const archive = this.exactBuild(game.sha256);
-    if (!game.nativeResolution && archive) {
-      const hint = readScreenHints({}, archive.filename)[0] ?? readScreenHints({}, archive.archivePath)[0];
-      if (hint) this.library.recordGameResolution(game.id, { ...hint, source: 'J2ME Archive' });
+    if (archive?.sha256 === game.sha256) {
+      this.applyArchiveResolution(game, archive);
+      if (game.nativeResolution?.source === 'J2ME Archive') this.library.recordGameResolution(game.id, game.nativeResolution);
     }
     const index = await this.catalog(signal);
     const known = archive?.title ? index.get(key(archive.title)) : undefined;

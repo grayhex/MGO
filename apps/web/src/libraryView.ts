@@ -1,11 +1,16 @@
 import { GENRES, type GameMeta } from '@mgo/protocol';
 
-/** How the library is ordered and which games it shows besides the genre and the search. A "game" here is a group: all versions of one title. */
+/** A group contains all versions of a title. Resolution filters select matching versions within it. */
 export type SortKey = 'name' | 'name-desc' | 'added' | 'played' | 'time' | 'genre';
-export type StatusFilter = 'all' | 'unplayed' | 'played' | 'gone' | 'unconfirmed';
 
 export const SORT_KEYS: SortKey[] = ['name', 'name-desc', 'added', 'played', 'time', 'genre'];
-export const STATUS_FILTERS: StatusFilter[] = ['all', 'unplayed', 'played', 'gone', 'unconfirmed'];
+
+export const resolutionKey = (size: { width: number; height: number }) => `${size.width}×${size.height}`;
+
+export function matchesResolution(game: GameMeta, filter: string): boolean {
+  const size = game.nativeResolution;
+  return filter === 'all' || (size ? resolutionKey(size) === filter : filter === 'unknown');
+}
 
 export const totalPlaySeconds = (vs: GameMeta[]): number => vs.reduce((n, v) => n + (v.playSeconds ?? 0), 0);
 const lastPlayed = (vs: GameMeta[]): string => vs.reduce((m, v) => (v.lastPlayedAt && v.lastPlayedAt > m ? v.lastPlayedAt : m), '');
@@ -15,16 +20,6 @@ const genreRank = (vs: GameMeta[]): number => {
   const i = g ? GENRES.indexOf(g) : -1;
   return i < 0 ? GENRES.length : i;
 };
-
-export function matchesStatus(vs: GameMeta[], f: StatusFilter): boolean {
-  switch (f) {
-    case 'all': return true;
-    case 'unplayed': return totalPlaySeconds(vs) === 0 && !vs.some((v) => v.lastPlayedAt);
-    case 'played': return totalPlaySeconds(vs) > 0 || vs.some((v) => !!v.lastPlayedAt);
-    case 'gone': return vs.every((v) => v.sourceMissing === true);
-    case 'unconfirmed': { const c = vs[0]?.classification; return !c || c.unconfirmed; }
-  }
-}
 
 const byName = (a: GameMeta[], b: GameMeta[]) => (a[0]?.name ?? '').localeCompare(b[0]?.name ?? '', undefined, { sensitivity: 'base', numeric: true });
 

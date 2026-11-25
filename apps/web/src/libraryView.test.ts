@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { GameMeta } from '@mgo/protocol';
-import { compareGroups, matchesStatus } from './libraryView';
+import { compareGroups, matchesResolution } from './libraryView';
 
 let n = 0;
 const game = (name: string, over: Partial<GameMeta> = {}): GameMeta[] => [{
@@ -30,17 +30,14 @@ describe('library sorting and filters', () => {
     assert.deepEqual(list.sort((x, y) => compareGroups(x, y, 'name')).map((g) => g[0]!.name), ['Asphalt 2', 'Asphalt 3', 'Asphalt 10']);
   });
 
-  it('filters by what happened to the game', () => {
-    assert.deepEqual([a, b, c].filter((g) => matchesStatus(g, 'played')).map((g) => g[0]!.name), ['Asphalt', 'Block Breaker']);
-    assert.deepEqual([a, b, c].filter((g) => matchesStatus(g, 'unplayed')).map((g) => g[0]!.name), ['Crazy Taxi']);
-    assert.deepEqual([a, b, c].filter((g) => matchesStatus(g, 'gone')).map((g) => g[0]!.name), ['Crazy Taxi']);
-    assert.deepEqual([a, b, c].filter((g) => matchesStatus(g, 'unconfirmed')).map((g) => g[0]!.name), ['Crazy Taxi'], 'no genre = not confirmed');
-    assert.equal(matchesStatus(game('Other One', { classification: cls('Other', true) }), 'unconfirmed'), true);
-    assert.equal(matchesStatus(a, 'all'), true);
-  });
-
-  it('a game with several versions is gone only when every version is', () => {
-    const two = [...game('Twin', { sourceMissing: true }), ...game('Twin', { sourceMissing: false })];
-    assert.equal(matchesStatus(two, 'gone'), false);
+  it('matches the resolution of each build independently of saved profiles and output size', () => {
+    const playedResolution = { width: 132, height: 176, source: 'played' } as const;
+    const first = game('Asphalt', { playedResolution, nativeResolution: { width: 240, height: 320, source: 'file name' } })[0]!;
+    const second = game('Asphalt', { playedResolution })[0]!;
+    const both = [first, second];
+    assert.deepEqual(both.filter(game => matchesResolution(game, '240×320')), [first]);
+    assert.deepEqual(both.filter(game => matchesResolution(game, 'unknown')), [second]);
+    assert.deepEqual(both.filter(game => matchesResolution(game, '132×176')), []);
+    assert.deepEqual(both.filter(game => matchesResolution(game, 'all')), both);
   });
 });
