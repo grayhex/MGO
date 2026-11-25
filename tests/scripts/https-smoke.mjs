@@ -34,6 +34,18 @@ try {
   let response;
   for(let i=0;i<100;i++) { try { response=await request(`https://127.0.0.1:${httpsPort}/api/health`); if(response.status===200)break; } catch {} await new Promise(r=>setTimeout(r,100)); }
   assert.equal(response?.status,200); assert.equal(JSON.parse(response.body).proto,'https');
+  let gatewayStats;
+  for (let i = 0; i < 20; i++) {
+    try {
+      gatewayStats = JSON.parse(docker('exec', id+'-gateway', 'wget', '-qO-', 'http://127.0.0.1:9090/mgo-resources'));
+      if (gatewayStats.cpuPercent !== null) break;
+    } catch {}
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  assert.ok(gatewayStats?.memoryBytes > 0 && gatewayStats.memoryLimitBytes >= gatewayStats.memoryBytes);
+  assert.ok(Number.isFinite(gatewayStats.cpuPercent) && gatewayStats.cpuPercent >= 0);
+  const externalStats = await request(`https://127.0.0.1:${httpsPort}/mgo-resources`);
+  assert.doesNotMatch(externalStats.body, /"memoryLimitBytes"/, 'raw gateway metrics stay on the internal port');
   const h2 = http2Connect(`https://127.0.0.1:${httpsPort}`, { ca: readFileSync(path.join(dir, 'server.crt')) });
   try {
     for (let i = 0; i < 6; i++) h2.request({ ':path': '/slow-image' }).on('error', () => undefined);

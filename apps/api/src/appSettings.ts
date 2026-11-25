@@ -35,7 +35,7 @@ export function renderMidletsIni(i: AppSettingsInput): string {
     ['KeyRight', String(i.keys.right)],
   ];
   if (i.preset) {
-    kv.push(['DevicePreset', i.preset.name], ['IgnoreFullScreenMode', String(i.preset.forceFullscreen)]);
+    kv.push(['DevicePreset', i.preset.name]);
     if (i.preset.platform) kv.push(['MIDPPlatform', i.preset.platform]);
   }
   // Game speed (the Y command) also scales Thread.sleep; at normal speed this key changes nothing.
@@ -43,6 +43,8 @@ export function renderMidletsIni(i: AppSettingsInput): string {
   // Yield loops waiting for a game tick should suspend briefly instead of occupying a CPU core.
   kv.push(['PatchYield', 'true']);
   const t = i.tweaks;
+  const forceFullscreen = t?.forceFullscreen ?? i.preset?.forceFullscreen;
+  if (forceFullscreen !== undefined) kv.push(['IgnoreFullScreenMode', String(forceFullscreen)]);
   if (t?.frameRate !== undefined) kv.push(['FrameRate', String(t.frameRate)]);
   if (t?.preloadResources !== undefined) kv.push(['PreloadResources', String(t.preloadResources)]);
   if (t?.startAppOnResume !== undefined) kv.push(['StartAppOnResume', String(t.startAppOnResume)]);

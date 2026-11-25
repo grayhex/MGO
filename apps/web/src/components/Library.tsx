@@ -264,7 +264,7 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
 
       <div className="lib-toolbar" role="search">
         <input className="input lib-search" type="search" placeholder={translateUI("Search games or vendors")} value={query} onChange={(e) => onQuery(e.target.value)} aria-label={translateUI("Search")} data-testid="search" />
-        <div className="plat-filter" role="group" aria-label={translateUI('Game platform')} data-testid="platform-filter">
+        <div className="plat-filter" data-filtered={platform !== 'all'} role="group" aria-label={translateUI('Game platform')} data-testid="platform-filter">
           <button type="button" className={platform === 'all' ? 'on' : ''} aria-pressed={platform === 'all'} onClick={() => choosePlatform('all')}>{translateUI('All')}</button>
           {GAME_PLATFORMS.map(p => <button type="button" key={p} className={platform === p ? 'on' : ''} aria-pressed={platform === p} onClick={() => choosePlatform(platform === p ? 'all' : p)} data-platform={p} title={GAME_PLATFORM_LABELS[p]}><PlatformTag platform={p} size="sm" className="bare" /></button>)}
         </div>

@@ -6,11 +6,11 @@ const subscribe = (cb: () => void) => { listeners.add(cb); return () => { listen
 const listeners = new Set<() => void>();
 
 function preference(value: string | null): ThemePreference {
-  return value === 'dark' ? 'dark' : 'light';
+  return value === 'light' ? 'light' : 'dark';
 }
 
 function loadPreference(): ThemePreference {
-  try { return preference(localStorage.getItem(key)); } catch { return 'light'; }
+  try { return preference(localStorage.getItem(key)); } catch { return 'dark'; }
 }
 
 let selected = loadPreference();

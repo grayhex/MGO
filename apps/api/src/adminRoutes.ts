@@ -12,7 +12,7 @@ import type { ScanManager } from './scanner.js';
 import type { SettingsStore } from './settingsStore.js';
 import { SOUNDFONT_MAX_BYTES } from '@mgo/protocol';
 import type { SoundfontStore } from './soundfont.js';
-import { resourceUsage } from './monitoring.js';
+import { gatewayResources, resourceUsage } from './monitoring.js';
 import { systemStatus } from './systemStatus.js';
 
 export interface AdminContext {
@@ -26,6 +26,7 @@ export interface AdminContext {
   moby: MobyClient;
   version: string;
   java: string | null;
+  metadataGateway?: string;
 }
 
 const MIME = { jpg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' } as const;
@@ -133,9 +134,9 @@ export function registerAdminRoutes(app: FastifyInstance, c: AdminContext): void
   app.get('/api/system/resources', async () => resourceUsage());
 
   app.get('/api/system/status', async () => {
-    const status = await systemStatus(cfg, library, store, c.java, c.version);
+    const [status, gateway] = await Promise.all([systemStatus(cfg, library, store, c.java, c.version), gatewayResources(c.metadataGateway)]);
     if (status.monitoring && c.sessions) { const sessions = c.sessions.active().map(s => s.status()); status.monitoring.sessions = sessions.length; status.monitoring.frames = sessions.reduce((n,s) => n+s.framesReceived,0); status.monitoring.audioBytes = sessions.reduce((n,s) => n+s.audioBytes,0); }
-    return status;
+    return { ...status, gateway };
   });
 
   // --- library directory ---

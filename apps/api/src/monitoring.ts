@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { SystemResources } from '@mgo/protocol';
+import type { ComponentResources, SystemResources } from '@mgo/protocol';
 
 const CGROUP = '/sys/fs/cgroup';
 const read = (file: string): string | undefined => {
@@ -79,4 +79,21 @@ export function monitoring() {
     ...resourceUsage(), uptimeSeconds: process.uptime(), sessions: 0, frames: 0, audioBytes: 0,
     nodeVersion: process.version, platform: `${os.platform()} ${os.arch()}`,
   };
+}
+
+export async function gatewayResources(base?: string): Promise<ComponentResources | null> {
+  if (!base) return null;
+  try {
+    const response = await fetch(new URL('/mgo-resources', base), { signal: AbortSignal.timeout(1000), redirect: 'error' });
+    if (!response.ok) return null;
+    const { sampledAt, cpuPercent, memoryBytes, memoryLimitBytes } = await response.json();
+    const age = Date.now() - sampledAt * 1000;
+    if (!Number.isSafeInteger(sampledAt) || age < -5000 || age > 20000 ||
+        !Number.isSafeInteger(memoryBytes) || memoryBytes < 0 ||
+        !Number.isSafeInteger(memoryLimitBytes) || memoryLimitBytes <= 0 ||
+        (cpuPercent !== null && (!Number.isFinite(cpuPercent) || cpuPercent < 0 || cpuPercent > 100))) return null;
+    return { cpuPercent, memoryBytes, memoryLimitBytes };
+  } catch {
+    return null; // Old gateways and installations without Docker can still use the system dashboard.
+  }
 }

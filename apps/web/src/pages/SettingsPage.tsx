@@ -78,7 +78,7 @@ export function SettingsPage({ toast, onRunWizard, onLibraryChanged }: { toast: 
       <div role="tabpanel" id="panel-mobygames" aria-labelledby="tab-mobygames" hidden={tab !== 'mobygames'}>
         <Section id="mobygames" icon="info" title={translateUI("Game metadata")}>
           {tab === 'mobygames' && <div className="metadata-sources">
-            <section className="metadata-platform" aria-labelledby="java-sources">
+            <section className="metadata-platform java-metadata" aria-labelledby="java-sources">
               <h3 id="java-sources">Java ME</h3>
               <section aria-labelledby="java-index-title">
                 <h4 id="java-index-title">{translateUI('Build index and matching')}</h4>
@@ -92,14 +92,14 @@ export function SettingsPage({ toast, onRunWizard, onLibraryChanged }: { toast: 
                 </div>
               </section>
             </section>
-            <div className="metadata-source-grid native">
+            <aside className="metadata-source-grid native">
               <NgageCatalogPanel toast={toast} onChanged={onLibraryChanged} />
               <section className="metadata-platform" aria-labelledby="symbian-sources">
                 <h3 id="symbian-sources">Symbian</h3>
                 <p className="small muted">{translateUI('MGO reads the package type and S60 generation from SIS and SISX files.')}</p>
                 <a className="small" href="#symbian">{translateUI('Symbian and N-Gage firmware')}</a>
               </section>
-            </div>
+            </aside>
           </div>}
         </Section>
       </div>

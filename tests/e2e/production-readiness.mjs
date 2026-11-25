@@ -11,6 +11,7 @@ const sleep = ms => new Promise(r => setTimeout(r,ms));
 const wait = async (fn, message) => { for(let i=0;i<300;i++){try{const result=await fn();if(result)return result;}catch{}await sleep(100);}throw new Error('timeout: '+message);};
 const free = () => new Promise(resolve=>{const s=createServer();s.listen(0,'127.0.0.1',()=>{const port=s.address().port;s.close(()=>resolve(port));});});
 const source = createServer((req,res)=>{
+  if(req.url === '/mgo-resources'){res.setHeader('content-type','application/json');return res.end(JSON.stringify({sampledAt:Math.floor(Date.now()/1000),cpuPercent:1.2,memoryBytes:12*1048576,memoryLimitBytes:512*1048576}));}
   if(req.url.endsWith('.jpg')){res.setHeader('content-type','image/png');return res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aKf8AAAAASUVORK5CYII=','base64'));}
   res.setHeader('content-type','text/html');
   res.end(req.url.endsWith('.php') ? `<script type="application/ld+json">{"@type":"VideoGame","aggregateRating":{"ratingValue":90,"bestRating":100}}</script><table><tr><td>Multiplayer</td><td>Bluetooth (2 players)</td></tr><tr><td>Product code</td><td>6R72</td></tr></table>` : `<h3>Strategy (1)</h3><a href="item/pathway-to-glory.php" class="game-card"><img src="/images/ngage/box_art/pathway.jpg"><div class="title">Pathway to Glory</div><div class="meta">Nokia / Studio &middot; 2004</div></a>`);
@@ -65,6 +66,8 @@ try{
   await p.goto(base+'/settings');
   await p.getByRole('tab',{name:'System',exact:true}).waitFor();
   await p.locator('.system-metrics .metric strong').first().waitFor();
+  await p.getByRole('article', {name: 'HTTPS gateway'}).getByText('12.0 MB').waitFor();
+  assert.equal(await p.locator('.system-component').count(), 3);
   assert.equal(await p.getByRole('tabpanel').count(),1,'only active tab is accessible');
   await p.waitForTimeout(5200);
   assert.ok(await p.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), 'the compact system overview fits the desktop viewport');
@@ -79,7 +82,14 @@ try{
   await p.screenshot({path:'test-results/mgo-settings-system.png',fullPage:true,animations:'disabled'});
   await p.getByRole('tab',{name:'Game metadata',exact:true}).click();
   for (const title of ['Build index and matching', 'Descriptions and screenshots', 'N-Gage', 'Symbian']) await p.getByRole('heading', {name:title, exact:true}).waitFor();
+  const metadataLayout = await p.evaluate(() => ({
+    viewport: innerHeight, page: document.documentElement.scrollHeight,
+    settingsBottom: Math.round(document.querySelector('#mobygames').getBoundingClientRect().bottom + scrollY),
+  }));
+  assert.ok(metadataLayout.page <= metadataLayout.viewport + 1, `metadata fits the desktop viewport: ${JSON.stringify(metadataLayout)}`);
   await p.getByRole('tab',{name:'Firmware',exact:true}).click();
+  await p.getByTestId('devices').waitFor();
+  assert.ok(await p.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), 'firmware fits with three installed devices');
   await p.getByText('Which firmware file do I need?', {exact:true}).click();
   await p.locator('.firmware-reference').getByText('NEM-4', {exact:true}).waitFor();
   await p.locator('.firmware-reference').getByText('RM-320', {exact:true}).waitFor();

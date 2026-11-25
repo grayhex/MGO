@@ -1,6 +1,7 @@
 package labgames;
 
 import javax.microedition.lcdui.Canvas;
+import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.Display;
 import javax.microedition.lcdui.Font;
 import javax.microedition.lcdui.Graphics;
@@ -15,12 +16,15 @@ public class KemProps extends MIDlet {
 				g.fillRect(0, 0, getWidth(), getHeight());
 			}
 		};
+		c.addCommand(new Command("Back", Command.BACK, 0));
+		c.setFullScreenMode(false);
 		Display.getDisplay(this).setCurrent(c);
 		System.out.println("PROPS locale=" + System.getProperty("microedition.locale")
 			+ " pointer=" + c.hasPointerEvents()
 			+ " fonts=" + Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL).getHeight()
 			+ "/" + Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_MEDIUM).getHeight()
-			+ "/" + Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_LARGE).getHeight());
+			+ "/" + Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_LARGE).getHeight()
+			+ " canvasHeight=" + c.getHeight());
 	}
 
 	protected void pauseApp() {

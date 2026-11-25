@@ -4,11 +4,20 @@
 .stage-bar .title { display: grid; line-height: 1.2; min-width: 0; }
 .stage-left { display: flex; align-items: center; gap: 12px; flex: 1 1 180px; min-width: 0; }
 .stage-left .btn { flex-shrink: 0; }
+.player-game-icon { width: 29px; height: 29px; flex: none; border-radius: 5px; object-fit: contain; image-rendering: pixelated; }
 .stage-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; justify-content: flex-end; }
+.stage-view, .stage-status, .stage-tools, .stage-fps { display: flex; align-items: center; gap: 5px; }
+.stage-view { justify-content: center; }
+.stage-fps { gap: 0; }
+.stage-fps-limit { position: relative; }
+.stage-fps-limit summary { list-style: none; width: 20px; height: 30px; min-height: 0; padding: 0; }
+.stage-fps-limit summary::-webkit-details-marker { display: none; }
+.stage-fps-limit[open] summary { color: var(--primary); }
+.fps-menu { position: absolute; right: -46px; top: calc(100% + 9px); z-index: 21; display: grid; justify-items: start; gap: 7px; width: 212px; padding: 10px; border: 1px solid var(--outline-strong); border-radius: var(--r-md); color: var(--fg); background: var(--surface-elevated); box-shadow: var(--shadow-subtle); }
 .stage-actions .stage-tool { flex-direction: column; height: auto; min-height: 34px; gap: 2px; padding: 3px 5px; }
 .stage-tool .icon-svg { width: 14px; height: 14px; }
 .stage-tool span { font-size: .625rem; line-height: 1.15; }
-.stage-bar .title strong { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stage-bar .title strong { font-size: 1.08rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stage-bar .title span { font-size: 0.75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stage { --stage-h: clamp(380px, calc(100dvh - var(--header-h) - 250px), 920px); height: var(--stage-h); padding: 20px; background: var(--stage-bg); display: block; position: relative; }
 .stage-card.is-screen { position: static; }
@@ -26,7 +35,7 @@
 .skin-opt img { height: 64px; width: auto; max-width: 100%; object-fit: contain; pointer-events: none; }
 .skin-opt strong { font-size: 0.8125rem; line-height: 1rem; }
 .skin-opt span { font-size: 0.6875rem; line-height: 0.875rem; color: var(--muted); }
-.ctrl-col { display: grid; gap: 8px; min-width: 0; }
+.ctrl-col { display: grid; gap: 7px; min-width: 0; align-content: start; }
 .player-resources { display: flex; align-items: center; gap: 12px; padding: 9px 12px; background: var(--surface-elevated); border: 1px solid var(--outline); border-radius: 13px; font-size: .75rem; }
 .player-preferences { display: flex; align-items: center; gap: 6px; flex: none; }
 .player-preferences .seg button { height: 22px; padding: 0 7px; font-size: .7rem; }
@@ -42,21 +51,30 @@
 .ctrl-col .panel[data-panel-icon='layers'] { --panel-tone: var(--panel-blue); }
 .ctrl-col .panel:is([data-panel-icon='sliders'], [data-panel-icon='gamepad']) { --panel-tone: var(--panel-amber); }
 .ctrl-col .panel[data-panel-icon='log'] { --panel-tone: var(--panel-pink); }
-.ctrl-col .panel > summary { min-height: 39px; padding: 6px 10px; gap: 8px; color: var(--fg); letter-spacing: 0; text-transform: none; font-size: .84rem; }
+.ctrl-col .panel > summary { min-height: 34px; padding: 4px 9px; gap: 7px; color: var(--fg); letter-spacing: 0; text-transform: none; font-size: .82rem; }
 .ctrl-col .panel > summary:hover { background: color-mix(in srgb, var(--panel-tone) 7%, var(--surface)); }
-.ctrl-col .panel-glyph { width: 25px; height: 25px; border-radius: 8px; display: grid; place-items: center; background: color-mix(in srgb, var(--panel-tone) 13%, var(--surface)); color: var(--panel-tone); }
+.ctrl-col .panel-glyph { width: 23px; height: 23px; border-radius: 7px; display: grid; place-items: center; background: color-mix(in srgb, var(--panel-tone) 13%, var(--surface)); color: var(--panel-tone); }
 .ctrl-col .panel-glyph .icon-svg { width: 15px; height: 15px; }
 .ctrl-col .panel > summary .badge { margin-left: auto; border-radius: var(--r-pill); }
 .ctrl-col .panel > summary .badge + .chev { margin-left: 0; }
 .ctrl-col .panel > summary .chev { color: var(--subtle); }
-.ctrl-col .panel-body { padding: 4px 11px 10px; gap: 7px; font-size: .875rem; }
+.ctrl-col .panel-body { padding: 3px 10px 8px; gap: 6px; font-size: .875rem; }
 .ctrl-col .panel-body .input, .ctrl-col .panel-body .select { background-color: var(--surface-soft); }
 .ctrl-col .volume-slider input { accent-color: var(--panel-teal); }
 .ctrl-col .control-line .label-caps { font-size: .69rem; letter-spacing: .025em; }
 .ctrl-col .panel-body fieldset { gap: 8px; }
 .ctrl-col .input, .ctrl-col .select { min-height: 32px; min-width: 0; }
 .ctrl-col .field-row { gap: 8px; }
-.ctrl-col .switch { gap: 6px; font-size: 0.8125rem; }
+.ctrl-col .switch { gap: 5px; font-size: .76rem; }
+.ctrl-col .btn.sm { min-height: 28px; }
+.ctrl-col .switch .track { width: 30px; height: 17px; }
+.ctrl-col .switch .track::after { width: 13px; height: 13px; }
+.ctrl-col .switch input:checked + .track::after { transform: translateX(13px); }
+.ctrl-col .tweak-locale input { width: 82px; min-height: 26px; padding-block: 2px; }
+.tweak-switches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 8px; }
+.tweak-switches .control-line { flex-wrap: nowrap; justify-content: flex-start; }
+.recording-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.recording-actions .btn.icon { margin-inline-start: 2px; }
 .ctrl-col .note { padding: 8px 10px; margin: 0; }
 .ctrl-col .control-line { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
 .ctrl-col .control-line .label-caps { margin: 0; }
@@ -140,17 +158,34 @@ textarea.text-editor-field { resize: vertical; min-height: 84px; }
 .chips .chip.ok { border-color: var(--success, #2e9e5b); }
 .chips .chip.ok .icon-svg { color: var(--success, #2e9e5b); }
 .chips .chip .badge { margin-left: 4px; }
-.switch-row { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.player-chips { flex-wrap: nowrap; gap: 4px; }
+.player-chips .chip { height: 23px; min-width: 0; gap: 4px; padding: 0 5px; font-size: .68rem; line-height: 1; white-space: nowrap; }
+.player-chips .chip .icon-svg { width: 12px; height: 12px; flex: none; }
+.player-chips .chip-flex { flex: 0 1 auto; }
+.player-chips .chip-flex > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.switch-row { display: flex; flex-wrap: wrap; gap: 5px 11px; }
 /* a picker that lists every model (Settings): wraps instead of widening the page */
 .skin-picker.wrap { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); overflow: visible; padding: 4px 0; border-top: 0; }
 .skin-picker.wrap .skin-opt { flex: none; max-width: none; }
 
 /* ---- player: the picture gets the room (no bottom picker, slimmer bars), the touch keys sit left of the screen ---- */
-.container.wide { max-width: none; padding: 12px 16px 14px; }
+.container.wide { max-width: none; padding: 12px 16px; }
 .player-grid { grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; }
 .player-grid .stage-card { top: calc(var(--header-h) + 12px); }
-.stage-card .stage-bar { padding: 6px 12px; gap: 8px; }
+.stage-card .stage-bar { position: relative; z-index: 12; padding: 6px 12px; gap: 8px; }
+.lights-out .stage-card .stage-bar { position: absolute; z-index: 20; }
 .stage-card .stage-bar .title span { display: none; }
+@media (min-width: 1400px) {
+  .stage-card .stage-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }
+  .stage-left { gap: 8px; }
+}
+@media (min-width: 1650px) {
+  .stage-card .stage-bar { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+}
+@media (max-width: 1399px) {
+  .stage-left { flex: 1 1 140px; gap: 6px; }
+  .stage-view { flex: 1 0 auto; }
+}
 .stage-row { display: flex; min-width: 0; }
 .stage-row > .stage { flex: 1; min-width: 0; }
 .player-grid .stage,
@@ -159,7 +194,6 @@ textarea.text-editor-field { resize: vertical; min-height: 84px; }
 .stage-card:fullscreen .stage { --stage-h: calc(100dvh - 60px); }
 .stage-foot.side { width: max(140px, calc(clamp(208px, 24vw, 264px) * var(--keypad-scale, 1))); flex: none; padding: 10px 8px; border-top: 0; border-right: 1px solid var(--outline); align-content: center; gap: 8px; }
 @media (min-width: 981px) and (min-height: 600px) {
-  .player-grid .ctrl-col { max-height: calc(100dvh - var(--header-h) - 24px); overflow: auto; align-content: start; }
   .player-grid:not(.lights-out) .stage-card:not(:fullscreen) {
     height: calc(100dvh - var(--header-h) - 24px);
     grid-template-rows: auto minmax(0, 1fr) auto;
@@ -201,8 +235,8 @@ button.chip-link:hover { border-color: var(--primary-warm); }
 }
 .lights-out.touch-controls .stage-foot.side:has(.physical-keypad) { width: calc(clamp(250px, 44%, 468px) * var(--keypad-scale, 1)); }
 .lights-out .stage-foot .physical-keypad { height: calc(min(87dvh, 870px) * var(--keypad-scale, 1)); }
-.stage-foot.side.split-keypad { grid-template-rows: repeat(2, minmax(0, 1fr)); }
-.stage-foot.side.split-keypad .physical-keypad { height: 100%; min-height: 0; max-height: calc(min(40dvh, 420px) * var(--keypad-scale, 1)); }
+.stage-foot.side.split-keypad { grid-template-rows: repeat(2, minmax(0, calc(min(31dvh, 285px) * var(--keypad-scale, 1)))); align-content: center; }
+.stage-foot.side.split-keypad .physical-keypad { height: 100%; min-height: 0; }
 .view-keypad { overflow: hidden; border-radius: var(--r-sm); }
 @media (max-width: 760px) {
   .stage-row.with-keypad > .stage { order: -1; }
@@ -210,7 +244,7 @@ button.chip-link:hover { border-color: var(--primary-warm); }
   .stage-foot .physical-keypad { height: calc(clamp(230px, 58dvh, 540px) * var(--keypad-scale, 1)); }
   .lights-out .stage-foot .physical-keypad { height: calc(min(60dvh, 650px) * var(--keypad-scale, 1)); }
   .lights-out.touch-controls .stage-foot.side { width: 100%; max-height: 45dvh; }
-  .stage-foot.side.split-keypad { height: calc(min(58dvh, 520px) * var(--keypad-scale, 1)); }
+  .stage-foot.side.split-keypad { grid-template-rows: repeat(2, minmax(0, 1fr)); height: calc(min(58dvh, 520px) * var(--keypad-scale, 1)); }
   .stage-foot.side .keypad { width: max(140px, calc(100% * var(--keypad-scale, 1))); }
   .lights-out.touch-controls .stage-row.with-keypad > .stage { flex: 1; height: auto; }
 }

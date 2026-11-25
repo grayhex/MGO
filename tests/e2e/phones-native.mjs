@@ -36,6 +36,11 @@ try {
   browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox'] });
   const p = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = []; p.on('pageerror', (e) => errors.push(e.message));
+  await p.goto(base + '/');
+  const platforms = p.getByTestId('platform-filter');
+  await platforms.getByRole('button', { name: 'N-Gage', exact: true }).click();
+  assert.equal(await platforms.getAttribute('data-filtered'), 'true');
+  assert.ok(await platforms.getByRole('button', { name: 'Java ME', exact: true }).evaluate(button => Number(getComputedStyle(button).opacity) < 1));
 
   // ---- the N-Gage game starts on an N-Gage, not on the J2ME phone the browser remembered ----
   await p.addInitScript(() => { try { localStorage.setItem('j2me-web.skin.v1', JSON.stringify({ skinId: 'sony-ericsson-k790i', view: 'full', integer: true })); } catch {} });
@@ -51,10 +56,18 @@ try {
   await p.getByRole('radio', { name: 'Screen', exact: true }).click();
   const halves = p.getByTestId('phone-keypad');
   await halves.nth(1).waitFor();
+  const keypadAligned = () => p.evaluate(() => {
+    const [left, right] = [...document.querySelectorAll('.split-keypad [data-testid="phone-keypad"]')].map(el => el.getBoundingClientRect());
+    const lcd = document.querySelector('.stage .skin-lcd').getBoundingClientRect();
+    const center = (left.top + right.bottom) / 2;
+    return left.bottom <= right.top && Math.abs(center - (lcd.top + lcd.height / 2)) <= 34;
+  });
+  await wait(keypadAligned, 'both keypad halves are stacked around the center of the LCD');
   assert.equal(await p.getByTestId('keypad').count(), 0, 'the native N-Gage player uses its real keypad');
   await p.getByRole('button', { name: 'Lights Out', exact: true }).click();
   await p.getByRole('group', { name: 'Lights Out controls' }).getByRole('button', { name: 'On-screen keypad' }).click();
   await halves.nth(1).waitFor();
+  await wait(keypadAligned, 'the keypad stays centered in Lights Out');
   await p.waitForFunction(() => [...document.querySelectorAll('.split-keypad .skin-body')].every(img => Number(getComputedStyle(img).opacity) < .25));
   assert.equal(await p.locator('.stage canvas').evaluate(canvas => getComputedStyle(canvas).opacity), '1');
   await p.screenshot({ path: 'test-results/ngage-lights-out.png' });

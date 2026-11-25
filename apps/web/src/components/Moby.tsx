@@ -108,7 +108,6 @@ export function MobyPanel({ toast }: { toast: Toaster }) {
           <button className="btn primary" type="button" disabled={busy || key.trim().length < 8} onClick={() => void saveKey()}>{translateUI("Save key")}</button>
         </div>
       </label>
-      <p className="muted small">{translateUI("The key is stored only on the server (file readable by the mgo user only) and is never sent back to the browser.")}</p>
       {configured && (
         <div className="btn-row">
           <button className="btn" type="button" disabled={busy} onClick={() => void runTest()}>{translateUI("Test key")}</button>
@@ -148,7 +147,11 @@ export function MobyPanel({ toast }: { toast: Toaster }) {
           )}
         </>
       )}
-      <p className="muted small">{translateUI("Data and images from MobyGames are shown with attribution and a link to the game’s MobyGames page, are kept on this server for your own use only, and can be deleted here at any time.")}</p>
+      <details className="more moby-policy">
+        <summary>{translateUI('API key and data storage')}</summary>
+        <p className="muted small">{translateUI("The key is stored only on the server (file readable by the mgo user only) and is never sent back to the browser.")}</p>
+        <p className="muted small">{translateUI("Data and images from MobyGames are shown with attribution and a link to the game’s MobyGames page, are kept on this server for your own use only, and can be deleted here at any time.")}</p>
+      </details>
     </div>
   );
 }
