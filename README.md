@@ -25,15 +25,16 @@
 - **Find builds and fill in game cards.** Use the J2ME Archive index to identify builds and the curated list to find individual JARs. Add descriptions and screenshots with My Abandonware or MobyGames.
 - **Keep your progress on the server.** MGO stores saves and game settings across browser sessions. Choose a MIDI SoundFont for Java ME and see emulator status in Settings.
 
-<details>
-<summary>Library, phones and settings screenshots</summary>
+## Library, phones and settings screenshots
+<div align="center">
+  
+<img src="docs/img/lib.png" alt="MGO library in tile view" width="760">
 
-<img src="docs/img/library.png" alt="MGO library in tile view" width="760">
-<img src="docs/img/library-list.png" alt="MGO library in table view" width="760">
 <img src="docs/img/phones.png" alt="MGO phone catalog" width="760">
+
 <img src="docs/img/settings.png" alt="MGO settings" width="760">
 
-</details>
+</div>
 
 ## Install
 
