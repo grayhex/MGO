@@ -27,7 +27,7 @@ try {
   chmodSync(fixture, 0o644);
   docker('network','create',id);
   docker('run','-d','--name',id+'-app','--network',id,'--network-alias','app','--read-only','--cap-drop','ALL','--mount',`type=bind,source=${fixture},target=/upstream.mjs,readonly`,'--entrypoint','node',process.env.MGO_TLS_UPSTREAM_IMAGE || 'node:22-alpine','/upstream.mjs');
-  docker('run','-d','--name',id+'-gateway','--network',id,'--read-only','--cap-drop','ALL','--cap-add','CHOWN','--cap-add','SETUID','--cap-add','SETGID','--tmpfs','/tmp','--tmpfs','/var/run','--tmpfs','/var/cache/nginx','--tmpfs','/etc/nginx/conf.d','-v',id+'-certs:/certs','-e',`MGO_HTTPS_PORT=${httpsPort}`,'-p',`127.0.0.1:${httpPort}:8080`,'-p',`127.0.0.1:${httpsPort}:8443`,process.env.MGO_TLS_IMAGE || 'mgo-gateway:verify');
+  docker('run','-d','--name',id+'-gateway','--network',id,'--memory','128m','--read-only','--cap-drop','ALL','--cap-add','CHOWN','--cap-add','SETUID','--cap-add','SETGID','--tmpfs','/tmp','--tmpfs','/var/run','--tmpfs','/var/cache/nginx','--tmpfs','/etc/nginx/conf.d','-v',id+'-certs:/certs','-e',`MGO_HTTPS_PORT=${httpsPort}`,'-p',`127.0.0.1:${httpPort}:8080`,'-p',`127.0.0.1:${httpsPort}:8443`,process.env.MGO_TLS_IMAGE || 'mgo-gateway:verify');
   let copied=false;
   for(let i=0;i<100;i++) { try { docker('cp',id+'-gateway:/certs/server.crt',path.join(dir,'server.crt')); copied=true; break; } catch {} await new Promise(r=>setTimeout(r,100)); }
   assert.ok(copied,'gateway certificate was not created');
@@ -43,6 +43,8 @@ try {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   assert.ok(gatewayStats?.memoryBytes > 0 && gatewayStats.memoryLimitBytes >= gatewayStats.memoryBytes);
+  assert.equal(gatewayStats.memoryLimitBytes, 128 * 1048576, 'gateway reports its own container limit');
+  assert.match(docker('exec', id+'-gateway', 'cat', '/etc/nginx/nginx.conf'), /^worker_processes 2;$/m);
   assert.ok(Number.isFinite(gatewayStats.cpuPercent) && gatewayStats.cpuPercent >= 0);
   const externalStats = await request(`https://127.0.0.1:${httpsPort}/mgo-resources`);
   assert.doesNotMatch(externalStats.body, /"memoryLimitBytes"/, 'raw gateway metrics stay on the internal port');

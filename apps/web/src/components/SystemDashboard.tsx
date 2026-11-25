@@ -18,7 +18,7 @@ function ComponentUsage({ name, readings, detail }: { name: string; readings?: C
       <div title={detail}>
         <span>{t('Memory')}</span>
         <strong>{readings ? bytes(readings.memoryBytes) : '—'}<small>{readings?.memoryLimitBytes ? ` / ${bytes(readings.memoryLimitBytes)}` : ''}</small></strong>
-        <progress max={readings?.memoryLimitBytes || 1} value={readings?.memoryLimitBytes ? readings.memoryBytes : 0} aria-label={`${name} ${t('Memory')}`} aria-valuetext={readings?.memoryLimitBytes ? undefined : t('Unavailable')} />
+        {readings?.memoryLimitBytes ? <progress max={readings.memoryLimitBytes} value={readings.memoryBytes} aria-label={`${name} ${t('Memory')}`} /> : readings && <small className="resource-unlimited">{t('No memory limit')}</small>}
       </div>
     </div>
   </article>;

@@ -1,15 +1,22 @@
 import { EMULATION_DEFAULTS, EMULATION_LIMITS, type EmulationTweaks } from '@mgo/protocol';
-import { t as translateUI } from '../i18n';
+import { t as translateUI, useLocale } from '../i18n';
 import { Icon } from './Icon';
 import { Hint, Switch } from './ui';
 
 type Size = 'small' | 'medium' | 'large';
+const GAME_LOCALES: readonly string[] = [
+  'en-US', 'en-GB', 'ru-RU', 'de-DE', 'fr-FR', 'it-IT', 'es-ES', 'pt-BR', 'pt-PT',
+  'nl-NL', 'pl-PL', 'cs-CZ', 'sk-SK', 'hu-HU', 'ro-RO', 'uk-UA', 'el-GR', 'tr-TR',
+  'sv-SE', 'da-DK', 'nb-NO', 'fi-FI', 'ar-SA', 'he-IL', 'hi-IN', 'id-ID', 'th-TH',
+  'vi-VN', 'ja-JP', 'ko-KR', 'zh-CN', 'zh-TW',
+];
 
 /**
  * The per-game options that change what the game sees (see EmulationTweaks). An empty field means "the emulator's
  * default", which is shown as the placeholder; nothing here is stored unless the user changes it.
  */
 export function EmulationTweaksForm({ value, onChange, pointerDefault, fullscreenDefault }: { value: EmulationTweaks; onChange: (v: EmulationTweaks) => void; pointerDefault: boolean; fullscreenDefault: boolean }) {
+  const languageNames = new Intl.DisplayNames(useLocale(), { type: 'language' });
   const set = (patch: Partial<EmulationTweaks>) => {
     const next: EmulationTweaks = { ...value, ...patch };
     for (const k of Object.keys(next) as (keyof EmulationTweaks)[]) if (next[k] === undefined) delete next[k];
@@ -21,8 +28,11 @@ export function EmulationTweaksForm({ value, onChange, pointerDefault, fullscree
       <div className="tweak-tools">
         <label className="tweak-locale">
           <span className="label-caps">{translateUI('Locale')}</span>
-          <input className="input" type="text" maxLength={8} placeholder={EMULATION_DEFAULTS.locale} value={value.locale ?? ''}
-            onChange={(e) => set({ locale: e.target.value === '' ? undefined : e.target.value })} aria-label={translateUI('Language of the phone')} />
+          <select className="select" value={value.locale ?? ''} onChange={e => set({ locale: e.target.value || undefined })} aria-label={translateUI('Language of the phone')}>
+            <option value="">{translateUI('Default')}</option>
+            {value.locale && !GAME_LOCALES.includes(value.locale) && <option value={value.locale}>{value.locale}</option>}
+            {GAME_LOCALES.map(locale => <option key={locale} value={locale}>{languageNames.of(locale)} · {locale}</option>)}
+          </select>
         </label>
         <Hint text="What the game reads as microedition.locale, for example en-US or ru-RU. Some games pick their language from it." />
         <button className="btn ghost sm icon" type="button" aria-label={translateUI('Reset options')} title={translateUI('Reset options')} disabled={!resettable} onClick={() => set({ locale: undefined, pointerEvents: undefined, startAppOnResume: undefined, preloadResources: undefined, forceFullscreen: undefined })}><Icon name="restart" /></button>

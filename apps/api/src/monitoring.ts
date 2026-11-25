@@ -90,7 +90,7 @@ export async function gatewayResources(base?: string): Promise<ComponentResource
     const age = Date.now() - sampledAt * 1000;
     if (!Number.isSafeInteger(sampledAt) || age < -5000 || age > 20000 ||
         !Number.isSafeInteger(memoryBytes) || memoryBytes < 0 ||
-        !Number.isSafeInteger(memoryLimitBytes) || memoryLimitBytes <= 0 ||
+        (memoryLimitBytes !== null && (!Number.isSafeInteger(memoryLimitBytes) || memoryLimitBytes <= 0)) ||
         (cpuPercent !== null && (!Number.isFinite(cpuPercent) || cpuPercent < 0 || cpuPercent > 100))) return null;
     return { cpuPercent, memoryBytes, memoryLimitBytes };
   } catch {

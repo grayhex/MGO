@@ -823,7 +823,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         {j2me && (
         <Panel icon="device" title={translateUI("Emulation profile")}>
           <div className="chips player-chips" data-testid="phone-profile-match">
-            <span className="chip" title={translateUI("Key layout")}><Icon name="keypad" /><span>{translateUI('Keys')} · {translateUI(KEY_LAYOUTS[layout]?.label.split(' / ')[0] ?? layout)}</span></span>
+            <span className="chip" title={translateUI("Key layout")}><Icon name="keypad" /><span>{translateUI(KEY_LAYOUTS[layout]?.label.split(' / ')[0] ?? layout)}</span></span>
             {(dev?.platform || matched) && <span className="chip chip-flex" title={`${translateUI("Platform reported to the game")}: ${dev?.platform ?? translateUI('Emulator default')}`}><Icon name="cpu" /><span>{dev?.platform ?? translateUI('Emulator default')}</span></span>}
             {matched && <span className={`chip ${matched.exact ? 'ok' : ''}`} title={`${matched.preset.name}. ${translateUI(matched.reason)}`}><Icon name={matched.exact ? 'check' : 'info'} /><span>{translateUI(matched.exact ? 'exact' : 'generic')}</span></span>}
           </div>
@@ -863,11 +863,11 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
 
         <Panel icon="layers" title={translateUI("Display")}>
           <div className="chips player-chips">
-            <span className="chip" title={translateUI(sameResolution ? 'Game and emulator resolution' : game?.nativeResolution?.source === 'frame' ? 'Estimated from game frames' : 'Native game resolution')}><Icon name="gamepad" />
+            <span className="chip" title={translateUI(sameResolution ? 'Game and emulator resolution' : game?.nativeResolution?.source === 'frame' ? 'Estimated from game frames' : 'Native game resolution')}>
               <span>{translateUI(sameResolution ? 'Game + output' : 'Game')} <b data-testid="game-resolution"><span data-testid={sameResolution ? outputTestId : undefined}>{actualGameSize ? `${actualGameSize.width}×${actualGameSize.height}` : '—'}</span></b></span>
             </span>
-            {outputSize && !sameResolution && <span className="chip" title={translateUI('Emulator output resolution')}><Icon name="device" /><span>{translateUI('Emulator')} <b data-testid={outputTestId}>{outputSize.width}×{outputSize.height}</b></span></span>}
-            <button type="button" className="chip chip-link chip-flex" onClick={() => navigate('/phones')} title={skinName ? `${translateUI("Change the phone")}: ${skinName}` : translateUI("Change the phone")} data-testid="change-phone"><Icon name="phone" /><span>{(j2me && skinName) || translateUI('Phone')}</span></button>
+            {outputSize && !sameResolution && <span className="chip" title={translateUI('Emulator output resolution')}><span>{translateUI('Emulator')} <b data-testid={outputTestId}>{outputSize.width}×{outputSize.height}</b></span></span>}
+            <button type="button" className="chip chip-link phone-chip" onClick={() => navigate('/phones')} title={skinName ? `${translateUI("Change the phone")}: ${skinName}` : translateUI("Change the phone")} data-testid="change-phone"><Icon name="phone" /><span>{(j2me && skin?.config.model) || translateUI('Phone')}</span></button>
           </div>
           <div className="switch-row">
             <Switch checked={prefs.integer} onChange={(integer) => setPrefs({ integer })}>{translateUI("Whole-number scaling")}</Switch>

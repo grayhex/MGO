@@ -38,7 +38,6 @@ fi
 if [ ! -r "$memory" ] || [ ! -r "$cpu_stat" ]; then exit 0; fi
 
 cores=$(nproc)
-host_memory=$(awk '/^MemTotal:/ { printf "%.0f", $2 * 1024 }' /proc/meminfo)
 target=/tmp/mgo-gateway-resources.json
 (
   previous_cpu=
@@ -48,21 +47,20 @@ target=/tmp/mgo-gateway-resources.json
     cpu=$(awk 'NF == 1 && $1 ~ /^[0-9]+$/ { printf "%.0f", $1 / 1000 } $1 == "usage_usec" { print $2 }' "$cpu_stat")
     awk -v now="$now" -v old_time="$previous_time" -v cpu="$cpu" -v old_cpu="$previous_cpu" \
       -v cores="$cores" -v quota="${quota:-max}" -v period="${period:-0}" -v stamp="$(date +%s)" \
-      -v inactive="$inactive" -v host_memory="$host_memory" '
+      -v inactive="$inactive" '
         FILENAME == ARGV[1] { if ($1 ~ /^[0-9]+$/) usage = $1 }
         FILENAME == ARGV[2] { limit = $1 }
         FILENAME == ARGV[3] && $1 == inactive { cache = $2 }
         END {
           if (usage == "") exit 1
-          if (limit == "max" || limit <= 0 || limit > host_memory) limit = host_memory
-          if (limit <= 0) exit 1
+          memory_cap = limit + 0 > 0 && limit + 0 < 2 ^ 60 ? sprintf("%.0f", limit) : "null"
           if (quota + 0 > 0 && period > 0 && quota / period < cores) cores = quota / period
           percent = "null"
           if (old_cpu != "" && cpu != "" && cpu >= old_cpu && now > old_time && cores > 0) {
             load = (cpu - old_cpu) / ((now - old_time) * 10000 * cores)
             percent = sprintf("%.2f", load > 100 ? 100 : load)
           }
-          printf "{\"sampledAt\":%s,\"cpuPercent\":%s,\"memoryBytes\":%.0f,\"memoryLimitBytes\":%.0f}\n", stamp, percent, (cache <= usage ? usage - cache : 0), limit
+          printf "{\"sampledAt\":%s,\"cpuPercent\":%s,\"memoryBytes\":%.0f,\"memoryLimitBytes\":%s}\n", stamp, percent, (cache <= usage ? usage - cache : 0), memory_cap
         }' "$memory" "$memory_limit" "$memory_stat" > "$target.tmp" && chmod 644 "$target.tmp" && mv -f "$target.tmp" "$target"
     previous_cpu=$cpu
     previous_time=$now
