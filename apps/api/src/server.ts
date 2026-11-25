@@ -539,7 +539,7 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
     socket.on('error', gone);
   });
 
-  registerAdminRoutes(app, { cfg, sessions, library, store: settings, soundfont, scan, metadata, moby, version: VERSION, java });
+  registerAdminRoutes(app, { cfg, sessions, library, store: settings, soundfont, scan, metadata, moby, version: VERSION, java, metadataGateway });
   registerSymbianRoutes(app, { cfg, sessions });
   registerArchiveRoutes(app, archive);
   const catalogGame = (id: string) => {

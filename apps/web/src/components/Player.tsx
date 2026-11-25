@@ -147,10 +147,29 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const lastFrame = useRef<ImageData | null>(null);
   const card = useRef<HTMLElement>(null);
   const stage = useRef<HTMLDivElement>(null);
+  const fpsMenu = useRef<HTMLDetailsElement>(null);
   const streamRef = useRef<SessionStream | null>(null);
   const sessionRef = useRef<SessionStatus | null>(null);
   const input = useMemo(() => new InputController(() => undefined), []);
   const [bindings, setBindings] = useState(input.bindings);
+
+  useEffect(() => {
+    const dismiss = (event: PointerEvent) => {
+      if (fpsMenu.current?.open && !fpsMenu.current.contains(event.target as Node)) fpsMenu.current.open = false;
+    };
+    const escape = (event: KeyboardEvent) => {
+      const menu = fpsMenu.current;
+      if (event.key !== 'Escape' || !menu?.open) return;
+      menu.open = false;
+      menu.querySelector('summary')?.focus({ preventScroll: true });
+    };
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('keydown', escape);
+    };
+  }, []);
 
   const shownSkin = useRef<LoadedSkin | null>(null);
   if (skin) shownSkin.current = skin;
@@ -625,11 +644,17 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const fullView = skinViews?.full;
   const keypadLayout = {
     '--keypad-scale': Number(keypadWidth) / 200,
-    ...(crops.length > 0 && fullView && screenView ? {
+    ...(fullView && screenView ? {
       '--full-lcd-width-factor': (fullView.width / fullView.height) * (fullView.screenRect.width / screenView.screenRect.width),
     } : {}),
   } as CSSProperties;
-  const skinScreen = skin?.config.screen;
+  const skinName = skin && `${skin.config.manufacturer} ${skin.config.model}`;
+  const firmwareScreen = native.data?.plan.deviceId ? EMULATED_DEVICES.find(device => device.id === native.data?.plan.deviceId)?.screen : null;
+  const outputSize = live ? { width: frameSize.w, height: frameSize.h } : j2me ? displayProfile : firmwareScreen;
+  const outputTestId = !live && !j2me ? 'planned-frame-size' : 'frame-size';
+  const sameResolution = outputSize && actualGameSize && outputSize.width === actualGameSize.width && outputSize.height === actualGameSize.height;
+  const gameIcon = game && (game.hasIcon || game.iconPending) ? api.iconUrl(game.id) : null;
+  const pausedByPlayer = !!pauseInfo?.on && pauseInfo.reason === 'manual';
 
   const loadError = loadErrors.game || loadErrors.sessions || (j2me && !advanced ? loadErrors.devices : null);
   const checking = !loaded || !sessionsChecked || (j2me && !advanced && !devices.length && health?.ok !== false);
@@ -664,21 +689,50 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         <div className="stage-bar">
           <div className="stage-left">
             <button className="btn ghost sm" onClick={leave}><Icon name="back" /> {translateUI("Library")}</button>
-            <div className="title">
+            {gameIcon && <img key={gameIcon} className="player-game-icon" data-testid="player-game-icon" src={gameIcon} alt="" onError={event => { event.currentTarget.hidden = true; }} />}
+            <div className="title" title={game?.name}>
               <strong>{game?.name ?? '…'}</strong>
               <span>{title || game?.vendor}</span>
             </div>
           </div>
-          <div className="stage-actions">
-            <span className={`badge ${STATE_BADGE[state] ?? ''} ${live ? 'live' : ''}`} data-testid="state-badge"><span className="dot" />{translateUI(state === 'idle' ? 'stopped' : state)}{translateUI(conn === 'reconnecting' ? ' · reconnecting…' : '')}{pauseInfo?.on && live ? translateUI(' · paused') : ''}</span>
-            {live && <button className="btn ghost sm" onClick={() => send({ t: 'pause', on: !(pauseInfo?.on && pauseInfo.reason === 'manual') })} aria-pressed={!!pauseInfo?.on && pauseInfo.reason === 'manual'} title={translateUI('Suspend the game: pauseApp is called, the picture stops')}>{translateUI(pauseInfo?.on && pauseInfo.reason === 'manual' ? '▶ Resume' : '⏸ Pause')}</button>}
+          <div className="stage-view">
             {(!monoblock || skin?.config.id === 'nokia-n8') && <Seg label={translateUI("View")} value={prefs.view} onChange={(view) => setPrefs({ view })} options={[{ value: 'full', label: <><Icon name="phone" /> {translateUI("Phone")}</>, title: 'Whole phone, body keys active' }, { value: 'screen', label: <><Icon name="zoom" /> {translateUI("Screen")}</>, title: 'Enlarged display; controls below' }]} />}
-            {view === 'screen' && <button className="btn ghost sm" onClick={()=>setLights(v=>!v)} aria-label={translateUI("Lights Out")} aria-pressed={lights} title={translateUI("Lights Out · Alt+L")}>{translateUI("☾ Lights Out")}</button>}
-            <button className="btn ghost sm stage-tool" onClick={() => turnTo(nextRotation(rotation))} aria-label={translateUI("Rotate the picture")} title={translateUI("Rotate the picture (for games made for landscape)")} data-testid="rotate"><Icon name="rotate" /><span>{translateUI("Rotate")}</span></button>
-            <button className="btn ghost sm stage-tool" onClick={() => void shot('save')} disabled={!lastFrame.current} aria-label={translateUI("Save a screenshot")} title={translateUI("Save a screenshot (PNG, the game's own size)")} data-testid="screenshot"><Icon name="camera" /><span>{translateUI("Screenshot")}</span></button>
-            <button className={`btn ghost sm stage-tool${showFps ? ' on' : ''}`} onClick={() => setShowFps(!showFps)} aria-pressed={showFps} aria-label={translateUI("Show the frame rate")} title={translateUI("Show the frame rate in the corner of the screen")} data-testid="fps-toggle"><Icon name="pulse" /><span>{translateUI("FPS")}</span></button>
-            <button className="btn ghost sm stage-tool" onClick={() => void shot('copy')} disabled={!lastFrame.current} aria-label={translateUI("Copy a screenshot")} title={translateUI("Copy a screenshot to the clipboard")} data-testid="screenshot-copy"><Icon name="copy" /><span>{translateUI("Copy")}</span></button>
-            <button className="btn ghost sm stage-tool" onClick={fullscreen} aria-label={translateUI("Toggle fullscreen")} title={translateUI("Fullscreen")}><Icon name="fullscreen" /><span>{translateUI("Fullscreen")}</span></button>
+            {view === 'screen' && <button className="btn ghost sm stage-lights" onClick={() => setLights(v => !v)} aria-label={translateUI("Lights Out")} aria-pressed={lights} title={translateUI("Lights Out · Alt+L")}><Icon name="moon" /><span>{translateUI("Lights Out")}</span></button>}
+          </div>
+          <div className="stage-actions">
+            <div className="stage-status">
+              <span className={`badge ${STATE_BADGE[state] ?? ''} ${live ? 'live' : ''}`} data-testid="state-badge"><span className="dot" />{translateUI(state === 'idle' ? 'stopped' : state)}{translateUI(conn === 'reconnecting' ? ' · reconnecting…' : '')}{pauseInfo?.on && live ? translateUI(' · paused') : ''}</span>
+              {live && <button className="btn ghost sm stage-pause" onClick={() => send({ t: 'pause', on: !pausedByPlayer })} aria-pressed={pausedByPlayer} aria-label={translateUI(pausedByPlayer ? 'Resume' : 'Pause')} title={translateUI(pausedByPlayer ? 'Resume' : 'Suspend the game: pauseApp is called, the picture stops')}><Icon name={pausedByPlayer ? 'play' : 'pause'} /><span>{translateUI(pausedByPlayer ? 'Resume' : 'Pause')}</span></button>}
+            </div>
+            <div className="stage-tools">
+              <button className="btn ghost sm stage-tool" onClick={() => turnTo(nextRotation(rotation))} aria-label={translateUI("Rotate the picture")} title={translateUI("Rotate the picture (for games made for landscape)")} data-testid="rotate"><Icon name="rotate" /><span>{translateUI("Rotate")}</span></button>
+              <button className="btn ghost sm stage-tool" onClick={() => void shot('save')} disabled={!lastFrame.current} aria-label={translateUI("Save a screenshot")} title={translateUI("Save a screenshot (PNG, the game's own size)")} data-testid="screenshot"><Icon name="camera" /><span>{translateUI("Screenshot")}</span></button>
+              <button className="btn ghost sm stage-tool" onClick={() => void shot('copy')} disabled={!lastFrame.current} aria-label={translateUI("Copy a screenshot")} title={translateUI("Copy a screenshot to the clipboard")} data-testid="screenshot-copy"><Icon name="copy" /><span>{translateUI("Copy")}</span></button>
+              <div className="stage-fps">
+                <button className={`btn ghost sm stage-tool${showFps ? ' on' : ''}`} onClick={() => setShowFps(!showFps)} aria-pressed={showFps} aria-label={translateUI("Show the frame rate")} title={translateUI("Show the frame rate in the corner of the screen")} data-testid="fps-toggle"><Icon name="pulse" /><span>{translateUI("FPS")}</span></button>
+                {loaded && j2me && health?.ok !== false && <details className="stage-fps-limit" ref={fpsMenu}>
+                  <summary className="btn ghost sm icon" aria-label={translateUI('FPS limit')} title={translateUI('FPS limit')}><Icon name="chevron" /></summary>
+                  <div className="fps-menu">
+                    <span className="label-caps">{translateUI('FPS limit')}</span>
+                    <Seg className="player-seg" label="Frame limit (fps)" value={String(tweaks.frameRate ?? 'default')}
+                      options={[
+                        { value: 'default', label: 'Default' },
+                        { value: '30', label: '30', ariaLabel: '30 FPS limit' },
+                        { value: '60', label: '60', ariaLabel: '60 FPS limit' },
+                        ...(tweaks.frameRate !== undefined && ![30, 60].includes(tweaks.frameRate) ? [{ value: String(tweaks.frameRate), label: `${tweaks.frameRate} FPS` }] : []),
+                      ]}
+                      onChange={value => setTweaks(previous => {
+                        const next = { ...previous };
+                        if (value === 'default') delete next.frameRate;
+                        else next.frameRate = Number(value);
+                        return next;
+                      })} />
+                    <span className="hint" role="status">{translateUI(running && pendingFrameLimit ? 'Restart to apply the frame limit.' : 'Maximum rendering rate. Games with their own frame timing can run below this limit.')}</span>
+                  </div>
+                </details>}
+              </div>
+              <button className="btn ghost sm stage-tool" onClick={fullscreen} aria-label={translateUI("Toggle fullscreen")} title={translateUI("Fullscreen")}><Icon name="fullscreen" /><span>{translateUI("Fullscreen")}</span></button>
+            </div>
           </div>
         </div>
 
@@ -734,23 +788,6 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           {session && <button className="btn ghost sm icon" onClick={() => api.diagnostics(session.id).then((b) => downloadBlob(b, `mgo-diagnostics-${fileSafe(game?.name ?? 'game')}.txt`), (e) => toast('error', (e as Error).message))} title={translateUI("A text report with the settings, the emulator log and the JVM state: attach it to a bug report")} aria-label={translateUI("Download diagnostics")} data-testid="diagnostics"><Icon name="log" /></button>}
           </div>
           {running && loadFeedback && <div className="field note">{loadFeedback}</div>}
-          {game && j2me && health?.ok !== false && <div className="control-line">
-            <span className="label-caps" title={translateUI('Maximum rendering rate. Games with their own frame timing can run below this limit.')}>{translateUI('FPS limit')}</span>
-            <Seg className="player-seg" label="Frame limit (fps)" value={String(tweaks.frameRate ?? 'default')}
-              options={[
-                { value: 'default', label: 'Default' },
-                { value: '30', label: '30', ariaLabel: '30 FPS limit', title: '30 FPS limit' },
-                { value: '60', label: '60', ariaLabel: '60 FPS limit', title: '60 FPS limit' },
-                ...(tweaks.frameRate !== undefined && ![30, 60].includes(tweaks.frameRate) ? [{ value: String(tweaks.frameRate), label: `${tweaks.frameRate} FPS` }] : []),
-              ]}
-              onChange={value => setTweaks(previous => {
-                const next = { ...previous };
-                if (value === 'default') delete next.frameRate;
-                else next.frameRate = Number(value);
-                return next;
-              })} />
-          </div>}
-          {running && pendingFrameLimit && <span className="hint" role="status">{translateUI('Restart to apply the frame limit.')}</span>}
           {running && j2me && <div className="control-line"><span className="label-caps">{translateUI("Game speed")}</span>
             <Seg<string> className="player-seg" label={translateUI("Game speed")} value={String(speed)} onChange={(v) => send({ t: 'speed', modifier: Number(v) })}
               options={[{ value: '-75', label: '×0.25' }, { value: '-50', label: '×0.5' }, { value: '1', label: '×1' }, { value: '2', label: '×2' }, { value: '4', label: '×4' }]} />
@@ -761,7 +798,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         </Panel>
         {(mismatch || suggestion) && tipHidden !== `${game?.id}:${suggestion?.id ?? prefs.skinId}` && (
           <div className="note info phone-tip" role="status" data-testid="phone-suggestion">
-            {mismatch && <p>{translateUI('Game {game} · Emulator {emulator}', { game: `${actualGameSize.width}×${actualGameSize.height}`, emulator: `${displayProfile.width}×${displayProfile.height}` })}</p>}
+            {mismatch && !suggestion && <p>{translateUI('The game and emulator use different resolutions.')}</p>}
             {suggestion && <p>{translateUI('Better screen fit: {phone} ({w}×{h}).', { phone: suggestion.label, w: suggestion.width, h: suggestion.height })}</p>}
             <div className="btn-row">
               {suggestion && <button className="btn sm primary" type="button" onClick={() => void switchPhone(suggestion.id)} data-testid="phone-suggestion-switch">{translateUI('Switch to {phone}', { phone: suggestion.label })}</button>}
@@ -774,8 +811,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           <div className="control-line audio-controls">
           <VolumeSlider value={vol} onChange={setVol} />
           <Switch checked={muted} onChange={setMuted}>{translateUI("Mute")}</Switch>
+          {audioInfo.state !== 'running' && running && !muted && <Hint text="Sound is waiting for a click or key press (browser autoplay policy)." />}
           </div>
-          {audioInfo.state !== 'running' && running && <div className="note">{translateUI("Sound is waiting for a click or key press (browser autoplay policy).")}</div>}
           <p className={developer ? "hint" : "sr-only"} data-testid="audio-status" data-audio-state={audioInfo.state} data-audio-rms={audioInfo.rms.toFixed(4)}>
             {translateUI(audioInfo.state === 'running' ? `output ${audioInfo.rms > 0.0005 ? 'active' : 'idle'} · level ${(audioInfo.rms * 100).toFixed(1)}% · buffer ${audioInfo.buffered} ms` : `audio ${audioInfo.state}`)}
           </p>
@@ -785,11 +822,10 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         {!j2me && game && <NativeTestingPanel game={game} data={native.data} error={native.error} running={running || busy} starting={busy || state === 'starting'} onChanged={setGame} onRefresh={native.refresh} onSkin={id => setPrefs({ skinId: id })} toast={toast} />}
         {j2me && (
         <Panel icon="device" title={translateUI("Emulation profile")}>
-          <div className="chips" data-testid="phone-profile-match">
-            {displayProfile && <span className="chip" title={translateUI("Emulator screen")}><Icon name="device" /> {displayProfile.width}×{displayProfile.height}</span>}
-            <span className="chip" title={translateUI("Key layout")}><Icon name="keypad" /> {translateUI(KEY_LAYOUTS[layout]?.label.split(' / ')[0] ?? layout)}</span>
-            {dev?.platform && <span className="chip" title={translateUI("Platform reported to the game")}><Icon name="cpu" /> {dev.platform}</span>}
-            {matched && <span className={`chip ${matched.exact ? 'ok' : ''}`} title={`${matched.preset.name}. ${translateUI(matched.reason)}`}><Icon name={matched.exact ? 'check' : 'info'} /> {translateUI(matched.exact ? 'exact' : 'generic')}</span>}
+          <div className="chips player-chips" data-testid="phone-profile-match">
+            <span className="chip" title={translateUI("Key layout")}><Icon name="keypad" /><span>{translateUI('Keys')} · {translateUI(KEY_LAYOUTS[layout]?.label.split(' / ')[0] ?? layout)}</span></span>
+            {(dev?.platform || matched) && <span className="chip chip-flex" title={`${translateUI("Platform reported to the game")}: ${dev?.platform ?? translateUI('Emulator default')}`}><Icon name="cpu" /><span>{dev?.platform ?? translateUI('Emulator default')}</span></span>}
+            {matched && <span className={`chip ${matched.exact ? 'ok' : ''}`} title={`${matched.preset.name}. ${translateUI(matched.reason)}`}><Icon name={matched.exact ? 'check' : 'info'} /><span>{translateUI(matched.exact ? 'exact' : 'generic')}</span></span>}
           </div>
           <div className="control-line"><Switch checked={advanced} onChange={setAdvanced}>{translateUI("Advanced profile")}</Switch><Hint text="Advanced: choose skin and profile independently" /></div>
           <fieldset hidden={!advanced} style={{border:0,padding:0,margin:0,display:advanced?'grid':'none',gap:12}}>
@@ -821,18 +857,17 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
 
         {loaded && j2me && (
         <Panel icon="sliders" title={translateUI("Game compatibility options")}>
-          <EmulationTweaksForm pointerDefault={phoneHasTouch(prefs.skinId)} value={tweaks} onChange={setTweaks} />
+          <EmulationTweaksForm pointerDefault={phoneHasTouch(prefs.skinId)} fullscreenDefault={dev?.forceFullscreen ?? false} value={tweaks} onChange={setTweaks} />
         </Panel>
         )}
 
         <Panel icon="layers" title={translateUI("Display")}>
-          <div className="chips">
-            <span className="chip" data-testid="game-resolution" title={translateUI(game?.nativeResolution?.source === 'frame' ? 'Estimated from game frames' : 'Game resolution')}><Icon name="gamepad" /> {translateUI('Game')} {actualGameSize ? `${actualGameSize.width}×${actualGameSize.height}` : '—'}</span>
-            <button type="button" className="chip chip-link" onClick={() => navigate('/phones')} title={translateUI("Change the phone")} data-testid="change-phone"><Icon name="phone" /> {skin ? `${skin.config.manufacturer} ${skin.config.model}` : '…'}</button>
-            <span className="chip" title={translateUI("Emulated picture")}><Icon name="zoom" /> <span data-testid="frame-size">{frameSize.w}×{frameSize.h}</span></span>
-            {skinScreen && res && (res.width !== skinScreen.width || res.height !== skinScreen.height) && (
-              <span className="chip" title={translateUI(`This phone’s display is ${skinScreen.width}×${skinScreen.height}; the game renders ${res.width}×${res.height}. It is shown whole, with margins, never stretched.`)}><Icon name="info" /> {skinScreen.width}×{skinScreen.height}</span>
-            )}
+          <div className="chips player-chips">
+            <span className="chip" title={translateUI(sameResolution ? 'Game and emulator resolution' : game?.nativeResolution?.source === 'frame' ? 'Estimated from game frames' : 'Native game resolution')}><Icon name="gamepad" />
+              <span>{translateUI(sameResolution ? 'Game + output' : 'Game')} <b data-testid="game-resolution"><span data-testid={sameResolution ? outputTestId : undefined}>{actualGameSize ? `${actualGameSize.width}×${actualGameSize.height}` : '—'}</span></b></span>
+            </span>
+            {outputSize && !sameResolution && <span className="chip" title={translateUI('Emulator output resolution')}><Icon name="device" /><span>{translateUI('Emulator')} <b data-testid={outputTestId}>{outputSize.width}×{outputSize.height}</b></span></span>}
+            <button type="button" className="chip chip-link chip-flex" onClick={() => navigate('/phones')} title={skinName ? `${translateUI("Change the phone")}: ${skinName}` : translateUI("Change the phone")} data-testid="change-phone"><Icon name="phone" /><span>{(j2me && skinName) || translateUI('Phone')}</span></button>
           </div>
           <div className="switch-row">
             <Switch checked={prefs.integer} onChange={(integer) => setPrefs({ integer })}>{translateUI("Whole-number scaling")}</Switch>

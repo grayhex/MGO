@@ -57,13 +57,15 @@ try {
   const useDark = p.getByRole('button', { name: 'Use dark theme', exact: true });
   const useLight = p.getByRole('button', { name: 'Use light theme', exact: true });
   const palette = () => p.locator('body').evaluate(el => getComputedStyle(el).backgroundColor);
-  assert.equal(await palette(), 'rgb(244, 247, 245)');
-  await useDark.click();
+  assert.equal(await p.locator('html').getAttribute('lang'), 'en');
   await useLight.waitFor();
   assert.equal(await palette(), 'rgb(5, 5, 7)');
-  await p.reload();
-  await useLight.waitFor();
   await useLight.click();
+  await useDark.waitFor();
+  assert.equal(await palette(), 'rgb(244, 247, 245)');
+  await p.reload();
+  await useDark.waitFor();
+  assert.equal(await palette(), 'rgb(244, 247, 245)');
   console.log('✔ one button switches between two saved themes');
 
   await p.setViewportSize({ width: 1920, height: 1000 });

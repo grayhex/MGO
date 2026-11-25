@@ -49,7 +49,8 @@ ENV MGO_HTTPS_PORT=8443 NGINX_ENVSUBST_FILTER=MGO_HTTPS_PORT
 COPY infrastructure/local/nginx-https.conf /etc/nginx/templates/default.conf.template
 COPY infrastructure/local/nginx-aas.conf /etc/nginx/templates/aas.conf.template
 COPY infrastructure/local/05-mgo-tls.sh /docker-entrypoint.d/05-mgo-tls.sh
-RUN chmod +x /docker-entrypoint.d/05-mgo-tls.sh
+COPY infrastructure/local/10-mgo-resources.sh /docker-entrypoint.d/10-mgo-resources.sh
+RUN chmod +x /docker-entrypoint.d/05-mgo-tls.sh /docker-entrypoint.d/10-mgo-resources.sh
 COPY infrastructure/local/mgo-proxy.conf /etc/nginx/mgo-proxy.conf
 
 # ---- 4. Runtime (the default target: keep it the last stage) --------------------------------------------------------------------------

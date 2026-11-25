@@ -33,19 +33,26 @@ try {
 
   // ---- options are saved for the game and reach it ----
   const props = await upload('tests/fixtures/labgames/build/kemprops.jar');
-  await p.goto(base + '/play/' + props.id);
-  await p.getByText('Game compatibility options', { exact: true }).waitFor();
-  await p.getByLabel('Language of the phone').fill('ru-RU');
+  await p.goto(base + '/');
+  await p.locator('.game-card', { hasText: props.name }).getByRole('button', { name: 'Game settings' }).click();
+  await p.getByText('Game fonts', { exact: true }).click();
   await p.getByLabel('Font size medium').fill('30');
   await p.getByLabel('Font size small').fill('20');
   await p.getByLabel('Font size large').fill('40');
+  await p.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+  await wait(async () => (await (await fetch(base + '/api/games/' + props.id)).json()).settings.emulation?.fontSizes?.large === 40, 'font options saved');
+  await p.goto(base + '/play/' + props.id);
+  await p.getByText('Game compatibility options', { exact: true }).waitFor();
+  await p.getByLabel('Language of the phone').fill('ru-RU');
+  await p.getByText('Game fullscreen', { exact: true }).click();
+  assert.ok(await p.getByRole('checkbox', { name: 'Game fullscreen', exact: true }).isChecked());
   await p.getByText('Preload resources', { exact: true }).click();
   const touch = p.getByRole('checkbox', { name: 'Touch events' });
   assert.equal(await touch.isChecked(), false, 'the default keypad phone does not advertise touch');
   await p.getByText('Touch events', { exact: true }).click();
   await wait(async () => { const g = (await (await fetch(base + '/api/games')).json()).find((x) => x.id === props.id); return g.settings.emulation?.locale === 'ru-RU' && g.settings.emulation?.pointerEvents === true && g.settings.emulation?.preloadResources === true; }, 'options saved for the game');
   await p.locator('.ctrl-col').getByRole('button', { name: 'Start', exact: true }).click();
-  await wait(async () => { const s = await running(); return s && (await (await fetch(base + '/api/sessions/' + s.id)).json()).logTail.some((l) => /PROPS locale=ru-RU pointer=true/.test(l)); }, 'the game sees the options');
+  await wait(async () => { const s = await running(); return s && (await (await fetch(base + '/api/sessions/' + s.id)).json()).logTail.some((l) => l.includes('PROPS locale=ru-RU pointer=true') && l.includes(`canvasHeight=${s.height}`)); }, 'the game sees the options and its canvas uses the full screen');
   const defaults = await running();
   assert.equal(defaults.frameRateLimit, null, 'default uses the emulator frame-rate policy');
   assert.doesNotMatch(readFileSync(path.join(dir, 'saves', 'default', props.id, 'midlets.ini'), 'utf8'), /^FrameRate=/m);
@@ -56,7 +63,7 @@ try {
   await p.getByText('Game compatibility options', { exact: true }).waitFor();
   await wait(async () => (await p.getByLabel('Language of the phone').inputValue()) === 'ru-RU', 'saved options are shown after a reload');
   await p.getByRole('button', { name: 'Reset options' }).click();
-  await wait(async () => { const g = (await (await fetch(base + '/api/games')).json()).find((x) => x.id === props.id); return g.settings.emulation === undefined; }, 'defaults restored');
+  await wait(async () => { const g = (await (await fetch(base + '/api/games')).json()).find((x) => x.id === props.id); return JSON.stringify(g.settings.emulation) === JSON.stringify({ fontSizes: { small: 20, medium: 30, large: 40 } }); }, 'compatibility defaults restored without changing fonts');
 
   await p.route('**/api/system/resources', route => route.fulfill({ json: {
     cpuPercent: 4.8, memoryBytes: 204 * 1024 ** 2, memoryLimitBytes: 1536 * 1024 ** 2
@@ -64,10 +71,10 @@ try {
 
   // ---- game speed ----
   const game = await upload('tests/fixtures/labgames/build/kemgame.jar');
-  await p.setViewportSize({ width: 1280, height: 720 });
+  await p.setViewportSize({ width: 1920, height: 1080 });
   await p.goto(base + '/play/' + game.id);
   const panel = p.locator('.ctrl-col');
-  for (const [language, label] of [['RU', 'Ограничение кадров (fps)'], ['EN', 'Frame limit (fps)']]) {
+  for (const language of ['RU', 'EN']) {
     await panel.locator('.seg.lang').getByRole('radio', { name: language }).click();
     await panel.locator('.resource-meters').getByText('4.8%').waitFor();
     const row = await panel.locator('.resource-meters').evaluate(meters =>
@@ -82,25 +89,32 @@ try {
       })
     );
     assert.deepEqual(row, [true, true], `resource labels fit on one line in ${language}`);
-    const fps = panel.getByRole('radiogroup', { name: label, exact: true });
-    await fps.waitFor();
-    assert.deepEqual((await fps.getByRole('radio').allTextContents()).slice(-2), ['30', '60']);
     const fits = await panel.evaluate(el => {
       const panel = el.getBoundingClientRect();
-      const fps = el.querySelector('.player-seg').getBoundingClientRect();
-      return { bottom: panel.bottom, height: innerHeight, fpsRight: fps.right, panelRight: panel.right, fpsHeight: fps.height };
+      const groups = [...el.querySelectorAll('.player-chips')];
+      const oneLine = groups.every(group => new Set([...group.children].map(chip => chip.getBoundingClientRect().top)).size === 1 && group.scrollWidth <= group.clientWidth + 1);
+      return { bottom: panel.bottom, height: innerHeight, documentHeight: document.documentElement.scrollHeight, nested: getComputedStyle(el).overflowY === 'auto', oneLine };
     });
-    assert.ok(fits.bottom <= fits.height && fits.fpsRight < fits.panelRight && fits.fpsHeight < 38, `compact side panel fits at 1280×720 in ${language}: ${JSON.stringify(fits)}`);
+    assert.ok(fits.bottom <= fits.height && fits.documentHeight <= fits.height + 1 && !fits.nested && fits.oneLine, `compact side panel fits at Full HD in ${language}: ${JSON.stringify(fits)}`);
     assert.equal(await panel.getByText('Game files', { exact: true }).count(), 0);
   }
+  const frameLimitButton = p.locator('.stage-fps-limit summary');
+  await frameLimitButton.click();
   const limits = p.getByRole('radiogroup', { name: 'Frame limit (fps)' });
+  assert.deepEqual(await limits.getByRole('radio').allTextContents(), ['Default', '30', '60']);
   await limits.getByRole('radio', { name: '30 FPS limit' }).click();
   await p.locator('.ctrl-col').getByRole('button', { name: 'Start', exact: true }).click();
   await wait(async () => (await running())?.framesReceived > 5, 'game drawing');
   const first = await running();
   assert.equal(first.frameRateLimit, 30);
+  for (const [width, height] of [[1920, 1080], [1536, 864]]) {
+    await p.setViewportSize({ width, height });
+    assert.ok(await p.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), `running player fits ${width}×${height}`);
+  }
+  await p.setViewportSize({ width: 1920, height: 1080 });
   const firstGame = await (await fetch(base + '/api/games/' + game.id)).json();
   assert.deepEqual(firstGame.playedResolution, { width: first.width, height: first.height, source: 'played' });
+  await frameLimitButton.click();
   await limits.getByRole('radio', { name: '60 FPS limit' }).click();
   await p.getByText('Restart to apply the frame limit.').waitFor();
   assert.equal((await running()).id, first.id, 'choosing a limit keeps the game running');
@@ -128,16 +142,26 @@ try {
   await p.goto(base + '/play/' + padded.id);
   await panel.getByRole('progressbar', { name: 'Memory' }).waitFor();
   await panel.getByRole('button', { name: 'Start', exact: true }).click();
-  await p.getByTestId('game-resolution').filter({ hasText: 'Game 176×220' }).waitFor();
+  await p.getByTestId('game-resolution').filter({ hasText: '176×220' }).waitFor();
+  assert.equal(await p.getByTestId('frame-size').innerText(), '240×320');
   const recommendation = p.getByTestId('phone-suggestion');
-  assert.match(await recommendation.innerText(), /Game 176×220 · Emulator 240×320/);
+  assert.match(await recommendation.innerText(), /Better screen fit/);
   await p.getByTestId('phone-suggestion-switch').click();
   await wait(async () => {
     const g = await (await fetch(base + '/api/games/' + padded.id)).json();
     return g.settings.width === 176 && g.settings.height === 220;
   }, 'the suggested handset applies its screen size');
+  await panel.getByRole('button', { name: 'Restart with selected profile' }).click();
+  await wait(async () => (await running())?.width === 176, 'restarted at the native resolution');
+  await p.getByTitle('Game and emulator resolution', { exact: true }).waitFor();
+  assert.equal(await p.locator('.player-chips').filter({ has: p.getByTestId('game-resolution') }).getByText('176×220', { exact: true }).count(), 1);
   await p.locator('.stage-left').getByRole('button', { name: 'Library' }).click();
   await p.locator('.game-card', { hasText: 'Small viewport' }).locator('.resolution-tag:visible').filter({ hasText: '176×220' }).first().waitFor();
+  const withIcon = await upload('tests/fixtures/labgames/build/kemicon.jar');
+  await p.goto(base + '/play/' + withIcon.id);
+  await wait(() => p.getByTestId('player-game-icon').evaluate(img => img.naturalWidth > 0), 'the player uses the embedded JAR icon');
+  assert.equal(await p.getByTestId('player-game-icon').getAttribute('src'), `/api/games/${withIcon.id}/icon?v=2`);
+  assert.equal(await p.getByTestId('screenshot').evaluate(button => button.nextElementSibling?.dataset.testid), 'screenshot-copy');
   assert.deepEqual(errors, []);
   console.log('emulation options e2e OK');
 } finally {

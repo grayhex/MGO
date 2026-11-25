@@ -72,7 +72,6 @@ export function SymbianPanel({ toast }: { toast: Toaster }) {
           <button className="btn sm" onClick={load}><Icon name="restart" /> {translateUI('Refresh status')}</button>
           <a className="btn sm" href="/api/symbian/diagnostics" download data-testid="symbian-diagnostics" title={translateUI("Versions, devices, the service log and the emulator's last words: attach it to a bug report.")}>{translateUI('Download Symbian diagnostics')}</a>
         </div>
-        {!st.reachable && <img className="state-art" src="/graphics/states/server-offline.svg" alt="" />}
         {!st.configured && <p className="note">{translateUI('The Symbian service is not set up on this server (SYMBIAN_AGENT_URL is empty). See docs/SYMBIAN.md to enable it.')}</p>}
         {st.configured && !st.reachable && <p className="note err">{translateUI('The Symbian service does not answer')}: {st.message}</p>}
         {st.disk && (
@@ -84,66 +83,42 @@ export function SymbianPanel({ toast }: { toast: Toaster }) {
         )}
       </div>
 
-      {st.reachable && (
-        <>
-          <p className="note warn">{translateUI('Experimental. Symbian S60 and N-Gage games run in EKA2L1, which MGO does not ship with firmware: you add your own, legally obtained device firmware here. Not every game works.')}</p>
-
-          <h3>{translateUI('Installed devices')} <Hint text="A device is one firmware installed in the service. A game runs on exactly one of them; MGO shows here which phone each firmware belongs to." /></h3>
-          {st.firmware.devices.length === 0
-            ? <div className="sym-empty" data-testid="no-devices"><p><strong>{translateUI('No firmware yet')}</strong></p><p className="muted">{translateUI('Add device firmware below to play Symbian and N-Gage games.')}</p></div>
-            : <ul className="sym-devices" data-testid="devices">{st.firmware.devices.map((d) => {
-              const cat = catalogOf(d.code);
-              const skin = skinOf(cat);
-              const defaultsOf = (['ngage', 'ngage2', 'symbian'] as const).filter(pl => st.defaults[pl]?.toLowerCase() === d.code.toLowerCase());
-              return (
-                <li key={d.code} className="sym-device card-pad" data-testid={`device-${d.code}`}>
-                  <div className="sym-thumb">{skin ? <img src={`/phones/${skin}/preview.webp`} alt="" loading="lazy" draggable={false} /> : <Icon name="phone" />}</div>
-                  <div className="sym-device-body">
-                    <h4>{cat?.name ?? `${d.manufacturer} ${d.model}`}</h4>
-                    <p className="muted small">{cat ? cat.os : translateUI('Not in the MGO phone catalog: MGO cannot tell which games it runs.')}</p>
-                    <div className="chips">
-                      <span className="chip"><code>{d.code}</code></span>
-                      {cat && cat.platforms.map(p => <PlatformTag key={p} platform={p} size="sm" />)}
-                      {defaultsOf.map(pl => <span key={pl} className="chip on" title={translateUI('This device is the default for this kind of game')}>★ {PLATFORM_HELP[pl].title.split(' (')[0]}</span>)}
+      <div className="sym-workspace">
+        {st.reachable && (
+          <section className="sym-installed">
+            <h3>{translateUI('Installed devices')} <Hint text="A device is one firmware installed in the service. A game runs on exactly one of them; MGO shows here which phone each firmware belongs to." /></h3>
+            {st.firmware.devices.length === 0
+              ? <div className="sym-empty" data-testid="no-devices"><p><strong>{translateUI('No firmware yet')}</strong></p><p className="muted">{translateUI('Add device firmware below to play Symbian and N-Gage games.')}</p></div>
+              : <ul className="sym-devices" data-testid="devices">{st.firmware.devices.map((d) => {
+                const cat = catalogOf(d.code);
+                const skin = skinOf(cat);
+                const defaultsOf = (['ngage', 'ngage2', 'symbian'] as const).filter(pl => st.defaults[pl]?.toLowerCase() === d.code.toLowerCase());
+                return (
+                  <li key={d.code} className="sym-device card-pad" data-testid={`device-${d.code}`}>
+                    <div className="sym-thumb">{skin ? <img src={`/phones/${skin}/preview.webp`} alt="" loading="lazy" draggable={false} /> : <Icon name="phone" />}</div>
+                    <div className="sym-device-body">
+                      <h4>{cat?.name ?? `${d.manufacturer} ${d.model}`}</h4>
+                      <p className="muted small">{cat ? cat.os : translateUI('Not in the MGO phone catalog: MGO cannot tell which games it runs.')}</p>
+                      <div className="chips">
+                        <span className="chip"><code>{d.code}</code></span>
+                        {cat && cat.platforms.map(p => <PlatformTag key={p} platform={p} size="sm" />)}
+                        {defaultsOf.map(pl => <span key={pl} className="chip on" title={translateUI('This device is the default for this kind of game')}>★ {PLATFORM_HELP[pl].title.split(' (')[0]}</span>)}
+                      </div>
                     </div>
-                  </div>
-                  <button className="btn sm danger" disabled={busy} onClick={async () => { if (confirm(translateUI('Remove this device and its firmware from the service?'))) { try { follow(await api.symbianRemove(d.code)); } catch (e) { toast('error', (e as Error).message); } } }}>{translateUI('Remove')}</button>
-                </li>
-              );
-            })}</ul>}
-
-          {st.firmware.devices.length > 0 && (
+                    <button className="btn sm danger" disabled={busy} onClick={async () => { if (confirm(translateUI('Remove this device and its firmware from the service?'))) { try { follow(await api.symbianRemove(d.code)); } catch (e) { toast('error', (e as Error).message); } } }}>{translateUI('Remove')}</button>
+                  </li>
+                );
+              })}</ul>}
+          </section>
+        )}
+        <section className="sym-installer">
+          {st.reachable && (
             <>
-              <h3>{translateUI('Default device per platform')} <Hint text="MGO does not guess which firmware fits a game. Pick here the device used for every game of a platform that has no device of its own (a game's own choice is made in its player)." /></h3>
-              <ul className="sym-defaults" data-testid="defaults">
-                {(['ngage', 'ngage2', 'symbian'] as const).map((pl) => {
-                  const fits = st.firmware.devices.filter(d => { const c = catalogOf(d.code); return !c || c.platforms.includes(pl); });
-                  const current = st.defaults[pl] ?? '';
-                  const auto = !current && fits.length === 1 ? fits[0] : null;
-                  return (
-                    <li key={pl} className="sym-default">
-                      <div>
-                        <strong>{translateUI(PLATFORM_HELP[pl].title)}</strong> <Hint text={PLATFORM_HELP[pl].hint} />
-                        <p className="muted small">{translateUI(PLATFORM_HELP[pl].hint)}</p>
-                      </div>
-                      <div className="sym-default-pick">
-                        <select className="select" value={current} data-testid={`default-${pl}`} aria-label={translateUI(PLATFORM_HELP[pl].title)} disabled={busy || fits.length === 0} onChange={(e) => void setDefault(pl, e.target.value)}>
-                          <option value="">{translateUI(fits.length === 1 ? 'Automatic (the only suitable device)' : '— not set (ask per game) —')}</option>
-                          {fits.map((d) => { const c = catalogOf(d.code); return <option key={d.code} value={d.code}>{c?.name ?? `${d.manufacturer} ${d.model}`} ({d.code})</option>; })}
-                        </select>
-                        {fits.length === 0 && <span className="note warn">{translateUI('No installed firmware can run these games.')}</span>}
-                        {auto && <span className="muted small">{translateUI('Used automatically')}: {catalogOf(auto.code)?.name ?? auto.code}</span>}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+              <FirmwareAdd st={st} toast={toast} follow={follow} busy={busy} />
+              <FirmwareJobStatus job={job} jobError={jobError} canResume={canResume} resume={resume} />
             </>
           )}
-
-        </>
-      )}
-      <details className="more firmware-reference">
+          <details className="more firmware-reference">
             <summary>{translateUI('Which firmware file do I need?')}</summary>
             <p className="small muted">{translateUI('Use the phone model and product code to identify the firmware. Keep the original filenames inside the archive.')}</p>
             <ul className="firmware-reference-list">
@@ -159,13 +134,35 @@ export function SymbianPanel({ toast }: { toast: Toaster }) {
               <a href="https://eka2l1.github.io/quickstart/basic/installdevice/" target="_blank" rel="noreferrer">{translateUI('EKA2L1 firmware guide')} ↗</a>
               <a href="https://eka2l1.github.io/quickstart/ngage/" target="_blank" rel="noreferrer">{translateUI('N-Gage ROM guide')} ↗</a>
             </div>
-      </details>
-      {st.reachable && (
-        <>
-          <FirmwareAdd st={st} toast={toast} follow={follow} busy={busy} />
-          <FirmwareJobStatus job={job} jobError={jobError} canResume={canResume} resume={resume} />
-        </>
-      )}
+          </details>
+        </section>
+        {st.reachable && st.firmware.devices.length > 0 && (
+          <section className="sym-default-section">
+            <h3>{translateUI('Default device per platform')} <Hint text="MGO does not guess which firmware fits a game. Pick here the device used for every game of a platform that has no device of its own (a game's own choice is made in its player)." /></h3>
+            <ul className="sym-defaults" data-testid="defaults">
+              {(['ngage', 'ngage2', 'symbian'] as const).map((pl) => {
+                const fits = st.firmware.devices.filter(d => { const c = catalogOf(d.code); return !c || c.platforms.includes(pl); });
+                const current = st.defaults[pl] ?? '';
+                const auto = !current && fits.length === 1 ? fits[0] : null;
+                return (
+                  <li key={pl} className="sym-default">
+                    <div>
+                      <strong>{translateUI(PLATFORM_HELP[pl].title)}</strong> <Hint text={PLATFORM_HELP[pl].hint} />
+                    </div>
+                    <div className="sym-default-pick">
+                      <select className="select" value={current} data-testid={`default-${pl}`} aria-label={translateUI(PLATFORM_HELP[pl].title)} disabled={busy || fits.length === 0} onChange={(e) => void setDefault(pl, e.target.value)}>
+                        <option value="">{auto ? translateUI('Automatic · {device}', { device: catalogOf(auto.code)?.name ?? auto.code }) : translateUI('— not set (ask per game) —')}</option>
+                        {fits.map((d) => { const c = catalogOf(d.code); return <option key={d.code} value={d.code}>{c?.name ?? `${d.manufacturer} ${d.model}`} ({d.code})</option>; })}
+                      </select>
+                      {fits.length === 0 && <span className="note warn">{translateUI('No installed firmware can run these games.')}</span>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+      </div>
     </div>
   );
 }

@@ -196,6 +196,7 @@ button.genre-badge.unconfirmed { color: var(--muted); font-weight: 500; font-sty
 .plat-filter button { display: inline-flex; align-items: center; height: 28px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--muted); font: inherit; font-size: 0.8125rem; cursor: pointer; }
 .plat-filter button:hover { border-color: var(--outline-strong); }
 .plat-filter button.on { border-color: var(--outline-strong); background: var(--accent-tint); color: var(--on-accent-tint); }
+.plat-filter[data-filtered='true'] button[aria-pressed='false']:not(:hover, :focus-visible) { opacity: .61; filter: saturate(.25); }
 
 .login-hero .login-logo { width: min(360px, 100%); height: auto; }
 .login-preferences { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

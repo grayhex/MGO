@@ -23,6 +23,8 @@ export interface EmulationTweaks {
   frameRate?: number;
   /** KEmulator 2.22.1+: read game resources into memory at startup. */
   preloadResources?: boolean;
+  /** Start Canvas games in MIDP fullscreen regardless of their setFullScreenMode requests. */
+  forceFullscreen?: boolean;
   /** `StartAppOnResume`: call `pauseApp` when the game is suspended and `startApp` when it resumes (as phones do); off = only hideNotify/showNotify. */
   startAppOnResume?: boolean;
   /** `MIDPLocale`: the `microedition.locale` property, e.g. `en-US`, `ru-RU`. */
@@ -298,8 +300,15 @@ export interface SystemStatus {
   version: string;
   sampledAt?: string;
   monitoring?: SystemResources & { uptimeSeconds: number; sessions: number; frames: number; audioBytes: number; nodeVersion: string; platform: string };
+  gateway?: ComponentResources | null;
   checks: SystemCheck[];
   storage: { totalBytes: number; freeBytes: number; libraryBytes: number; quotaBytes: number };
+}
+
+export interface ComponentResources {
+  cpuPercent: number | null;
+  memoryBytes: number;
+  memoryLimitBytes: number | null;
 }
 
 export interface LibraryRoot {
@@ -659,7 +668,7 @@ export interface DevicePreset {
 export interface AudioDiagnostics { ready: boolean; backend: string; version: string | null; sink: string | null; error: string | null; streams: number; bytes: number; lastError: string | null }
 export interface SymbianStatus {
   audioDiagnostics?: AudioDiagnostics;
-  metrics?: { cpuPercent: number | null; memoryBytes: number; memoryLimitBytes: number | null } | null;
+  metrics?: ComponentResources | null;
   experimental: true;
   /** SYMBIAN_AGENT_URL is set. */
   configured: boolean;

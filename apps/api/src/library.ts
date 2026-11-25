@@ -81,7 +81,7 @@ export function validateEmulation(input: unknown): EmulationTweaks {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) throw bad('emulation must be an object');
   const o = input as Record<string, unknown>;
   const out: EmulationTweaks = {};
-  for (const k of Object.keys(o)) if (!['frameRate', 'preloadResources', 'startAppOnResume', 'locale', 'pointerEvents', 'fontSizes'].includes(k)) throw bad(`unknown emulation option "${k}"`);
+  for (const k of Object.keys(o)) if (!['frameRate', 'preloadResources', 'forceFullscreen', 'startAppOnResume', 'locale', 'pointerEvents', 'fontSizes'].includes(k)) throw bad(`unknown emulation option "${k}"`);
   const int = (v: unknown, lo: number, hi: number, name: string): number => {
     if (typeof v !== 'number' || !Number.isInteger(v) || v < lo || v > hi) throw bad(`${name} must be an integer in ${lo}..${hi}`);
     return v;
@@ -90,6 +90,10 @@ export function validateEmulation(input: unknown): EmulationTweaks {
   if (o.preloadResources !== undefined) {
     if (typeof o.preloadResources !== 'boolean') throw bad('preloadResources must be true or false');
     out.preloadResources = o.preloadResources;
+  }
+  if (o.forceFullscreen !== undefined) {
+    if (typeof o.forceFullscreen !== 'boolean') throw bad('forceFullscreen must be true or false');
+    out.forceFullscreen = o.forceFullscreen;
   }
   if (o.startAppOnResume !== undefined) {
     if (typeof o.startAppOnResume !== 'boolean') throw bad('startAppOnResume must be true or false');

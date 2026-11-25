@@ -86,6 +86,17 @@
 .metadata-source-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
 .metadata-source-grid > * { align-self: start; }
 .metadata-source-grid.native > * { align-self: stretch; }
+.metadata-sources .archive-settings, .metadata-sources .catalog-source { gap: 7px; padding: 10px; }
+@media (min-width: 1240px) {
+  .metadata-sources { grid-template-columns: minmax(0, 2.7fr) minmax(220px, 1fr); align-items: start; gap: 12px; }
+  .java-metadata { grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); align-items: start; }
+  .java-metadata > h3 { grid-column: 1 / -1; }
+  .java-metadata > section + section { margin-block-start: 0; }
+  .metadata-source-grid.native { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+  .java-metadata .metadata-source-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
+.metadata-sources .moby-policy[open] > summary { margin-bottom: 6px; }
+.moby-policy p + p { margin-top: 4px; }
 
 .curated-destination { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px 8px; }
 .curated-destination p { grid-column: 1 / -1; overflow-wrap: anywhere; }

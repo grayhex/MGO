@@ -50,6 +50,7 @@ try {
   await page.reload();
   await page.locator('.game-card', { hasText: last.name }).getByRole('button', { name: 'Play', exact: true }).click();
   await page.waitForURL('**/play/' + last.id);
+  await page.locator('.stage-fps-limit summary').click();
   const fps = page.getByRole('radiogroup', { name: 'Frame limit (fps)' });
   await fps.waitFor();
   assert.equal(await fps.getByRole('radio', { name: 'Default' }).getAttribute('aria-checked'), 'true');

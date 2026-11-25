@@ -7,6 +7,7 @@ import { api } from '../api';
 import type { Toast } from '../App';
 import { Modal } from './Modal';
 import { GameFilesPanel } from './GameFilesPanel';
+import { GameFontSizes } from './EmulationTweaksForm';
 import { Panel, Switch } from './ui';
 
 export function GameSettingsDialog({ game, toast, onClose, onChanged }: { game: GameMeta; toast: (k: Toast['kind'], t: string) => void; onClose: () => void; onChanged: () => void }) {
@@ -80,6 +81,11 @@ export function GameSettingsDialog({ game, toast, onClose, onChanged }: { game: 
           </select>
         </label>
       )}
+      <Panel icon="sliders" title="Game fonts" open={false}>
+        <GameFontSizes value={s.emulation?.fontSizes} onChange={sizes => {
+          setS({ ...s, emulation: { ...s.emulation, fontSizes: sizes } });
+        }} />
+      </Panel>
       <Panel icon="library" title="Game files" open={false}>
         <GameFilesPanel gameId={game.id} toast={toast} refreshKey={game.id} />
       </Panel>
