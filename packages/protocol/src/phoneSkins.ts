@@ -3,6 +3,7 @@ export const PHONE_SKIN_IDS = [
   'nokia-6100', 'nokia-6230i', 'sony-ericsson-k750i', 'nokia-n95', 'nokia-e71',
   'sony-ericsson-w995', 'sony-ericsson-k790i', 'motorola-razr-v3', 'nokia-5800', 'samsung-s5230',
   'nokia-n-gage-classic', 'nokia-n-gage-qd', 'nokia-n70', 'nokia-5320-xpressmusic', 'nokia-n8',
+  'siemens-s65',
 ] as const;
 export type PhoneSkinId = typeof PHONE_SKIN_IDS[number];
 export const isPhoneSkinId = (value: unknown): value is PhoneSkinId => typeof value === 'string' && (PHONE_SKIN_IDS as readonly string[]).includes(value);
@@ -30,6 +31,8 @@ export interface PhoneSkin {
   variant?: string;
   status: string;
   screen: { width: number; height: number };
+  /** Optional top edge of the separate portrait keypad crop, as a fraction of the full body. */
+  keypadCropTop?: number;
   input?: { kind: 'keypad' | 'touchscreen'; pointer: boolean; externalKeypad: boolean };
   buttons: { id: string; label: string; polygon: [number, number][] }[];
   keyMappings: Record<string, string | null>;

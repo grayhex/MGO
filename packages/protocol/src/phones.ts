@@ -17,12 +17,16 @@ export const PHONE_PROFILES = {
   'nokia-n70': { device: '176x208-nokia-full-screen', exact: true, reason: 'presets.xml identifies Nokia N70. Java ME only; no Symbian firmware.' },
   'nokia-5320-xpressmusic': { device: '240x320-common-full-screen', exact: false, reason: 'No 5320 preset; generic 240×320, emulator platform unchanged.' },
   'nokia-n8': { device: '360x640-common-full-screen', exact: false, reason: 'No N8 preset; generic 360×640 with pointer input, emulator platform unchanged.' },
+  'siemens-s65': { device: '132x176-siemens-full-screen', exact: false, reason: 'The Siemens CX75 preset provides 132×176 and the Siemens key layout.' },
 } as const;
 /** Backward-compatible Java ME mapping. Native profiles live in emulatedDevices.ts. */
 export type PhoneId = PhoneSkinId;
 export const isPhoneId = isPhoneSkinId;
-/** Key layout a phone is played with: its own when the model has one (Sony Ericsson), else the one of its device preset. */
-export const OWN_LAYOUT: Partial<Record<PhoneId, LayoutId>> = { 'sony-ericsson-k750i': 'sonyericsson', 'sony-ericsson-w995': 'sonyericsson', 'sony-ericsson-k790i': 'sonyericsson' };
+/** The handset layout when it needs to be recorded separately from the preset ID. */
+export const OWN_LAYOUT: Partial<Record<PhoneId, LayoutId>> = {
+  'sony-ericsson-k750i': 'sonyericsson', 'sony-ericsson-w995': 'sonyericsson', 'sony-ericsson-k790i': 'sonyericsson',
+  'siemens-s65': 'siemens',
+};
 export function resolvePhone(id: PhoneId, presets: DevicePreset[]) {
   const match = PHONE_PROFILES[id];
   const preset = presets.find((p) => p.id === match.device);

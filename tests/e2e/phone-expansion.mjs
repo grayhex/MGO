@@ -5,8 +5,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { PHONE_SKIN_IDS } from '@mgo/protocol';
 
-const ids = ['sony-ericsson-w995', 'sony-ericsson-k790i', 'motorola-razr-v3', 'nokia-5800', 'samsung-s5230', 'nokia-n-gage-classic', 'nokia-n-gage-qd', 'nokia-n70', 'nokia-5320-xpressmusic', 'nokia-n8'];
+const ids = ['sony-ericsson-w995', 'sony-ericsson-k790i', 'motorola-razr-v3', 'nokia-5800', 'samsung-s5230', 'nokia-n-gage-classic', 'nokia-n-gage-qd', 'nokia-n70', 'nokia-5320-xpressmusic', 'nokia-n8', 'siemens-s65'];
 const data = mkdtempSync(path.join(tmpdir(), 'mgo-phones-'));
 const port = 20500 + Math.floor(Math.random() * 300), base = `http://127.0.0.1:${port}`;
 mkdirSync('test-results', { recursive: true });
@@ -41,8 +42,8 @@ try {
   assert.equal(await page.locator('.skin-picker').count(), 0, 'the player has no phone picker');
   const pickPhone = async (model) => {
     await page.getByRole('link', { name: 'Phones' }).click();
-    await page.locator('.phone-pick').nth(14).waitFor();
-    assert.equal(await page.locator('.phone-pick').count(), 15);
+    await page.locator('.phone-pick').nth(PHONE_SKIN_IDS.length - 1).waitFor();
+    assert.equal(await page.locator('.phone-pick').count(), PHONE_SKIN_IDS.length);
     await page.getByRole('button', { name: model }).click();
     await page.waitForURL('**/play/' + game.id);
   };
@@ -71,11 +72,25 @@ try {
     const fullLcd = await page.getByTestId('skin-lcd').boundingBox();
     const fullCanvas = await page.locator('.skin-canvas').boundingBox();
     if (c.input.kind === 'keypad') {
-      const key = c.buttons.find(b => b.id === 'd5');
-      const x = key.polygon.reduce((n, p) => n + p[0], 0) / key.polygon.length;
-      const y = key.polygon.reduce((n, p) => n + p[1], 0) / key.polygon.length;
       const box = await body.boundingBox();
-      await page.mouse.move(box.x + x * box.width, box.y + y * box.height);
+      const center = (id) => {
+        const { polygon } = c.buttons.find(b => b.id === id);
+        const x = polygon.reduce((n, p) => n + p[0], 0) / polygon.length;
+        const y = polygon.reduce((n, p) => n + p[1], 0) / polygon.length;
+        return [box.x + x * box.width, box.y + y * box.height];
+      };
+      if (id === 'siemens-s65') {
+        assert.equal(running.device, '132x176-siemens-full-screen');
+        assert.equal(running.layout, 'siemens');
+        await page.mouse.click(...center('fire'));
+        await wait(async () => (await logs()).includes('ACTION -26 8'), 'S65 joystick sends Siemens Fire');
+        await page.mouse.click(...center('soft-left'));
+        await wait(async () => (await logs()).includes('KEY_DOWN -1'), 'S65 left soft key');
+        await page.locator('.stage').focus();
+        await page.keyboard.press('ArrowRight');
+        await wait(async () => (await logs()).includes('KEY_DOWN -62'), 'S65 keyboard directional mapping');
+      }
+      await page.mouse.move(...center('d5'));
       await page.mouse.down();
       await wait(async () => (await logs()).includes('KEY_DOWN 53'), id + ' physical 5');
       await page.locator('.stage-bar').getByRole('radio', { name: 'Screen', exact: true }).dispatchEvent('click');

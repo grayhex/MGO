@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
+import { PHONE_SKIN_IDS } from '@mgo/protocol';
 const cwd = process.cwd();
 const free = () => new Promise((res) => { const s = createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -35,7 +36,7 @@ try {
   // ---- Settings -> My phones ----
   await p.goto(base + '/settings#phone');
   await p.getByTestId('my-phones').waitFor();
-  assert.equal(await p.locator('.phone-grid .phone-card').count(), 15, 'the whole catalog is offered');
+  assert.equal(await p.locator('.phone-grid .phone-card').count(), PHONE_SKIN_IDS.length, 'the whole catalog is offered');
   await p.getByTestId('phone-nokia-n-gage-classic').click();
   await p.getByTestId('phone-nokia-n70').click();
   await wait(async () => (await api('/api/settings')).settings.myPhones?.includes('nokia-n70'), 'my phones saved');
@@ -65,7 +66,7 @@ try {
   const mine = (await api('/api/settings')).settings.myPhones.length;
   await wait(async () => (await p.locator('.phone-pick').count()) === mine, 'only my phones');
   await p.getByTestId('only-mine').uncheck();
-  await wait(async () => (await p.locator('.phone-pick').count()) === 15, 'all phones');
+  await wait(async () => (await p.locator('.phone-pick').count()) === PHONE_SKIN_IDS.length, 'all phones');
   assert.equal(await p.locator('.phone-pick .ptag').first().isVisible(), true, 'platforms are a drawing and a word');
   console.log('✔ /phones lists my phones first-class; the rest is one switch away; platforms are pictures');
 

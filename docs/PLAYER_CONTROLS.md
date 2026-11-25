@@ -16,6 +16,7 @@
 | Motorola RAZR V3 | 176x220-common-full-screen | generic | 176×220 | Nokia-compatible codes | false | unchanged emulator default |
 | Nokia 5800 XpressMusic | 360x640-common-full-screen | generic | 360×640 | Nokia-compatible codes + pointer | false | unchanged emulator default |
 | Samsung S5230 Star | 240x400-common-full-screen | generic | 240×400 | Nokia-compatible codes + pointer | false | unchanged emulator default |
+| Siemens S65 | 132x176-siemens-full-screen | Siemens CX75 fallback | 132×176 | Siemens | false | unchanged emulator default |
 
 The table describes the pinned build's 59 presets, not full hardware emulation. A generic profile does not impersonate a Nokia N95, E71 or Sony Ericsson platform. Properties and fullscreen policy follow the selected *existing* preset via midlets.ini; no manufacturer API support is inferred from a skin.
 
@@ -44,7 +45,7 @@ Focus loss/hidden page, disconnect and remapping release only relevant sources. 
 ## Validation
 
 - `npm run build`, `npm test`
-- `npm run test:integration` (real KEmulator; phones.test.ts covers all ten mappings, frame size, Fire, platform, emitted fullscreen policy, persistence and unchanged active session).
+- `npm run test:integration` (real KEmulator; phones.test.ts covers every handset mapping, frame size, Fire, platform, fullscreen policy and session persistence).
 - `node tests/e2e/phone-expansion.mjs`: five added handsets, body keys, real pointer coordinates, full/zoom views and session persistence; included in `npm run test:e2e`.
 - `CHROMIUM_PATH=/usr/bin/chromium node tests/e2e/player-features.mjs` for system Chromium; omit the variable to use Playwright's installed browser.
 

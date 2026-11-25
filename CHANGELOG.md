@@ -16,6 +16,8 @@ Formatted after [Keep a Changelog](https://keepachangelog.com/); versions follow
 
 ## [Unreleased]
 
+- Added the Siemens S65 handset with its 132×176 display, five-way joystick and Siemens Java ME key layout.
+
 ### Fixed
 - The handset keeps keyboard focus without drawing an outline around the player. The display shows a short handset model and more legible resolution labels.
 - The Java ME game language is selected from a list. Previously saved language codes remain available.

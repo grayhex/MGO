@@ -1,0 +1,9 @@
+{
+  "tool": "image_gen",
+  "date": "2026-11-25",
+  "sourceGeneration": "exec-37ce4207-867f-42f1-9e84-b2c90852aa54.png",
+  "method": "Front-facing studio illustration based on two photographic sources, with original Latin legends and a blank LCD.",
+  "technicalEdits": "The measured outline, LCD aperture, full and zoom crops and clickable regions are recorded in layout.json.",
+  "referenceDossier": "apps/web/public/phones/siemens-s65/references.md",
+  "historicalAcceptance": "review-draft"
+}

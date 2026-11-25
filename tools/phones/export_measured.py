@@ -113,6 +113,10 @@ def export(folder):
                   'Up to 2048px export; native resolution and measured masks are retained in design/phones.',
                   'Zoom is the same upper shell cropped above the hardware controls; it never changes emulation.'] + layout['notes'],
     }
+    if 'keypadTop' in layout:
+        top = round((layout['keypadTop'] - cy) * output_height / height)
+        assert ey + eh <= top < output_height
+        config['keypadCropTop'] = top / output_height
     (dest / 'config.json').write_text(json.dumps(config, ensure_ascii=False, indent=2) + '\n')
     ET.register_namespace('', 'http://www.w3.org/2000/svg')
     svg = ET.Element('{http://www.w3.org/2000/svg}svg', {'viewBox': '0 0 1 1', 'preserveAspectRatio': 'none'})

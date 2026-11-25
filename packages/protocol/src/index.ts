@@ -609,6 +609,7 @@ export const KEY_POUND = 35;
 export const SCREEN_PRESETS: { label: string; width: number; height: number }[] = [
   { label: '128×128', width: 128, height: 128 },
   { label: '128×160', width: 128, height: 160 },
+  { label: '132×176', width: 132, height: 176 },
   { label: '176×208', width: 176, height: 208 },
   { label: '176×220', width: 176, height: 220 },
   { label: '240×320', width: 240, height: 320 },

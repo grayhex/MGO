@@ -52,14 +52,20 @@ describe('readiness for the EKA2L1 core in PR #35', () => {
 });
 
 describe('independent skins, emulated devices and game platforms', () => {
-  it('has unique profile IDs and complete compatibility relations for fifteen skins', () => {
-    assert.equal(PHONE_SKIN_IDS.length, 15);
+  it('has unique profile IDs and complete compatibility relations for every skin', () => {
     assert.equal(new Set(EMULATED_DEVICES.map(d => d.id)).size, EMULATED_DEVICES.length);
     assert.deepEqual(Object.keys(PHONE_COMPATIBILITY), [...PHONE_SKIN_IDS]);
     for (const id of PHONE_SKIN_IDS) {
       assert.equal(profilesForSkin(id, 'j2me').length, 1, id);
       for (const deviceId of PHONE_COMPATIBILITY[id]) assert.ok(emulatedDevice(deviceId), deviceId);
     }
+  });
+  it('uses the existing Siemens preset for the S65 Java ME skin', () => {
+    const selection = selectPhone({ platform: 'j2me', skinId: 'siemens-s65' });
+    assert.ok(selection.ok && selection.device.engine === 'kemulator');
+    assert.equal(selection.device.presetId, '132x176-siemens-full-screen');
+    assert.equal(selection.device.layout, 'siemens');
+    assert.deepEqual(selection.device.screen, { width: 132, height: 176 });
   });
   it('reuses each Nokia skin for its real native OS generation', () => {
     const expected = {
@@ -95,8 +101,8 @@ describe('independent skins, emulated devices and game platforms', () => {
     assert.equal(selectPhone({ platform: 'symbian', skinId: 'nokia-n95', emulatedDeviceId: 'eka2l1-5320' }).ok, false);
     assert.equal(selectPhone({ platform: 'symbian', skinId: 'samsung-s5230' }).ok, false);
   });
-  it('S60 and N-Gage games run only on phones that have a Symbian / N-Gage profile: never on a Sony Ericsson, Motorola or Samsung', () => {
-    const NOT_NATIVE = ['sony-ericsson-k790i', 'sony-ericsson-k750i', 'sony-ericsson-w995', 'motorola-razr-v3', 'samsung-s5230', 'nokia-6100', 'nokia-6230i'] as const;
+  it('S60 and N-Gage games run only on phones with a compatible native profile', () => {
+    const NOT_NATIVE = ['sony-ericsson-k790i', 'sony-ericsson-k750i', 'sony-ericsson-w995', 'motorola-razr-v3', 'samsung-s5230', 'nokia-6100', 'nokia-6230i', 'siemens-s65'] as const;
     for (const skinId of NOT_NATIVE) {
       for (const platform of ['symbian', 'ngage', 'ngage2'] as const) {
         const plan = nativePhonePlan(platform, { ...DEFAULT_SETTINGS, skinId }, installed('RM-84', 'NEM-4', 'RM-409'));

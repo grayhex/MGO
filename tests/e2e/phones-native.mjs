@@ -8,6 +8,7 @@ import path from 'node:path';
 import { crc32 } from 'node:zlib';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
+import { PHONE_SKIN_IDS } from '@mgo/protocol';
 const cwd = process.cwd();
 function makeZip(entries) { const files = [], central = []; let offset = 0; for (const [name, text] of Object.entries(entries)) { const data = Buffer.from(text), nm = Buffer.from(name), crc = crc32(data); const l = Buffer.alloc(30); l.writeUInt32LE(0x04034b50, 0); l.writeUInt16LE(20, 4); l.writeUInt32LE(crc, 14); l.writeUInt32LE(data.length, 18); l.writeUInt32LE(data.length, 22); l.writeUInt16LE(nm.length, 26); const cd = Buffer.alloc(46); cd.writeUInt32LE(0x02014b50, 0); cd.writeUInt16LE(20, 4); cd.writeUInt16LE(20, 6); cd.writeUInt32LE(crc, 16); cd.writeUInt32LE(data.length, 20); cd.writeUInt32LE(data.length, 24); cd.writeUInt16LE(nm.length, 28); cd.writeUInt32LE(offset, 42); files.push(l, nm, data); central.push(cd, nm); offset += 30 + nm.length + data.length; } const cdb = Buffer.concat(central); const end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(Object.keys(entries).length, 8); end.writeUInt16LE(Object.keys(entries).length, 10); end.writeUInt32LE(cdb.length, 12); end.writeUInt32LE(offset, 16); return Buffer.concat([...files, cdb, end]); }
 const free = () => new Promise((res) => { const s = createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
@@ -83,7 +84,7 @@ try {
     const btn = el.closest('button');
     return { id: el.getAttribute('data-testid').replace('phone-card-', ''), box: r('.skin-box'), body: r('.skin-body'), lcd: r('.skin-lcd'), fit: btn.getAttribute('data-fit'), disabled: btn.disabled };
   }));
-  assert.equal(cards.length, 15);
+  assert.equal(cards.length, PHONE_SKIN_IDS.length);
   const unloaded = await p.evaluate(() => [...document.querySelectorAll('[data-testid^=phone-card-]')].filter((el) => { const i = el.querySelector('img.skin-body'); return !i || !i.complete || i.naturalWidth === 0; }).map((el) => el.getAttribute('data-testid')));
   assert.deepEqual(unloaded, [], 'every phone body picture loads');
   for (const c of cards) {
@@ -93,7 +94,7 @@ try {
   }
   assert.deepEqual(cards.filter((c) => c.fit === 'yes').map((c) => c.id).sort(), ['nokia-n-gage-classic', 'nokia-n-gage-qd']);
   assert.ok(cards.filter((c) => c.fit === 'no').every((c) => c.disabled), 'a phone that cannot run N-Gage games cannot be chosen for it');
-  for (const id of ['sony-ericsson-k790i', 'sony-ericsson-w995', 'motorola-razr-v3', 'samsung-s5230', 'nokia-6100']) {
+  for (const id of ['sony-ericsson-k790i', 'sony-ericsson-w995', 'motorola-razr-v3', 'samsung-s5230', 'nokia-6100', 'siemens-s65']) {
     assert.equal(await p.getByTestId(`phone-card-${id}`).locator('..').getAttribute('data-fit'), 'no', `${id} is marked as unable to run N-Gage games`);
   }
   assert.equal(await p.getByTestId('phone-firmware-nokia-n-gage-classic').getAttribute('data-loaded'), '1', 'the installed NEM-4 firmware is shown for the N-Gage Classic');

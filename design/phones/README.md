@@ -4,6 +4,6 @@ These PNGs are generated source illustrations used to build the website assets. 
 
 Each `source.png` is the current illustration for that handset.
 
-All ten sets remain visual review drafts. See apps/web/public/phones/README.md for native resolution, historical acceptance limitations and integration contract. Review source/reference geometry and spelling before signing off authenticity.
+The handsets are visual review drafts. See apps/web/public/phones/README.md for native resolution and the integration contract.
 
-The five additions (W995, K790i, original open RAZR V3, 5800 XpressMusic and S5230) retain source.png plus source-space layout.json, silhouette.svg and generation.json. Export them with `python3 tools/phones/export_measured.py`. Only alpha masks, cropping, resampling and format conversion are applied programmatically. The exporter never fabricates text or key artwork. Source photographs remain outside this repository with URLs/checksums in each reference dossier.
+Measured models retain source.png, source-space layout.json, silhouette.svg and generation.json. Export them with `python3 tools/phones/export_measured.py`. The exporter applies alpha masks, cropping, resampling and format conversion. Each reference dossier links to the source photographs and records their checksums.
