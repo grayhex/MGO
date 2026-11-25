@@ -1129,5 +1129,6 @@
   "Component resource usage": "Ресурсы компонентов",
   "API key and data storage": "API-ключ и хранение данных",
   "Pause": "Пауза",
-  "Resume": "Продолжить"
+  "Resume": "Продолжить",
+  "No memory limit": "Без лимита"
 }

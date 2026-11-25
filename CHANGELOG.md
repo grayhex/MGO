@@ -16,6 +16,11 @@ Formatted after [Keep a Changelog](https://keepachangelog.com/); versions follow
 
 ## [Unreleased]
 
+### Fixed
+- The handset keeps keyboard focus without drawing an outline around the player. The display shows a short handset model and more legible resolution labels.
+- The Java ME game language is selected from a list. Previously saved language codes remain available.
+- The HTTPS gateway has a 128 MiB limit in the default Compose file and uses two Nginx workers. The dashboard reports an uncapped gateway as such.
+
 ### Added
 - Settings → System can check, install and restore KEmulator builds with the MGO Bridge. Java ME compatibility options include resource preloading.
 - Native resolution labels in the library list and tiles, with colours for common sizes.

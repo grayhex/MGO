@@ -33,6 +33,11 @@ try {
 
   // ---- options are saved for the game and reach it ----
   const props = await upload('tests/fixtures/labgames/build/kemprops.jar');
+  const legacy = await fetch(`${base}/api/games/${props.id}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ settings: { emulation: { locale: 'eu-ES' } } }),
+  });
+  assert.ok(legacy.ok);
   await p.goto(base + '/');
   await p.locator('.game-card', { hasText: props.name }).getByRole('button', { name: 'Game settings' }).click();
   await p.getByText('Game fonts', { exact: true }).click();
@@ -43,7 +48,9 @@ try {
   await wait(async () => (await (await fetch(base + '/api/games/' + props.id)).json()).settings.emulation?.fontSizes?.large === 40, 'font options saved');
   await p.goto(base + '/play/' + props.id);
   await p.getByText('Game compatibility options', { exact: true }).waitFor();
-  await p.getByLabel('Language of the phone').fill('ru-RU');
+  const language = p.getByRole('combobox', { name: 'Language of the phone' });
+  assert.equal(await language.inputValue(), 'eu-ES', 'saved locale outside the dropdown list remains selected');
+  await language.selectOption('ru-RU');
   await p.getByText('Game fullscreen', { exact: true }).click();
   assert.ok(await p.getByRole('checkbox', { name: 'Game fullscreen', exact: true }).isChecked());
   await p.getByText('Preload resources', { exact: true }).click();
@@ -71,9 +78,15 @@ try {
 
   // ---- game speed ----
   const game = await upload('tests/fixtures/labgames/build/kemgame.jar');
+  const phone = await fetch(`${base}/api/games/${game.id}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ settings: { skinId: 'sony-ericsson-k790i' } }),
+  });
+  assert.ok(phone.ok);
   await p.setViewportSize({ width: 1920, height: 1080 });
   await p.goto(base + '/play/' + game.id);
   const panel = p.locator('.ctrl-col');
+  await panel.getByTestId('change-phone').getByText('K790i', { exact: true }).waitFor();
   for (const language of ['RU', 'EN']) {
     await panel.locator('.seg.lang').getByRole('radio', { name: language }).click();
     await panel.locator('.resource-meters').getByText('4.8%').waitFor();
@@ -107,6 +120,9 @@ try {
   await wait(async () => (await running())?.framesReceived > 5, 'game drawing');
   const first = await running();
   assert.equal(first.frameRateLimit, 30);
+  await p.locator('.stage').focus();
+  await p.keyboard.press('ArrowLeft');
+  assert.ok(await p.locator('.stage').evaluate(el => document.activeElement === el && getComputedStyle(el).outlineStyle === 'none'), 'the keyboard keeps focus on the phone without drawing an outline');
   for (const [width, height] of [[1920, 1080], [1536, 864]]) {
     await p.setViewportSize({ width, height });
     assert.ok(await p.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), `running player fits ${width}×${height}`);

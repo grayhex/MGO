@@ -50,7 +50,8 @@ COPY infrastructure/local/nginx-https.conf /etc/nginx/templates/default.conf.tem
 COPY infrastructure/local/nginx-aas.conf /etc/nginx/templates/aas.conf.template
 COPY infrastructure/local/05-mgo-tls.sh /docker-entrypoint.d/05-mgo-tls.sh
 COPY infrastructure/local/10-mgo-resources.sh /docker-entrypoint.d/10-mgo-resources.sh
-RUN chmod +x /docker-entrypoint.d/05-mgo-tls.sh /docker-entrypoint.d/10-mgo-resources.sh
+RUN chmod +x /docker-entrypoint.d/05-mgo-tls.sh /docker-entrypoint.d/10-mgo-resources.sh \
+    && sed -Ei 's/^worker_processes[[:space:]]+[^;]+;/worker_processes 2;/' /etc/nginx/nginx.conf
 COPY infrastructure/local/mgo-proxy.conf /etc/nginx/mgo-proxy.conf
 
 # ---- 4. Runtime (the default target: keep it the last stage) --------------------------------------------------------------------------

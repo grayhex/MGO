@@ -20,6 +20,7 @@
 .stage-bar .title strong { font-size: 1.08rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stage-bar .title span { font-size: 0.75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stage { --stage-h: clamp(380px, calc(100dvh - var(--header-h) - 250px), 920px); height: var(--stage-h); padding: 20px; background: var(--stage-bg); display: block; position: relative; }
+.stage:focus { outline: none; }
 .stage-card.is-screen { position: static; }
 .stage.stage-screen { --stage-h: clamp(340px, 56dvh, 640px); }
 /* Tall touch displays need the full height: shrinking this box would undo the zoom crop. */
@@ -70,9 +71,10 @@
 .ctrl-col .switch .track { width: 30px; height: 17px; }
 .ctrl-col .switch .track::after { width: 13px; height: 13px; }
 .ctrl-col .switch input:checked + .track::after { transform: translateX(13px); }
-.tweak-tools, .tweak-locale { display: flex; align-items: center; gap: 6px; }
+.tweak-tools, .tweak-locale { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tweak-locale { flex: 1; }
 .tweak-tools > button { margin-inline-start: auto; }
-.ctrl-col .tweak-locale input { width: 82px; min-height: 26px; padding-block: 2px; }
+.ctrl-col .tweak-locale .select { flex: 1; min-width: 0; min-height: 28px; padding-block: 2px; font-size: .75rem; }
 .tweak-switches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 8px; }
 .ctrl-col .tweak-switches .control-line { flex-wrap: nowrap; justify-content: flex-start; gap: 3px; }
 .recording-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
@@ -161,10 +163,11 @@ textarea.text-editor-field { resize: vertical; min-height: 84px; }
 .chips .chip.ok .icon-svg { color: var(--success, #2e9e5b); }
 .chips .chip .badge { margin-left: 4px; }
 .player-chips { flex-wrap: nowrap; gap: 4px; }
-.player-chips .chip { height: 23px; min-width: 0; gap: 4px; padding: 0 5px; font-size: .68rem; line-height: 1; white-space: nowrap; }
+.player-chips .chip { flex: none; height: 23px; min-width: 0; gap: 4px; padding: 0 5px; font-size: .68rem; line-height: 1; white-space: nowrap; }
 .player-chips .chip .icon-svg { width: 12px; height: 12px; flex: none; }
 .player-chips .chip-flex { flex: 0 1 auto; }
 .player-chips .chip-flex > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.player-chips:has(.phone-chip) { flex-wrap: wrap; }
 .switch-row { display: flex; flex-wrap: wrap; gap: 5px 11px; }
 /* a picker that lists every model (Settings): wraps instead of widening the page */
 .skin-picker.wrap { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); overflow: visible; padding: 4px 0; border-top: 0; }
