@@ -20,7 +20,7 @@
 
 ## What you can do
 
-- **Play in a real handset layout.** Pick from 15 phones with interactive keys, zoom into the display, or dim the interface with Lights Out. Use a keyboard, gamepad, or touch controls.
+- **Play in a real handset layout.** Pick from 16 phones with interactive keys, zoom into the display, or dim the interface with Lights Out. Use a keyboard, gamepad, or touch controls.
 - **Bring your own collection.** Import separate folders for Java ME, N-Gage and Symbian. Browse by platform and genre, see the resolution for each known build, and return to the running game from the library.
 - **Find builds and fill in game cards.** Use the J2ME Archive index to identify builds and the curated list to find individual JARs. Add descriptions and screenshots with My Abandonware or MobyGames.
 - **Keep your progress on the server.** MGO stores saves and game settings across browser sessions. Choose a MIDI SoundFont for Java ME and see emulator status in Settings.

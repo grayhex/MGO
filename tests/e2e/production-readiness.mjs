@@ -6,6 +6,7 @@ import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { PHONE_SKIN_IDS } from '@mgo/protocol';
 const dir = mkdtempSync(path.join(tmpdir(), 'mgo-ready-'));
 const sleep = ms => new Promise(r => setTimeout(r,ms));
 const wait = async (fn, message) => { for(let i=0;i<300;i++){try{const result=await fn();if(result)return result;}catch{}await sleep(100);}throw new Error('timeout: '+message);};
@@ -46,7 +47,7 @@ try{
   const n95Ready = p.locator('[data-testid="native-readiness"][data-ready="1"] [data-testid="resolved-firmware"][data-code="RM-320"]').filter({ hasText: 'N95 8GB' });
   await n95Ready.waitFor({ state: 'visible' });
   await p.getByTestId('change-phone').click();
-  assert.equal(await p.locator('.phone-pick').count(),15);
+  assert.equal(await p.locator('.phone-pick').count(), PHONE_SKIN_IDS.length);
   assert.equal(await p.locator('.phones-intro').count(),1);
   await p.evaluate(async () => { await Promise.all([...document.querySelectorAll('.phone-pick .skin-body')].map(img => img.decode().catch(() => undefined))); });
   await p.screenshot({ path: 'test-results/mgo-phones.png', fullPage: true, animations: 'disabled' });

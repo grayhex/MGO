@@ -1,0 +1,11 @@
+Siemens S65 handset artwork for MGO
+
+The artwork and its exported image variants are made available under
+CC BY-SA 2.5 (https://creativecommons.org/licenses/by-sa/2.5/).
+
+The illustration uses Afrank99's photograph "Siemens S65 AF.jpg",
+published under CC BY-SA 2.5 on Wikimedia Commons, as its main reference.
+https://commons.wikimedia.org/wiki/File:Siemens_S65_AF.jpg
+
+MGO uses a new front-facing illustration with transparent full and close-up
+assets for the emulator. The original photograph is available at the source link.

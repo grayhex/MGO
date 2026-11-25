@@ -1130,5 +1130,6 @@
   "API key and data storage": "API-ключ и хранение данных",
   "Pause": "Пауза",
   "Resume": "Продолжить",
-  "No memory limit": "Без лимита"
+  "No memory limit": "Без лимита",
+  "The Siemens CX75 preset provides 132×176 and the Siemens key layout.": "Профиль Siemens CX75 задаёт экран 132×176 и раскладку Siemens."
 }

@@ -1,6 +1,6 @@
 # Phone artwork for MGO
 
-Fifteen independently shaped handset illustrations, **review drafts**. Files are original generated artwork informed by the linked photographic references; they are not manufacturer-authorized reproductions. Historical acceptance (especially tiny legends, materials and precise physical key boundaries) is still required. Reference independence gaps are recorded in each references.md; do not interpret export validation as historical certification.
+Sixteen independently shaped handset illustrations, **review drafts**. Files are original generated artwork informed by the linked photographic references; they are not manufacturer-authorized reproductions. Historical acceptance (especially tiny legends, materials and precise physical key boundaries) is still required. Reference independence gaps are recorded in each references.md; do not interpret export validation as historical certification.
 
 ## Files per phone
 
@@ -20,7 +20,7 @@ python3 tools/phones/export_measured.py
 python3 tools/phones/validate_assets.py
 ```
 
-`export_assets.py` retains the original five exports. `export_measured.py` reads `design/phones/<id>/layout.json` for W995, K790i, RAZR V3, 5800, S5230 and the five new Nokia models; it does not rewrite the original five. Each measured file records native pixel coordinates, the source crop, LCD bounds, individual physical key polygons and a silhouette mask. `source.png` is immutable. Technical alpha masks remove generator fringes without redrawing the handset. `generation.json` records provenance; `silhouette.svg` makes the mask reviewable.
+`export_assets.py` retains the original five exports. `export_measured.py` reads `design/phones/<id>/layout.json` for the measured handsets, including the Siemens S65. Each measured file records native pixel coordinates, the source crop, LCD bounds, individual physical key polygons and a silhouette mask. `source.png` is immutable. Technical alpha masks remove generator fringes without redrawing the handset. `generation.json` records provenance and `silhouette.svg` makes the mask reviewable.
 
 ## Coordinates and two view modes
 
@@ -28,7 +28,7 @@ python3 tools/phones/validate_assets.py
 
 Place live Canvas under the body, optional glass above, SVG hitboxes last. Canvas must use contain/letterboxing when framebuffer ratio differs from the handset display; never stretch the framebuffer. Use integer game rendering where practical. E71 remains a vertical handset with a horizontal 320×240 window.
 
-Only full mode has physical hitboxes. In screen mode provide separate touch keypad/softkeys, keyboard and gamepad; keep ongoing input state shared and release held sources when switching modes. Zoom changes display presentation only. It must not resize the emulated game or restart a MIDlet.
+Only full mode has physical hitboxes on the main handset. Screen mode shows a separate interactive keypad. Portrait skins can set `keypadCropTop` in full-view coordinates to keep details next to the controls. Zoom changes display presentation only and keeps the current MIDlet and its framebuffer.
 
 `keyMappings` are logical game bindings, not a complete reconstruction of the handset OS. Null means no game binding: do not send a fabricated J2ME code. E71's W/A/S/D game bindings and R/T/Y/F/G/H/V/B/N/M digit bindings are explicit configuration decisions, not automatic support for an emulated E71 keyboard. Call/End, OS shortcuts and Fn/Chr need an explicit implementation before enabling. 6100 has four navigation sectors and no invented central Fire key.
 
@@ -41,6 +41,7 @@ Only full mode has physical hitboxes. In screen mode provide separate touch keyp
 | motorola-razr-v3 | Original Silver, clamshell open (2004) | 176×220 | Individually outlined etched keypad cells; zoom is the inner display lid |
 | nokia-5800 | Standard XpressMusic Black/Red (2008) | 360×640 | Touch display; real Call/Menu/End and media shortcut, no invented D-pad |
 | samsung-s5230 | Original non-Wi-Fi GT-S5230 Black (2009) | 240×400 | Touch display; Call, Back and End, no invented numeric keypad |
+| siemens-s65 | Silver and graphite, Latin legends (2004) | 132×176 | Five-way joystick, two soft keys and twelve numeric keys |
 
 `input.kind`, `input.pointer` and `input.externalKeypad` describe input surfaces, not emulator hardware capabilities. 5800/S5230 always show the external game keypad in full view as well as zoom, and their Canvas receives real pointer events. OS-only keys remain unbound; Samsung Back uses the explicitly configured clear action. New phone profiles resolve to existing generic presets and retain their actual keys/fullscreen policy/platform properties. See `docs/PLAYER_CONTROLS.md` for the mapping.
 

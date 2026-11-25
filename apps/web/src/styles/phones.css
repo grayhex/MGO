@@ -87,7 +87,7 @@
   .symbian-panel .sym-default { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* Fifteen devices fit in a compact catalog without repeating compatibility prose. */
+/* Keep the catalog compact and put compatibility details in the phone picker. */
 .phones-models { grid-template-columns: repeat(auto-fill,minmax(min(192px,100%),1fr)); gap: 12px; margin-top: 16px; }
 .phone-preview.phone-pick { padding: 12px; gap: 6px; }
 .phone-pick .phone-pick-skin { height: 235px; }

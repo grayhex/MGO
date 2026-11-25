@@ -1,5 +1,5 @@
 // Browser end-to-end test of the phone skins: real Chromium -> built web UI -> API -> kem-adapter -> KEmulator (KemTest MIDlet).
-// Covers: /phones for all fifteen models and both views, hitboxes (hold, slide, several fingers, cancel, blur),
+// Covers: /phones for the entire catalog in both views, hitboxes (hold, slide, several fingers, cancel, blur),
 // keys without a binding, the live canvas under the transparent window without stretching, zoom without a restart,
 // release on model/view change.
 // Usage: npm run test:e2e:dev   (needs the runtime and fixtures built)
@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PHONE_SKIN_IDS as IDS } from '@mgo/protocol';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -19,7 +20,6 @@ const jar = path.join(root, 'tests/fixtures/testmidlet/build/kemtest.jar');
 const dataDir = mkdtempSync(path.join(tmpdir(), 'j2me-skins-'));
 const port = 18700 + Math.floor(Math.random() * 400);
 const base = `http://127.0.0.1:${port}`;
-const IDS = ['nokia-6100', 'nokia-6230i', 'sony-ericsson-k750i', 'nokia-n95', 'nokia-e71', 'sony-ericsson-w995', 'sony-ericsson-k790i', 'motorola-razr-v3', 'nokia-5800', 'samsung-s5230', 'nokia-n-gage-classic', 'nokia-n-gage-qd', 'nokia-n70', 'nokia-5320-xpressmusic', 'nokia-n8'];
 const results = [];
 const ok = (name, cond, extra = '') => { results.push({ name, pass: !!cond, extra }); console.log(`${cond ? '✔' : '✖'} ${name}${extra ? ` — ${extra}` : ''}`); if (!cond) process.exitCode = 1; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -66,7 +66,7 @@ try {
   await page.goto(base + '/phones/lab'); // the developer lab; /phones is the phone picker
   await page.waitForSelector('[data-testid=phone-nokia-e71]');
   await page.waitForFunction((count) => [...document.querySelectorAll('.skin-body')].every((i) => i.complete && i.naturalWidth > 0) && document.querySelectorAll('.skin-body').length === count * 2, IDS.length, { timeout: 20000 });
-  ok('/phones/lab shows all fifteen models in both views (30 pictures, all loaded)', true);
+  ok('/phones/lab shows the entire catalog in both views', true);
   for (const id of IDS) {
     const c = cfg[id];
     const n = await page.locator(`[data-testid=phone-${id}] .skin-box`).count();
@@ -245,7 +245,7 @@ try {
   // the phone is changed on /phones; the mouse button is still down on the key, so the clicks are dispatched
   await page.getByRole('link', { name: 'Phones' }).dispatchEvent('click');
   await page.locator('.phone-pick').nth(IDS.length - 1).waitFor();
-  ok('/phones offers fifteen models', (await page.locator('.phone-pick').count()) === IDS.length);
+  ok('/phones offers the entire catalog', (await page.locator('.phone-pick').count()) === IDS.length);
   const k750 = page.locator('.phone-pick:enabled').filter({ has: page.getByTestId('phone-card-sony-ericsson-k750i') });
   await k750.waitFor();
   await k750.dispatchEvent('click');

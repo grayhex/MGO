@@ -62,6 +62,7 @@ export function keypadCrops(skin: LoadedSkin): Rect[] {
   const controls = skin.hitboxes.filter(box => box.action && box.points.every(([, y]) => y >= bottom));
   if (controls.length === 0) return [];
   const first = Math.min(...controls.flatMap(box => box.points.map(([, y]) => y)));
-  const cut = (first + bottom) / 2;
+  const measuredTop = skin.config.keypadCropTop;
+  const cut = measuredTop !== undefined && measuredTop >= bottom && measuredTop <= first ? measuredTop : (first + bottom) / 2;
   return [{ x: 0, y: cut, width: 1, height: 1 - cut }];
 }
