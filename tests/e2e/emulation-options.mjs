@@ -182,9 +182,10 @@ try {
   assert.deepEqual(clipped.playedResolution, { width: 132, height: 176, source: 'played' });
   assert.equal(clipped.nativeResolution, undefined, 'a clipped picture is not evidence of the native resolution');
   await panel.getByRole('button', { name: 'Stop', exact: true }).click();
-  await wait(async () => !(await running()), 'S65 session stopped');
+  await p.getByTestId('state-badge').filter({ hasText: 'exited' }).waitFor();
   await p.locator('.stage-left').getByRole('button', { name: 'Library' }).click();
-  await p.locator('.game-card', { hasText: 'Small viewport' }).locator('.resolution-tag:visible').filter({ hasText: '—' }).waitFor();
+  await p.waitForURL(base + '/');
+  await p.locator(`[data-library-group="${padded.groupKey}"]`).getByLabel('Native resolution unknown').waitFor();
   assert.match(await p.getByTestId('phone-resolution-filter').innerText(), /132×176/);
   assert.ok((await handset(padded.id, 'sony-ericsson-k790i')).ok);
   await p.goto(base + '/play/' + padded.id);
