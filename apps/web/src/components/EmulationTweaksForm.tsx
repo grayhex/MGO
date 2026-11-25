@@ -1,5 +1,6 @@
 import { EMULATION_DEFAULTS, EMULATION_LIMITS, type EmulationTweaks } from '@mgo/protocol';
 import { t as translateUI } from '../i18n';
+import { Icon } from './Icon';
 import { Hint, Switch } from './ui';
 
 type Size = 'small' | 'medium' | 'large';
@@ -17,11 +18,15 @@ export function EmulationTweaksForm({ value, onChange, pointerDefault, fullscree
   const resettable = [value.locale, value.pointerEvents, value.forceFullscreen, value.startAppOnResume, value.preloadResources].some(v => v !== undefined);
   return (
     <fieldset className="tweaks">
-      <label className="control-line tweak-locale">
-        <span className="label-caps">{translateUI('Locale')} <Hint text="What the game reads as microedition.locale, for example en-US or ru-RU. Some games pick their language from it." /></span>
-        <input className="input" type="text" maxLength={8} placeholder={EMULATION_DEFAULTS.locale} value={value.locale ?? ''}
-          onChange={(e) => set({ locale: e.target.value === '' ? undefined : e.target.value })} aria-label={translateUI('Language of the phone')} />
-      </label>
+      <div className="tweak-tools">
+        <label className="tweak-locale">
+          <span className="label-caps">{translateUI('Locale')}</span>
+          <input className="input" type="text" maxLength={8} placeholder={EMULATION_DEFAULTS.locale} value={value.locale ?? ''}
+            onChange={(e) => set({ locale: e.target.value === '' ? undefined : e.target.value })} aria-label={translateUI('Language of the phone')} />
+        </label>
+        <Hint text="What the game reads as microedition.locale, for example en-US or ru-RU. Some games pick their language from it." />
+        <button className="btn ghost sm icon" type="button" aria-label={translateUI('Reset options')} title={translateUI('Reset options')} disabled={!resettable} onClick={() => set({ locale: undefined, pointerEvents: undefined, startAppOnResume: undefined, preloadResources: undefined, forceFullscreen: undefined })}><Icon name="restart" /></button>
+      </div>
       <div className="tweak-switches">
         <div className="control-line">
           <Switch checked={value.pointerEvents ?? pointerDefault} onChange={(v) => set({ pointerEvents: v === pointerDefault ? undefined : v })}>{translateUI('Touch events')}</Switch>
@@ -39,10 +44,6 @@ export function EmulationTweaksForm({ value, onChange, pointerDefault, fullscree
           <Switch checked={value.forceFullscreen ?? fullscreenDefault} onChange={forceFullscreen => set({ forceFullscreen })}>{translateUI('Game fullscreen')}</Switch>
           <Hint text="Force the game canvas to use the whole emulated screen, including the area normally reserved for soft keys. Applies on restart." />
         </div>
-      </div>
-      <div className="btn-row">
-        <button className="btn ghost sm" disabled={!resettable} onClick={() => set({ locale: undefined, pointerEvents: undefined, startAppOnResume: undefined, preloadResources: undefined, forceFullscreen: undefined })}>{translateUI('Reset options')}</button>
-        <Hint text="Applied when the game is started the next time." />
       </div>
     </fieldset>
   );

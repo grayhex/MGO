@@ -649,7 +649,9 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     } : {}),
   } as CSSProperties;
   const skinName = skin && `${skin.config.manufacturer} ${skin.config.model}`;
-  const outputSize = live ? { width: frameSize.w, height: frameSize.h } : j2me ? displayProfile : null;
+  const firmwareScreen = native.data?.plan.deviceId ? EMULATED_DEVICES.find(device => device.id === native.data?.plan.deviceId)?.screen : null;
+  const outputSize = live ? { width: frameSize.w, height: frameSize.h } : j2me ? displayProfile : firmwareScreen;
+  const outputTestId = !live && !j2me ? 'planned-frame-size' : 'frame-size';
   const sameResolution = outputSize && actualGameSize && outputSize.width === actualGameSize.width && outputSize.height === actualGameSize.height;
   const gameIcon = game && (game.hasIcon || game.iconPending) ? api.iconUrl(game.id) : null;
 
@@ -861,9 +863,9 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         <Panel icon="layers" title={translateUI("Display")}>
           <div className="chips player-chips">
             <span className="chip" title={translateUI(sameResolution ? 'Game and emulator resolution' : game?.nativeResolution?.source === 'frame' ? 'Estimated from game frames' : 'Native game resolution')}><Icon name="gamepad" />
-              <span>{translateUI(sameResolution ? 'Game + output' : 'Game')} <b data-testid="game-resolution"><span data-testid={sameResolution ? 'frame-size' : undefined}>{actualGameSize ? `${actualGameSize.width}×${actualGameSize.height}` : '—'}</span></b></span>
+              <span>{translateUI(sameResolution ? 'Game + output' : 'Game')} <b data-testid="game-resolution"><span data-testid={sameResolution ? outputTestId : undefined}>{actualGameSize ? `${actualGameSize.width}×${actualGameSize.height}` : '—'}</span></b></span>
             </span>
-            {outputSize && !sameResolution && <span className="chip" title={translateUI('Emulator output resolution')}><Icon name="device" /><span>{translateUI('Emulator')} <b data-testid="frame-size">{outputSize.width}×{outputSize.height}</b></span></span>}
+            {outputSize && !sameResolution && <span className="chip" title={translateUI('Emulator output resolution')}><Icon name="device" /><span>{translateUI('Emulator')} <b data-testid={outputTestId}>{outputSize.width}×{outputSize.height}</b></span></span>}
             <button type="button" className="chip chip-link chip-flex" onClick={() => navigate('/phones')} title={skinName ? `${translateUI("Change the phone")}: ${skinName}` : translateUI("Change the phone")} data-testid="change-phone"><Icon name="phone" /><span>{(j2me && skinName) || translateUI('Phone')}</span></button>
           </div>
           <div className="switch-row">

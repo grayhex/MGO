@@ -48,6 +48,7 @@ try {
   await p.locator('.skin-box').waitFor();
   await wait(async () => (await p.locator('.skin-box').getAttribute('data-skin')) === 'nokia-n-gage-classic', 'the phone to follow the firmware');
   assert.equal(await p.locator('.skin-box').getAttribute('data-skin'), 'nokia-n-gage-classic', 'a stale Sony Ericsson preference never hosts an N-Gage game');
+  assert.equal(await p.getByTestId('planned-frame-size').innerText(), '176×208', 'resolution comes from the selected firmware before boot');
   console.log('✔ the N-Gage game is shown on the N-Gage Classic although the browser remembered a Sony Ericsson');
 
   // ---- /phones: what fits, what has firmware, and every body sits exactly on its screen ----

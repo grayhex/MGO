@@ -35,7 +35,7 @@
 .skin-opt img { height: 64px; width: auto; max-width: 100%; object-fit: contain; pointer-events: none; }
 .skin-opt strong { font-size: 0.8125rem; line-height: 1rem; }
 .skin-opt span { font-size: 0.6875rem; line-height: 0.875rem; color: var(--muted); }
-.ctrl-col { display: grid; gap: 7px; min-width: 0; align-content: start; }
+.ctrl-col { display: grid; gap: 6px; min-width: 0; align-content: start; }
 .player-resources { display: flex; align-items: center; gap: 12px; padding: 9px 12px; background: var(--surface-elevated); border: 1px solid var(--outline); border-radius: 13px; font-size: .75rem; }
 .player-preferences { display: flex; align-items: center; gap: 6px; flex: none; }
 .player-preferences .seg button { height: 22px; padding: 0 7px; font-size: .7rem; }
@@ -58,7 +58,7 @@
 .ctrl-col .panel > summary .badge { margin-left: auto; border-radius: var(--r-pill); }
 .ctrl-col .panel > summary .badge + .chev { margin-left: 0; }
 .ctrl-col .panel > summary .chev { color: var(--subtle); }
-.ctrl-col .panel-body { padding: 3px 10px 8px; gap: 6px; font-size: .875rem; }
+.ctrl-col .panel-body { padding: 3px 10px 7px; gap: 6px; font-size: .875rem; }
 .ctrl-col .panel-body .input, .ctrl-col .panel-body .select { background-color: var(--surface-soft); }
 .ctrl-col .volume-slider input { accent-color: var(--panel-teal); }
 .ctrl-col .control-line .label-caps { font-size: .69rem; letter-spacing: .025em; }
@@ -70,9 +70,11 @@
 .ctrl-col .switch .track { width: 30px; height: 17px; }
 .ctrl-col .switch .track::after { width: 13px; height: 13px; }
 .ctrl-col .switch input:checked + .track::after { transform: translateX(13px); }
+.tweak-tools, .tweak-locale { display: flex; align-items: center; gap: 6px; }
+.tweak-tools > button { margin-inline-start: auto; }
 .ctrl-col .tweak-locale input { width: 82px; min-height: 26px; padding-block: 2px; }
 .tweak-switches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 8px; }
-.tweak-switches .control-line { flex-wrap: nowrap; justify-content: flex-start; }
+.ctrl-col .tweak-switches .control-line { flex-wrap: nowrap; justify-content: flex-start; gap: 3px; }
 .recording-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .recording-actions .btn.icon { margin-inline-start: 2px; }
 .ctrl-col .note { padding: 8px 10px; margin: 0; }
