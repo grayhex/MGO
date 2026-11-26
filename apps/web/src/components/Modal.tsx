@@ -8,9 +8,12 @@ export function Modal({ title, onClose, children, wide, className = '' }: { titl
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     ref.current?.focus();
+    const element = ref.current;
+    const tvBack = () => close.current();
+    element?.addEventListener('mgo:tv-back', tvBack);
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); close.current(); } };
     window.addEventListener('keydown', k, true);
-    return () => { window.removeEventListener('keydown', k, true); prev?.focus?.(); };
+    return () => { element?.removeEventListener('mgo:tv-back', tvBack); window.removeEventListener('keydown', k, true); prev?.focus?.(); };
   }, []);
   return (
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>

@@ -715,3 +715,5 @@ export interface NgageInfo { title: string; sourceUrl: string; attribution: stri
 
 export interface KemulatorRelease { version: string; tag: string; asset: string; sha256: string; bytes: number }
 export interface KemulatorUpdateStatus { supported: boolean; version: string | null; bundledVersion: string | null; updated: boolean; busy: boolean }
+
+export * from './tv.js';

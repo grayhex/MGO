@@ -116,5 +116,29 @@ try {
     assert.ok(Math.abs(m.body.h - m.box.h) <= 1, `${w}x${h}: body = box`);
   }
   console.log('✔ in the player the N-Gage screen stays in its window at 5 window sizes');
+  const runningNative = async () => (await (await fetch(base + '/api/sessions')).json()).find(session => session.gameId === game.id && session.state === 'running');
+  const nativeSession = await runningNative();
+  await p.setViewportSize({ width: 1920, height: 1080 });
+  await p.goto(base + '/tv');
+  await p.getByRole('dialog', { name: 'Phone controller' }).getByRole('button', { name: 'Back' }).click();
+  await p.locator('.tv-game-tile').filter({ hasText: game.name }).click();
+  await p.getByRole('button', { name: 'Choose a phone', exact: true }).click();
+  const chooser = p.getByRole('dialog', { name: 'Choose a phone' });
+  const classic = chooser.getByRole('button', { name: /N-Gage Classic/ });
+  const qd = chooser.getByRole('button', { name: /N-Gage QD/ });
+  await wait(() => classic.isEnabled(), 'TV reads actual installed firmware');
+  assert.ok(await qd.isDisabled());
+  await classic.click();
+  await p.locator('.tv-details [data-tv-prefer]').click();
+  const lcd = p.locator('.tv-player .player-bare-screen canvas');
+  await lcd.waitFor();
+  await wait(async () => (await lcd.getAttribute('width')) === '176' && (await lcd.getAttribute('height')) === '208', 'TV shows native output size');
+  assert.equal((await runningNative()).id, nativeSession.id, 'TV reattaches the same running N-Gage session');
+  await p.keyboard.press('KeyM');
+  const tvMenu = p.getByRole('dialog', { name: 'TV menu' });
+  await tvMenu.getByRole('button', { name: 'Stop and return to library' }).click();
+  await p.getByRole('dialog', { name: 'Stop game?' }).getByRole('button', { name: 'Stop and return to library' }).click();
+  await wait(async () => !await runningNative(), 'TV stops the real agent session');
+  console.log('✔ TV Mode shows installed N-Gage firmware, resumes the native session at 176×208 and stops it');
   assert.deepEqual(errors, []);
 } finally { await browser?.close(); server.kill('SIGTERM'); agent.kill('SIGTERM'); await sleep(300); rmSync(dir, { recursive: true, force: true }); }

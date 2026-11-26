@@ -1,4 +1,4 @@
-# Phones, Lights Out and gamepads
+# Phone controls, Bluetooth and gamepads
 
 ## Automatic phone profiles
 
@@ -26,9 +26,23 @@ Automatic mode applies skinId → device + width/height + layout on the server, 
 
 Screen view shows the original handset controls alongside the display. On N-Gage Classic and QD the directional controls sit above the numeric keypad in the left column.
 
-Use **Controls → On-screen keypad** to show or hide the keypad in Phone and Screen views. Pick 100%, 150% or 200% under **Keypad width**. The size applies to Lights Out too. The player remembers these choices in the browser.
+Use **Controls → On-screen keypad** to show or hide the detached keypad in Screen view. Pick 100%, 150% or 200% under **Keypad width**. The size applies to Lights Out too. Phone view already has interactive keys on the handset. The player remembers these choices in the browser.
 
 Use the moon button or **Alt+L** to toggle Lights Out. **Escape** exits. The player hides the side panels and dims the handset and onscreen controls. The LCD stays at full brightness. Moving or touching the pointer reveals the menu for the touch controls, fullscreen and exit. The presentation preference is saved in the browser and respects reduced motion.
+
+## Sony Ericsson Bluetooth controllers
+
+1. Pair the phone with the computer running the browser in your operating system's Bluetooth settings.
+2. In **Settings → Sound & controls → Bluetooth phone**, click **K790i**, **K750i** or **W995** to download its `.hid` file directly from MGO. Use the computer's Bluetooth file transfer or USB to send it to the phone. Follow any installation prompt on the phone.
+3. On the phone, open **Entertainment → Remote Control**, select the `MGO-` profile for your model and choose the paired computer. Click **Test phone buttons** in MGO and press a key on the phone. Then open a game and use the navigation keys, soft keys, digits, `*` and `#`. Slide the W995 open to use its number pad.
+
+In TV Mode, volume up opens the global menu and volume down goes back. Holding `#` opens the menu on phones that deliver a held key. [TV Mode controls](TV_MODE.md#controls)
+
+**Controls** shows the most recently used input source with a phone, gamepad or keyboard icon. The phone icon appears after MGO receives a key from a profile. The operating system handles pairing and file transfer. All three profiles send standard USB HID keyboard usages F13–F24, some with Shift. Keyboard events carry no phone model. Use the tester to check that your browser receives those codes. The player applies the logical keys to the running emulator's layout. Existing custom keyboard bindings for those codes take precedence.
+
+The browser forwards each press and release through the same stream as normal keyboard input. The MGO server can be on another machine. The Sony Ericsson remote exposes keyboard and mouse HID with no vibration output. Existing vibration on supported gamepads and the device running the browser remains available. [Sony Ericsson HID developer guidelines](https://www.yumpu.com/en/document/view/7032510/bluetoothtm-hid-remote-control-sony) · [WebHID protected usages](https://developer.chrome.com/docs/capabilities/hid#security_and_privacy)
+
+The profiles are built from `apps/web/src/phoneRemote.ts` and the included handset display images. Regenerate them after changing the mapping with `node --experimental-strip-types tools/controls/build-sony-ericsson-profiles.mjs` (Node 22+ and GNU tar).
 
 ## Gamepads
 
@@ -49,4 +63,4 @@ Focus loss/hidden page, disconnect and remapping release only relevant sources. 
 - `node tests/e2e/phone-expansion.mjs`: five added handsets, body keys, real pointer coordinates, full/zoom views and session persistence; included in `npm run test:e2e`.
 - `CHROMIUM_PATH=/usr/bin/chromium node tests/e2e/player-features.mjs` for system Chromium; omit the variable to use Playwright's installed browser.
 
-Browser tests use the real backend/MIDlet and simulated Gamepad API data. They cannot certify actual USB/Bluetooth hardware or browser-specific controller drivers. Device disconnect/focus/deadzone/multiple-source behavior also has deterministic unit tests.
+Browser tests use the real backend/MIDlet, simulated Gamepad API data and simulated Sony Ericsson key events. Actual Bluetooth pairing and OS key delivery need a physical test. Device disconnect, focus, deadzone and multiple-source input also have deterministic unit tests.

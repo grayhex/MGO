@@ -55,6 +55,8 @@ In Portainer or a NAS container manager, deploy the same file as a stack. Open `
 2. Select a phone and press Play. Click a library row to open its game card. Use the **Screen** view for a larger picture with the handset keypad alongside it.
 3. For Symbian and N-Gage, add your device firmware in **Settings → Firmware**. The model and product code guide you to a matching archive. [Firmware guide](docs/SYMBIAN.md)
 
+Open **TV Mode** for a big-screen library, controller navigation and a phone remote. [TV Mode and Raspberry Pi guide](docs/TV_MODE.md)
+
 [Library and metadata](docs/LIBRARY.md) · [Controls](docs/PLAYER_CONTROLS.md) · [Backups](docs/BACKUP.md) · [Changes](CHANGELOG.md)
 
 ## Built with

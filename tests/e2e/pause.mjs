@@ -50,6 +50,28 @@ try {
   await hide(false);
   await wait(async () => (await session()).paused === false, 'visible page resumes it');
 
+  // A manual pause survives changing players. TV navigation can still resume the same session.
+  await p.getByRole('button', { name: 'Pause', exact: true }).click();
+  await wait(async () => (await session()).paused === true, 'manual pause before switching views');
+  const pausedSession = await session();
+  await p.getByRole('link', { name: 'TV Mode' }).click();
+  await p.getByRole('dialog', { name: 'Phone controller' }).getByRole('button', { name: 'Back' }).click();
+  await p.locator('.tv-game-tile').filter({ hasText: game.name }).click();
+  await p.locator('.tv-details [data-tv-prefer]').click();
+  const resumeFromStage = p.locator('.tv-player').getByRole('button', { name: 'Resume', exact: true });
+  await resumeFromStage.waitFor();
+  await p.waitForFunction(() => document.activeElement?.textContent.trim() === 'Resume');
+  assert.equal((await session()).id, pausedSession.id);
+  assert.equal((await session()).paused, true);
+
+  await p.keyboard.press('KeyM');
+  await p.getByRole('dialog', { name: 'TV menu' }).waitFor();
+  await p.waitForFunction(() => document.activeElement?.closest('.tv-dialog-menu') && document.activeElement.textContent.trim() === 'Resume');
+  await p.keyboard.press('Enter');
+  await wait(async () => (await session()).paused === false && (await frames()) > pausedSession.framesReceived + 5, 'TV resumes the paused emulator');
+  assert.equal((await session()).id, pausedSession.id);
+  await resumeFromStage.waitFor({ state: 'hidden' });
+
   assert.deepEqual(errors, []);
   console.log('pause e2e OK');
 } finally {

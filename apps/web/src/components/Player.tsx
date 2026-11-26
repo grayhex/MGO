@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { api, ApiError, type JarAnalysisView } from '../api';
 import type { Toast } from '../App';
 import { PcmAudio } from '../audio';
-import { InputController } from '../input';
+import { InputController, type InputSource } from '../input';
 import { isSkinId, useCatalog, usePrefs, useSkin } from '../skin/registry';
 import { keypadCrops } from '../skin/hitboxes';
 import { resolutionEstimateLabel } from '../libraryView';
@@ -37,6 +37,9 @@ import { betterPhone, type PhoneOption } from '../betterPhone';
 import { nextRotation, unrotatePoint, type Rotation } from '../skin/geometry';
 import { useRotation } from '../skin/rotation';
 import { VolumeSlider } from './VolumeSlider';
+import { useTvLcd, type TvPlayerOptions } from '../tv/player';
+import { TvKeyboard } from '../tv/Keyboard';
+import { TEXT_CONSTRAINT } from '@mgo/protocol';
 
 type Conn = 'connecting' | 'open' | 'reconnecting' | 'closed' | 'idle';
 
@@ -50,7 +53,7 @@ function saveControlPreference(key: string, value: string): void {
   try { localStorage.setItem(`mgo.player.${key}`, value); } catch { /* browser storage is optional */ }
 }
 
-export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, health }: { gameId: string; autoStart: boolean; onAutoStartConsumed: () => void; toast: (k: Toast['kind'], t: string) => void; onExit: () => void; health: HealthStatus | null }) {
+export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, health, tv }: { gameId: string; autoStart: boolean; onAutoStartConsumed: () => void; toast: (k: Toast['kind'], t: string) => void; onExit: () => void; health: HealthStatus | null; tv?: TvPlayerOptions }) {
   const developer=useDeveloperMode();
   const [game, setGame] = useState<GameMeta | null>(null);
   const [failure, setFailure] = useState<{ failure: import('@mgo/protocol').StartFailure; sessionId: string | null } | null>(null);
@@ -74,7 +77,16 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const [fps, setFps] = useState(0);
   const framesSeen = useRef(0);
   const [pauseInfo, setPauseInfo] = useState<{ on: boolean; reason: 'manual' | 'hidden' } | null>(null);
+  const pausedByPlayer = !!pauseInfo?.on && pauseInfo.reason === 'manual';
   const [textArea, setTextArea] = useState<Extract<ServerEvent, { t: 'text' }>['area']>(null);
+  const [tvText, setTvText] = useState('');
+  const [dismissedText, dismissText] = useState<string | null>(null);
+  const textField = textArea ? [textArea.kind, textArea.x, textArea.y].join(':') : null;
+  useEffect(() => {
+    if (!tv) return;
+    setTvText(textArea?.text ?? '');
+    if (!textField) dismissText(null);
+  }, [textField, !!tv]);
   const [menu, setMenu] = useState<Extract<ServerEvent, { t: 'menu' }> | null>(null);
   const [perm, setPerm] = useState<Extract<ServerEvent, { t: 'permission' }> | null>(null);
   // Automatic mode synchronizes the skin; Advanced keeps presentation independent.
@@ -100,7 +112,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     return saved === '100' || saved === '150' ? saved : '200';
   });
   const [gamepadVibration, setGamepadVibration] = useState(() => getControlPreference('gamepad-vibration') !== 'off');
-  const vibrationEnabled = useRef(gamepadVibration); vibrationEnabled.current = gamepadVibration;
+  const vibrationEnabled = useRef(gamepadVibration); vibrationEnabled.current = tv?.vibration ?? gamepadVibration;
   const [keymap, setKeymap] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -111,7 +123,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const [padMenu, setPadMenu] = useState(false);
   const padMenuOpen = useRef(false); padMenuOpen.current = padMenu;
   const [padState, setPadState] = useState<PadState>({controllers:[],pressed:[]});
-  const gamepad = useRef<GamepadPoller | null>(null);
+  const ownGamepad = useRef<GamepadPoller | null>(null);
+  const gamepad = tv?.gamepad ?? ownGamepad;
   const [lights, setLights] = useState(() => { try { return localStorage.getItem('j2me-web.lights.v1') === 'true'; } catch { return false; } });
   const [awake, setAwake] = useState(true);
   const [touchControls, setTouchControls] = useState(false);
@@ -120,8 +133,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const { skin, error: skinError, retry: retrySkin } = useSkin(loaded ? prefs.skinId : null);
   // A touch-screen monoblock (Nokia 5800, Samsung S5230) is only a display: a "screen only" view means nothing there.
   const monoblock = skin?.config.input?.kind === 'touchscreen';
-  const view: 'full' | 'screen' = monoblock && skin?.config.id !== 'nokia-n8' ? 'full' : prefs.view;
-  const lightsActive = lights && view === 'screen';
+  const view: 'full' | 'screen' = tv ? (tv.display === 'full' ? 'full' : 'screen') : monoblock && skin?.config.id !== 'nokia-n8' ? 'full' : prefs.view;
+  const lightsActive = !tv && lights && view === 'screen';
   const wake = () => { setAwake(true); clearTimeout(wakeTimer.current); wakeTimer.current = setTimeout(() => setAwake(false), 2500); };
   useEffect(() => { try { localStorage.setItem('j2me-web.lights.v1', String(lights)); } catch {} }, [lights]);
   useEffect(() => {
@@ -133,10 +146,16 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     return () => { clearTimeout(wakeTimer.current);window.removeEventListener('keydown',key,true);document.removeEventListener('fullscreenchange',changed); };
   }, [lightsActive]);
   useEffect(() => {
+    if (tv) return;
     const key=(e:KeyboardEvent)=>{if(e.altKey && e.code==='KeyL' && !e.repeat){e.preventDefault();setPrefs({view:'screen'});setLights(v=>!v);}};
     window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
-  }, []);
+  }, [!!tv]);
   const [pad, setPad] = useState<string | null>(null);
+  const [lastInput, setLastInput] = useState<InputSource>();
+  const activeInput = lastInput === 'phone' ? 'phone'
+    : controls.gamepad && pad && lastInput !== 'keyboard' ? 'gamepad' : 'keyboard';
+  const inputLabel = translateUI(activeInput === 'phone' ? 'Input: Bluetooth phone'
+    : activeInput === 'gamepad' ? 'Input: Gamepad' : 'Input: Keyboard');
   const [busy, setBusy] = useState(false);
   const [frameSize, setFrameSize] = useState({ w: 240, h: 320 });
   const [vol, setVol] = useState(() => { try { return Number(localStorage.getItem('j2me-web.volume') ?? audioSettings().volume); } catch { return audioSettings().volume; } });
@@ -151,7 +170,9 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const fpsMenu = useRef<HTMLDetailsElement>(null);
   const streamRef = useRef<SessionStream | null>(null);
   const sessionRef = useRef<SessionStatus | null>(null);
-  const input = useMemo(() => new InputController(() => undefined), []);
+  const ownInput = useMemo(() => new InputController(() => undefined, setLastInput), []);
+  const input = tv?.input ?? ownInput;
+  const tvSize = useTvLcd(stage, tv?.display === 'clean', frameSize.w, frameSize.h, tv?.integer ?? true);
   const [bindings, setBindings] = useState(input.bindings);
 
   useEffect(() => {
@@ -205,7 +226,12 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
 
   const onEvent = useCallback((ev: ServerEvent) => {
     switch (ev.t) {
-      case 'hello': setState(ev.state); setFrameSize({ w: ev.width, h: ev.height }); break;
+      case 'hello':
+        setState(ev.state);
+        setFrameSize({ w: ev.width, h: ev.height });
+        // A new stream follows hello with a paused event only when the session is suspended.
+        setPauseInfo(null);
+        break;
       case 'state':
         setState(ev.state);
         if (ev.state === 'exited' || ev.state === 'failed') {
@@ -330,8 +356,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     window.addEventListener('keydown', go, { once: true });
     return () => { window.removeEventListener('pointerdown', go); window.removeEventListener('keydown', go); audio.close(); };
   }, [audio]);
-  useEffect(() => { audio.setVolume(vol / 100); try { localStorage.setItem('j2me-web.volume', String(vol)); } catch { /* ignore */ } }, [audio, vol]);
-  useEffect(() => { audio.setMuted(muted); }, [audio, muted]);
+  useEffect(() => { audio.setVolume((tv?.volume ?? vol) / 100); if (!tv) try { localStorage.setItem('j2me-web.volume', String(vol)); } catch { /* ignore */ } }, [audio, vol, tv?.volume]);
+  useEffect(() => { audio.setMuted(tv ? tv.volume === 0 : muted); }, [audio, muted, tv?.volume]);
 
   // client stats every second, server-side resources every two
   useEffect(() => {
@@ -381,8 +407,18 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   }, [state, session?.id]);
 
   // ---- input wiring: keyboard, focus loss, gamepad
-  useEffect(() => { input.enabled = live && conn === 'open' && !keymap && !menu && !perm; if (!input.enabled) input.releaseAll(); }, [input, live, conn, keymap, menu, perm]);
+  const tvStatus = tv?.report;
+  const tvPaused = !!tv && live && pausedByPlayer;
+  const tvTextOpen = !!tv && live && !tvPaused && !!textArea && textField !== dismissedText && !(textArea.constraints & TEXT_CONSTRAINT.UNEDITABLE);
+  const suppressInput = !!(menu || perm || keymap || (tv && link) || tvTextOpen);
   useEffect(() => {
+    const enabled = live && conn === 'open' && !suppressInput && !tvPaused && !tv?.blocked;
+    input.enabled = enabled;
+    if (!enabled) input.releaseAll();
+    tvStatus?.(suppressInput ? 'blocked' : tvPaused ? 'paused' : live && conn === 'open' ? 'game' : busy || !loaded || !sessionsChecked ? 'opening' : 'idle');
+  }, [input, live, conn, suppressInput, tvPaused, tv?.blocked, tvStatus, busy, loaded, sessionsChecked]);
+  useEffect(() => {
+    if (tv) return;
     window.addEventListener('keydown', input.onKeyDown);
     window.addEventListener('keyup', input.onKeyUp);
     const rel = () => input.releaseAll();
@@ -401,7 +437,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
       window.removeEventListener('blur', rel); document.removeEventListener('visibilitychange', vis);
       gp.stop(); input.releaseAll();
     };
-  }, [input, gameId, controls.gamepad]);
+  }, [input, gameId, controls.gamepad, !!tv]);
   const uiRef = useRef<(action: PadAction) => void>(() => undefined);
   const closePadSettings = () => {
     setPadMenu(false);
@@ -426,7 +462,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
       controls[(at+delta+controls.length)%controls.length]?.focus();
     } else if(action==='fire') (document.activeElement as HTMLElement)?.click();
   };
-  useEffect(()=>{if(gamepad.current)gamepad.current.uiMode=!live || !!menu || !!perm || keymap;},[controls.gamepad,live,menu,perm,keymap]);
+  useEffect(()=>{if(!tv && gamepad.current)gamepad.current.uiMode=!live || !!menu || !!perm || keymap;},[controls.gamepad,live,menu,perm,keymap,!!tv]);
   // the held-key state is shared by every control surface: changing the picture or the view lets go of everything
   useEffect(() => { input.releaseAll(); }, [input, prefs.skinId, view]);
 
@@ -495,6 +531,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     } finally { setBusy(false); }
   };
   const leave = async () => { if (sessionRef.current && (state === 'running' || state === 'starting' || state === 'stopping') && !await stop()) return; onExit(); };
+  const resume = () => { if (live && pausedByPlayer && conn === 'open') send({ t: 'pause', on: false }); };
+  if (tv) tv.handle.current = { leave, resume };
   const shot = async (how: 'save' | 'copy') => {
     const c = canvasEl.current;
     if (!c) return;
@@ -645,7 +683,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     && (view === 'screen' || skin?.config.input?.externalKeypad === true || matchMedia('(pointer: coarse)').matches));
   const canShowKeypad = view === 'screen' || skin?.config.input?.externalKeypad === true;
   const showKeypad = canShowKeypad && (keypadOverride ?? keypadDefault);
-  const external = lightsActive ? touchControls : showKeypad;
+  const external = !tv && (lightsActive ? touchControls : showKeypad);
   const keypadReady = loaded && (skin !== null || !!skinError) && (j2me || !!native.data || !!native.error);
   const crops = useMemo(() => skin ? keypadCrops(skin) : [], [skin]);
   const skinViews = skin?.config.views;
@@ -663,7 +701,6 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const outputTestId = !live && !j2me ? 'planned-frame-size' : 'frame-size';
   const sameResolution = outputSize && actualGameSize && outputSize.width === actualGameSize.width && outputSize.height === actualGameSize.height;
   const gameIcon = game && (game.hasIcon || game.iconPending) ? api.iconUrl(game.id) : null;
-  const pausedByPlayer = !!pauseInfo?.on && pauseInfo.reason === 'manual';
 
   const loadError = loadErrors.game || loadErrors.sessions || (j2me && !advanced ? loadErrors.devices : null);
   const checking = !loaded || !sessionsChecked || (j2me && !advanced && !devices.length && health?.ok !== false);
@@ -671,10 +708,18 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     <p className="error" role="alert">{translateUI(loadError)}</p>
     <button className="btn" type="button" onClick={() => { setLoadErrors({}); setLoadAttempt(n => n + 1); }}>{translateUI('Retry')}</button>
   </> : checking ? <p role="status">{translateUI('Connecting to the player…')}</p> : null;
-  const overlay = !running ? loadFeedback ?? (
+  const overlay = tvPaused ? (
+    <div className="tv-stage-pause">
+      <p role="status">{translateUI('Game paused')}</p>
+      <button className="btn primary" type="button" data-tv-prefer disabled={conn !== 'open'} onClick={resume}>
+        <Icon name="play" /> {translateUI('Resume')}
+      </button>
+    </div>
+  ) : !running ? loadFeedback ?? (
     <>
       {game && <h2>{game.name}</h2>}
-      {state === 'failed' && <p className="error">{translateUI("The emulator stopped unexpectedly. See the log.")}</p>}
+      {state === 'failed' && <p className="error" role="alert">{tv && log.at(-1) ? log.at(-1) : translateUI("The emulator stopped unexpectedly. See the log.")}</p>}
+      {tv && !j2me && !native.data?.plan.ready && <p role="status">{translateUI(native.error || native.data?.plan.message || 'Checking firmware…')}</p>}
       {game && game.classVersion >= 49 ? <p className="error">{translateUI("Java 5+ class files are not supported.")}</p> : (
         <button className="btn primary" disabled={!canStart} onClick={start}><Icon name="play" /> {translateUI(busy ? 'Starting…' : state === 'idle' ? 'Start' : 'Start again')}</button>
       )}
@@ -683,7 +728,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   ) : undefined;
 
   return (
-    <div className={`player-grid ${lightsActive ? 'lights-out' : ''} ${awake ? 'hud-awake' : ''} ${touchControls ? 'touch-controls' : ''}`} onPointerMove={wake} onPointerDown={wake}>
+    <div className={`player-grid ${tv ? 'tv-player' : ''} ${lightsActive ? 'lights-out' : ''} ${awake ? 'hud-awake' : ''} ${touchControls ? 'touch-controls' : ''}`} onPointerMove={tv ? undefined : wake} onPointerDown={tv ? undefined : wake}>
       <section className={`card stage-card ${view === 'screen' ? 'is-screen' : ''}`} ref={card} aria-label={translateUI("Phone")}>
         {lightsActive && (
           <div className="lights-hud" role="group" aria-label={translateUI('Lights Out controls')}>
@@ -695,7 +740,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
               aria-label={translateUI('Exit Lights Out')} title={`${translateUI('Exit Lights Out')} · Esc`}><Icon name="sun" /></button>
           </div>
         )}
-        <div className="stage-bar">
+        {!tv && <div className="stage-bar">
           <div className="stage-left">
             <button className="btn ghost sm" onClick={leave}><Icon name="back" /> {translateUI("Library")}</button>
             {gameIcon && <img key={gameIcon} className="player-game-icon" data-testid="player-game-icon" src={gameIcon} alt="" onError={event => { event.currentTarget.hidden = true; }} />}
@@ -743,7 +788,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
               <button className="btn ghost sm stage-tool" onClick={fullscreen} aria-label={translateUI("Toggle fullscreen")} title={translateUI("Fullscreen")}><Icon name="fullscreen" /><span>{translateUI("Fullscreen")}</span></button>
             </div>
           </div>
-        </div>
+        </div>}
 
         <div className={`stage-row${external && keypadReady ? ' with-keypad' : ''}`} style={keypadLayout}>
           {external && keypadReady && (
@@ -754,7 +799,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
             </div>
           )}
           <div ref={stage} tabIndex={-1} className={`stage ${view === 'screen' ? 'stage-screen' : ''} ${skin?.config.input?.kind === 'touchscreen' ? 'stage-touchscreen' : ''}`}>
-            {shownSkin.current ? (
+            {shownSkin.current && tv?.display !== 'clean' ? (
               <PhoneSkin
                 skin={shownSkin.current}
                 view={view}
@@ -762,31 +807,36 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
                 rotation={rotation}
                 canvasRef={setCanvas}
                 canvasProps={{ onPointerDown: pointer('D'), onPointerMove: pointer('M'), onPointerUp: pointer('U'), onPointerCancel: pointer('U') }}
-                integer={prefs.integer}
+                integer={tv?.integer ?? prefs.integer}
                 smooth={smooth}
                 input={input}
                 interactive={live && shownSkin.current === skin}
                 lcdOverlay={overlay}
               lcdBadge={live && showFps ? <span className="fps-badge" data-testid="fps-badge">{fps}</span> : undefined}
               />
-            ) : <div className="player-bare-screen">
+            ) : <div className="player-bare-screen" style={tvSize}>
               <canvas ref={setCanvas} width={frameSize.w} height={frameSize.h}
                 className={smooth ? undefined : 'pixelated'}
                 style={{ transform: `rotate(${rotation}deg)` }}
                 onPointerDown={pointer('D')} onPointerMove={pointer('M')} onPointerUp={pointer('U')} onPointerCancel={pointer('U')} />
               {overlay && <div className="player-bare-controls">{overlay}</div>}
             </div>}
-            {loaded && !skin && <div className="phone-load-status" role="status">
+            {loaded && !skin && tv?.display !== 'clean' && <div className="phone-load-status" role="status">
               <span>{translateUI(skinError ? 'Could not load the phone skin' : 'Loading the phone…')}</span>
               {skinError && <button className="btn sm" type="button" onClick={retrySkin}>{translateUI('Retry phone skin')}</button>}
             </div>}
           </div>
         </div>
 
-        {textArea && live && <TextEditor key={textArea.kind} area={textArea} onText={(text) => send({ t: 'text', text })} />}
+        {!tv && textArea && live && <TextEditor key={textArea.kind} area={textArea} onText={(text) => send({ t: 'text', text })} />}
+        {tvTextOpen && textArea && <Modal title={translateUI('Text input')} onClose={() => dismissText(textField)} wide>
+          <TvKeyboard label={translateUI('Text input')} value={tvText} secret={!!(textArea.constraints & TEXT_CONSTRAINT.PASSWORD)}
+            onChange={text => setTvText(text.slice(0, textArea.maxSize > 0 ? textArea.maxSize : 200))}
+            onDone={() => { send({ t: 'text', text: tvText }); dismissText(textField); }} />
+        </Modal>}
       </section>
 
-      <aside className="ctrl-col" aria-label={translateUI("Emulator controls")}>
+      {!tv && <aside className="ctrl-col" aria-label={translateUI("Emulator controls")}>
         <PlayerResources />
         <Panel icon="play" title={translateUI("Session")} right={<span className={`badge ${STATE_BADGE[state] ?? ''}`}>{translateUI(state === 'idle' ? 'stopped' : state)}</span>}>
           <div className="btn-row">
@@ -884,7 +934,11 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           </div>
         </Panel>
 
-        <Panel icon="gamepad" title={translateUI("Controls")}>
+        <Panel icon="gamepad" title={translateUI("Controls")} right={
+          <span className="input-source" data-testid="input-source" title={inputLabel} role="img" aria-label={inputLabel}>
+            <Icon name={activeInput} />
+          </span>
+        }>
           <div className="control-line">
             <Switch checked={showKeypad} disabled={!canShowKeypad} onChange={enabled => { setKeypadOverride(enabled); saveControlPreference('keypad', enabled ? 'on' : 'off'); }}>{translateUI("On-screen keypad")}</Switch>
             <div className="btn-row">
@@ -944,7 +998,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         {(developer || state === 'failed') && <Panel icon="log" title={translateUI(`Emulator log (${log.length})`)}>
           <pre className="log" tabIndex={0}>{log.slice(-120).join('\n') || '—'}</pre>
         </Panel>}
-      </aside>
+      </aside>}
 
       {keymap && <KeyMapDialog bindings={bindings} onClose={() => setKeymap(false)} onSave={(b) => { input.bindings = b; setBindings(b); }} />}
       {menu && (

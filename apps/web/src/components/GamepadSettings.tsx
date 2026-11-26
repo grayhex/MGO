@@ -2,16 +2,16 @@ import { t as translateUI } from '../i18n';
 import { useEffect, useState } from 'react';
 import { ACTION_LABEL } from '../input';
 import { clearPadOverride, DEFAULT_PAD, loadPadProfile, PAD_ACTIONS, savePadProfile, type GamepadPoller, type PadAction, type PadProfile, type PadState } from '../gamepad';
-export function GamepadSettings({ gameId, poller, state }: { gameId: string; poller: GamepadPoller | null; state: PadState }) {
+export function GamepadSettings({ gameId, poller, state }: { gameId?: string; poller: GamepadPoller | null; state: PadState }) {
   useEffect(()=>()=>{if(poller){poller.capture=undefined;poller.release();}},[poller]);
   const [profile,setProfile]=useState(()=>loadPadProfile(gameId));
-  const [scope,setScope]=useState<'game'|'global'>('game');
+  const [scope,setScope]=useState<'game'|'global'>(gameId ? 'game' : 'global');
   const [waiting,setWaiting]=useState<PadAction|null>(null);
   const apply=(p:PadProfile)=>{setProfile(p);poller?.setProfile(p);};
   return <div className="gamepad-settings">
     <p>{translateUI(state.controllers.length ? state.controllers.map(p=>`${p.id} (${p.mapping || 'raw HID'}, #${p.index})`).join(' · ') : 'Connect a USB/Bluetooth controller, then press a button. The browser may require a click first.')}</p>
     <p className="hint">{translateUI("Xbox/PlayStation use browser standard mapping where available. Raw HID indices vary; bind buttons or move an axis below.")}</p>
-    <label>{translateUI("Save scope")} <select aria-label={translateUI("Gamepad scope")} value={scope} onChange={e=>{if(poller)poller.capture=undefined;setWaiting(null);setScope(e.target.value as 'game'|'global');apply(loadPadProfile(e.target.value==='game'?gameId:undefined));}}><option value="game">{translateUI("This game")}</option><option value="global">{translateUI("Global")}</option></select></label>
+    {gameId && <label>{translateUI("Save scope")} <select aria-label={translateUI("Gamepad scope")} value={scope} onChange={e=>{if(poller)poller.capture=undefined;setWaiting(null);setScope(e.target.value as 'game'|'global');apply(loadPadProfile(e.target.value==='game'?gameId:undefined));}}><option value="game">{translateUI("This game")}</option><option value="global">{translateUI("Global")}</option></select></label>}
     <label>{translateUI("Deadzone")} {profile.deadzone.toFixed(2)} <input aria-label={translateUI("Stick deadzone")} type="range" min="0.1" max="0.9" step="0.05" value={profile.deadzone} onChange={e=>apply({...profile,deadzone:Number(e.target.value)})}/></label>
     {PAD_ACTIONS.map(action=><div className={`pad-binding ${state.pressed.includes(action)?'held':''}`} key={action}>
       <span>{translateUI(action in ACTION_LABEL ? ACTION_LABEL[action as keyof typeof ACTION_LABEL] : action)}</span>
@@ -20,7 +20,7 @@ export function GamepadSettings({ gameId, poller, state }: { gameId: string; pol
     </div>)}
     <div className="btn-row"><button className="btn" onClick={()=>{if(poller)poller.capture=undefined;setWaiting(null);savePadProfile(profile,scope==='game'?gameId:undefined);}}>{translateUI("Save mapping")}</button>
     <button className="btn" onClick={()=>{if(poller)poller.capture=undefined;setWaiting(null);apply(structuredClone(DEFAULT_PAD));}}>{translateUI("Reset")}</button>
-    <button className="btn" onClick={()=>{clearPadOverride(gameId);apply(loadPadProfile());}}>{translateUI("Use global for this game")}</button>
+    {gameId && <button className="btn" onClick={()=>{clearPadOverride(gameId);apply(loadPadProfile());}}>{translateUI("Use global for this game")}</button>}
     {waiting&&<button className="btn" onClick={()=>{if(poller)poller.capture=undefined;setWaiting(null);}}>{translateUI("Cancel binding")}</button>}</div>
   </div>;
 }
