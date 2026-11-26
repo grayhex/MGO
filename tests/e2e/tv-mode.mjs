@@ -121,7 +121,7 @@ try {
   const privateKey = path.join(dir, 'tv.key');
   execFileSync('openssl', ['req', '-x509', '-nodes', '-newkey', 'rsa:2048', '-days', '1', '-subj', '/CN=mgo-tv.local',
     '-addext', 'subjectAltName=DNS:mgo-tv.local', '-keyout', privateKey, '-out', certificate], { stdio: 'ignore' });
-  const forward = incoming => request({ hostname: '127.0.0.1', port, path: incoming.url, method: incoming.method, headers: { ...incoming.headers, 'x-forwarded-proto': 'https' } });
+  const forward = incoming => request({ hostname: '127.0.0.1', port, agent: false, path: incoming.url, method: incoming.method, headers: { ...incoming.headers, 'x-forwarded-proto': 'https' } });
   gateway = createServer({ key: readFileSync(privateKey), cert: readFileSync(certificate) }, (incoming, outgoing) => {
     const upstream = forward(incoming);
     upstream.on('response', response => { outgoing.writeHead(response.statusCode, response.headers); response.pipe(outgoing); });
@@ -338,7 +338,10 @@ try {
   for (const socket of connections) socket.destroy();
   gateway?.close();
   const stopped = once(server, 'exit');
+  // The fixture's proxy may still own a rejected upgrade when Chromium closes its contexts.
+  const forceStop = setTimeout(() => server.kill('SIGKILL'), 5000);
   server.kill('SIGTERM');
   await stopped;
+  clearTimeout(forceStop);
   rmSync(dir, { recursive: true, force: true });
 }
