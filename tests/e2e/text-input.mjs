@@ -52,6 +52,25 @@ try {
   await p.keyboard.press('ArrowDown');
   await wait(async () => (await field.getAttribute('type')) === 'password', 'password field masked');
 
+  await p.getByRole('link', { name: 'TV Mode' }).click();
+  await p.getByRole('dialog', { name: 'Phone controller' }).getByRole('button', { name: 'Back' }).click();
+  await p.locator('.tv-game-tile').filter({ hasText: game.name }).click();
+  await p.locator('.tv-details [data-tv-prefer]').click();
+  const tvEditor = p.getByRole('dialog', { name: 'Text input' });
+  const uppercase = tvEditor.getByRole('button', { name: 'Uppercase', exact: true });
+  await uppercase.click();
+  assert.equal(await uppercase.getAttribute('aria-pressed'), 'true');
+  await tvEditor.getByRole('button', { name: 'A', exact: true }).click();
+  await uppercase.click();
+  assert.equal(await uppercase.getAttribute('aria-pressed'), 'false');
+  await tvEditor.getByRole('button', { name: 'b', exact: true }).click();
+  await tvEditor.getByRole('button', { name: 'АБВ', exact: true }).click();
+  await uppercase.click();
+  await tvEditor.getByRole('button', { name: 'Я', exact: true }).click();
+  assert.equal(await tvEditor.getByRole('status', { name: 'Text input' }).textContent(), '•••');
+  await tvEditor.getByRole('button', { name: 'Done', exact: true }).click();
+  await wait(async () => /pass=\[AbЯ\]/.test(await log()), 'the TV keyboard preserves the password’s letter case');
+
   assert.deepEqual(errors, []);
   console.log('text input e2e OK');
 } finally {

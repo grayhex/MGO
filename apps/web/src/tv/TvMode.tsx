@@ -352,7 +352,7 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
         </>}
         {overlay === 'menu' && <>
           <div className="tv-actions">
-            {active && <button type="button" data-tv-prefer onClick={closeOverlay}>{t('Resume')}</button>}
+            {active && <button type="button" data-tv-prefer onClick={() => { handle.current?.resume(); closeOverlay(); }}>{t('Resume')}</button>}
             <button type="button" onClick={() => setOverlay('pair')}>{t('Pair a phone')}</button>
             <button type="button" onClick={() => setOverlay('controls')}>{t('Controller mapping')}</button>
             <button type="button" onClick={() => void fullscreen()}>{t('Toggle fullscreen')}</button>

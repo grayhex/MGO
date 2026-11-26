@@ -89,6 +89,8 @@ html.mgo-tv, html.mgo-tv body { overflow: hidden; }
 .tv-player .player-bare-screen canvas { width: 100%; height: 100%; max-height: 100%; object-fit: fill; }
 .tv-player .player-bare-controls { position: absolute; inset: 0; display: grid; place-content: center; padding: 1em; text-align: center; }
 .tv-player .player-bare-controls p { max-width: 35ch; }
+.tv-stage-pause { padding: .8em 1.1em; border-radius: .65em; background: var(--tv-surface); color: var(--tv-fg); }
+.tv-stage-pause p { margin-top: 0; }
 .tv-player .modal-backdrop { background: #070f0dbe; backdrop-filter: none; }
 .tv-player .modal { background: var(--tv-surface); color: var(--tv-fg); width: min(88vw, 23em); }
 .tv-veil { position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; padding: var(--tv-safe-y) var(--tv-safe-x); background: #020605bb; }
@@ -104,7 +106,7 @@ html.mgo-tv, html.mgo-tv body { overflow: hidden; }
 .tv-phone-grid img { max-height: 4em; max-width: 100%; object-fit: contain; }
 .tv-typed { padding: .55em; min-height: 2.6em; margin-bottom: .55em; border: 1px solid var(--tv-line); border-radius: .4em; overflow-wrap: anywhere; }
 .tv-letters { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: .27em; margin-bottom: .65em; }
-.tv-letters button { min-width: 0; min-height: 2em; padding: .1em; text-transform: uppercase; }
+.tv-letters button { min-width: 0; min-height: 2em; padding: .1em; }
 .tv-pair-code { display: flex; align-items: center; gap: 1em; margin: .8em 0; flex-wrap: wrap; }
 .tv-pair-code img { width: min(9em, 100%); height: auto; image-rendering: pixelated; border-radius: .3em; }
 .tv-code { color: var(--tv-focus, var(--primary)); letter-spacing: .14em; font: 700 1.7em var(--mono); overflow-wrap: anywhere; }

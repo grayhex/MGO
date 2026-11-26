@@ -3,8 +3,8 @@ import type { InputController } from '../input';
 import type { GamepadPoller } from '../gamepad';
 
 export type TvDisplay = 'clean' | 'screen' | 'full';
-export type TvPlayerStatus = 'opening' | 'game' | 'blocked' | 'idle';
-export interface TvPlayerHandle { leave: () => Promise<void>; }
+export type TvPlayerStatus = 'opening' | 'game' | 'blocked' | 'paused' | 'idle';
+export interface TvPlayerHandle { leave: () => Promise<void>; resume: () => void; }
 export interface TvPlayerOptions {
   input: InputController;
   gamepad: MutableRefObject<GamepadPoller | null>;

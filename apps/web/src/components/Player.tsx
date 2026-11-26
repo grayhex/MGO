@@ -77,6 +77,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const [fps, setFps] = useState(0);
   const framesSeen = useRef(0);
   const [pauseInfo, setPauseInfo] = useState<{ on: boolean; reason: 'manual' | 'hidden' } | null>(null);
+  const pausedByPlayer = !!pauseInfo?.on && pauseInfo.reason === 'manual';
   const [textArea, setTextArea] = useState<Extract<ServerEvent, { t: 'text' }>['area']>(null);
   const [tvText, setTvText] = useState('');
   const [dismissedText, dismissText] = useState<string | null>(null);
@@ -225,7 +226,12 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
 
   const onEvent = useCallback((ev: ServerEvent) => {
     switch (ev.t) {
-      case 'hello': setState(ev.state); setFrameSize({ w: ev.width, h: ev.height }); break;
+      case 'hello':
+        setState(ev.state);
+        setFrameSize({ w: ev.width, h: ev.height });
+        // A new stream follows hello with a paused event only when the session is suspended.
+        setPauseInfo(null);
+        break;
       case 'state':
         setState(ev.state);
         if (ev.state === 'exited' || ev.state === 'failed') {
@@ -402,14 +408,15 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
 
   // ---- input wiring: keyboard, focus loss, gamepad
   const tvStatus = tv?.report;
-  const tvTextOpen = !!tv && live && !!textArea && textField !== dismissedText && !(textArea.constraints & TEXT_CONSTRAINT.UNEDITABLE);
+  const tvPaused = !!tv && live && pausedByPlayer;
+  const tvTextOpen = !!tv && live && !tvPaused && !!textArea && textField !== dismissedText && !(textArea.constraints & TEXT_CONSTRAINT.UNEDITABLE);
   const suppressInput = !!(menu || perm || keymap || (tv && link) || tvTextOpen);
   useEffect(() => {
-    const enabled = live && conn === 'open' && !suppressInput && !tv?.blocked;
+    const enabled = live && conn === 'open' && !suppressInput && !tvPaused && !tv?.blocked;
     input.enabled = enabled;
     if (!enabled) input.releaseAll();
-    tvStatus?.(suppressInput ? 'blocked' : (live && conn === 'open') ? 'game' : busy || !loaded || !sessionsChecked ? 'opening' : 'idle');
-  }, [input, live, conn, suppressInput, tv?.blocked, tvStatus, busy, loaded, sessionsChecked]);
+    tvStatus?.(suppressInput ? 'blocked' : tvPaused ? 'paused' : live && conn === 'open' ? 'game' : busy || !loaded || !sessionsChecked ? 'opening' : 'idle');
+  }, [input, live, conn, suppressInput, tvPaused, tv?.blocked, tvStatus, busy, loaded, sessionsChecked]);
   useEffect(() => {
     if (tv) return;
     window.addEventListener('keydown', input.onKeyDown);
@@ -524,7 +531,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     } finally { setBusy(false); }
   };
   const leave = async () => { if (sessionRef.current && (state === 'running' || state === 'starting' || state === 'stopping') && !await stop()) return; onExit(); };
-  if (tv) tv.handle.current = { leave };
+  const resume = () => { if (live && pausedByPlayer && conn === 'open') send({ t: 'pause', on: false }); };
+  if (tv) tv.handle.current = { leave, resume };
   const shot = async (how: 'save' | 'copy') => {
     const c = canvasEl.current;
     if (!c) return;
@@ -693,7 +701,6 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const outputTestId = !live && !j2me ? 'planned-frame-size' : 'frame-size';
   const sameResolution = outputSize && actualGameSize && outputSize.width === actualGameSize.width && outputSize.height === actualGameSize.height;
   const gameIcon = game && (game.hasIcon || game.iconPending) ? api.iconUrl(game.id) : null;
-  const pausedByPlayer = !!pauseInfo?.on && pauseInfo.reason === 'manual';
 
   const loadError = loadErrors.game || loadErrors.sessions || (j2me && !advanced ? loadErrors.devices : null);
   const checking = !loaded || !sessionsChecked || (j2me && !advanced && !devices.length && health?.ok !== false);
@@ -701,7 +708,14 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     <p className="error" role="alert">{translateUI(loadError)}</p>
     <button className="btn" type="button" onClick={() => { setLoadErrors({}); setLoadAttempt(n => n + 1); }}>{translateUI('Retry')}</button>
   </> : checking ? <p role="status">{translateUI('Connecting to the player…')}</p> : null;
-  const overlay = !running ? loadFeedback ?? (
+  const overlay = tvPaused ? (
+    <div className="tv-stage-pause">
+      <p role="status">{translateUI('Game paused')}</p>
+      <button className="btn primary" type="button" data-tv-prefer disabled={conn !== 'open'} onClick={resume}>
+        <Icon name="play" /> {translateUI('Resume')}
+      </button>
+    </div>
+  ) : !running ? loadFeedback ?? (
     <>
       {game && <h2>{game.name}</h2>}
       {state === 'failed' && <p className="error" role="alert">{tv && log.at(-1) ? log.at(-1) : translateUI("The emulator stopped unexpectedly. See the log.")}</p>}

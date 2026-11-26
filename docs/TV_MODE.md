@@ -1,6 +1,6 @@
 # TV Mode
 
-Open **TV Mode** from the sidebar or go directly to `/tv`. The browser remembers the mode. Use **Menu → Exit TV Mode** to return to the desktop interface. In a running game the menu also offers **Resume**, display and sound settings, and a confirmed stop. Save in the game before stopping. Games and saves still live on your MGO server.
+Open **TV Mode** from the sidebar or go directly to `/tv`. The browser remembers the mode. Use **Menu → Exit TV Mode** to return to the desktop interface. In a running game the menu also offers **Resume**, display and sound settings, and a confirmed stop. **Resume** continues the same session when you bring a paused game over from the desktop player. Save in the game before stopping. Games and saves still live on your MGO server.
 
 ## Raspberry Pi and 4K TV
 
@@ -27,7 +27,7 @@ Some Linux images package the browser as `chromium-browser`. If sound requires a
 
 Open **Controller mapping** from the global menu to change gamepad actions and the dedicated menu/back buttons. Global and per-game mappings are shared with the standard player. Keyboard and other keyboard HID bindings use the standard player's keyboard mapping. A quick `#` press on the Sony Ericsson profile still goes to the game. Install the updated `.hid` file for the volume buttons. Delivery of extended keys, held keys and simultaneous inputs depends on the handset firmware and host OS. [Download and test the Sony Ericsson profiles](PLAYER_CONTROLS.md#sony-ericsson-bluetooth-controllers)
 
-The library groups installed versions under a single card. Use **Recently played**, **Favorites**, platform filters or **Search games**. Search has an on-screen keyboard with Latin and Cyrillic layouts. The game card contains build and handset choices, available screenshots, and compatibility settings for Java ME. For native games the selector lists compatible firmware and marks what needs to be installed.
+The library groups installed versions under a single card. Use **Recently played**, **Favorites**, platform filters or **Search games**. Search and game text entry use an on-screen keyboard with Latin and Cyrillic layouts and an **Uppercase** toggle. The game card contains build and handset choices, available screenshots, and compatibility settings for Java ME. For native games the selector lists compatible firmware and marks what needs to be installed.
 
 By default gameplay fills the display area with a clean LCD view. Use **Display** to switch between **Lights Out**, **Screen** and **Phone**. Whole-number scaling uses physical display pixels in Lights Out. At 4K a 240×320 image can scale to 1440×1920. Turn whole-number scaling off to fit the available area while keeping the aspect ratio. Nearest-neighbor keeps the pixel edges sharp. The emulator still renders at its normal resolution.
 
