@@ -219,6 +219,9 @@ try {
   ok('zoom does not change the emulated resolution', sess1.width === sess0.width && sess1.height === sess0.height && (await page.locator('[data-testid=frame-size]').innerText()) === fs0, fs0);
   const logAfter = sess1.logTail.join('\n');
   ok('the MIDlet was launched exactly once', (logAfter.match(/LAUNCHES \d+/g) ?? []).length === 1);
+  // The detached skin measures its container before it renders the keypad.
+  await page.locator('.stage .skin-box[data-view=screen]').waitFor();
+  await page.getByTestId('phone-keypad').waitFor();
   ok('in the Screen view the body has no keys and the controls are outside', (await page.locator('.stage .skin-box polygon').count()) === 0 && (await page.getByTestId('phone-keypad').count()) === 1);
   const big = await page.evaluate(() => document.querySelector('canvas').getBoundingClientRect().width);
   await page.screenshot({ path: path.join(outDir, 'skin-06-player-screen.png') });
