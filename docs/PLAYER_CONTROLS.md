@@ -34,11 +34,11 @@ Use the moon button or **Alt+L** to toggle Lights Out. **Escape** exits. The pla
 
 1. Pair the phone with the computer running the browser in your operating system's Bluetooth settings.
 2. In **Settings → Sound & controls → Bluetooth phone**, click **K790i**, **K750i** or **W995** to download its `.hid` file directly from MGO. Use the computer's Bluetooth file transfer or USB to send it to the phone. Follow any installation prompt on the phone.
-3. On the phone, open **Entertainment → Remote Control**, select the `MGO-` profile for your model and choose the paired computer. Click **Test phone buttons** in MGO and press a key on the phone. Then open a game and use the navigation keys, soft keys, digits, `*` and `#`. Slide the W995 open to use its number pad.
+3. On the phone, open **Entertainment → Remote Control**, select `MGO790A2`, `MGO750A2` or `MGO995A2` and choose the paired computer. Click **Test phone buttons** in MGO and press a key on the handset. Then open a game and use the navigation keys, soft keys, digits, `*` and `#`. Slide the W995 open to use its number pad.
 
-Replace any older MGO profile on the handset. The updated profiles send ordinary letter codes with Control, Shift and Alt. This avoids extended function keys that macOS can reserve for brightness. In TV Mode, the handset controls gameplay after a game starts. [TV Mode controls](TV_MODE.md#controls)
+The A2 profiles use plain arrow keys, Enter, Q/W, digits and X/Z. They match the default MGO keyboard bindings and can also be tested in a text editor. [TV Mode controls](TV_MODE.md#controls)
 
-**Controls** shows separate icons for the gamepad and Sony Ericsson HID. The gamepad appears when the browser reports it. The handset icon appears after MGO receives input from it in the player. Bluetooth keyboard events carry no connection status or model. Use the tester to check that your browser receives the keys. The player applies the logical keys to the running emulator's layout.
+**Controls** shows separate badges for the gamepad and Sony Ericsson. The gamepad appears when the browser reports it. Press volume up on the handset in the player or in **Test phone buttons** to light up **SE** for this browser tab. This only updates the badge. The OS delivers the game buttons as ordinary keyboard events and exposes no Bluetooth keyboard connection or disconnection status to the browser.
 
 The browser forwards each press and release through the same stream as normal keyboard input. The MGO server can be on another machine. The Sony Ericsson remote exposes keyboard and mouse HID with no vibration output. Existing vibration on supported gamepads and the device running the browser remains available. [Sony Ericsson HID developer guidelines](https://www.yumpu.com/en/document/view/7032510/bluetoothtm-hid-remote-control-sony) · [WebHID protected usages](https://developer.chrome.com/docs/capabilities/hid#security_and_privacy)
 

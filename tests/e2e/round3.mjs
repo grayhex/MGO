@@ -58,8 +58,8 @@ try {
   await p.getByRole('button', { name: 'Lights Out' }).first().click();
   await p.locator('.player-grid.lights-out').waitFor();
   await sleep(500);
-  const o = await p.evaluate(() => ({ body: Number(getComputedStyle(document.querySelector('.skin-body')).opacity), glass: document.querySelector('.skin-glass') ? Number(getComputedStyle(document.querySelector('.skin-glass')).opacity) : 0 }));
-  assert.ok(o.body >= 0.1 && o.body <= 0.3, `the body is faintly visible (opacity ${o.body})`);
+  const o = await p.evaluate(() => ({ body: Number(getComputedStyle(document.querySelector('.stage .skin-body')).opacity), glass: document.querySelector('.stage .skin-glass') ? Number(getComputedStyle(document.querySelector('.stage .skin-glass')).opacity) : 0 }));
+  assert.equal(o.body, .36, 'the handset uses the same dimming in both players');
   console.log('✔ Lights Out keeps the phone body faintly visible:', JSON.stringify(o));
 
   assert.deepEqual(errors, []);

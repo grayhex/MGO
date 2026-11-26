@@ -30,7 +30,6 @@ async function shot(page, name) {
 }
 
 const padIndex = { up: 12, down: 13, left: 14, right: 15, fire: 0, menu: 9, back: 8 };
-const hidCode = { up: 'KeyI', down: 'KeyK', left: 'KeyJ', right: 'KeyL', fire: 'KeyU', pound: 'KeyT' };
 const frames = page => page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
 async function pad(page, key) {
   await page.evaluate(index => { window.tvButtons = [index]; }, padIndex[key]);
@@ -38,14 +37,7 @@ async function pad(page, key) {
   await page.evaluate(() => { window.tvButtons = []; });
   await frames(page);
 }
-async function hid(page, key) {
-  await page.evaluate(code => {
-    const target = document.activeElement;
-    const init = { code, bubbles: true, cancelable: true };
-    target.dispatchEvent(new KeyboardEvent('keydown', { ...init, altKey: true, ctrlKey: true, shiftKey: true }));
-    target.dispatchEvent(new KeyboardEvent('keyup', init));
-  }, hidCode[key]);
-}
+const phoneVolumeUp = page => page.keyboard.press('Control+Alt+Shift+KeyP');
 
 // The browser geometry determines a sequence of real controller direction presses.
 // This keeps the flow independent of the number of columns at each tested resolution.
@@ -133,8 +125,7 @@ try {
   }))));
   assert.deepEqual(legacySockets, [false, false]);
 
-  await hid(tv, 'down');
-  await hid(tv, 'fire');
+  await phoneVolumeUp(tv);
   assert.equal(await tv.evaluate(() => document.activeElement?.textContent.trim()), 'Search games');
   assert.equal(await tv.getByRole('dialog').count(), 0);
   await shot(tv, 'tv-library-4k');
@@ -163,13 +154,14 @@ try {
   }
   await until(async () => (await status())?.gameId === first.id, 'First game did not start');
   const darkSkin = tv.locator('.tv-player.tv-lights-out .skin-box[data-view="screen"]');
-  await darkSkin.waitFor();
-  await tv.waitForFunction(() => {
+  const checkDimmedPhone = () => tv.waitForFunction(() => {
+    const stage = document.querySelector('.tv-lights-out .stage');
     const image = document.querySelector('.tv-lights-out .skin-body');
     const canvas = document.querySelector('.tv-lights-out .skin-lcd canvas');
-    return image?.complete && image.naturalWidth > 0 && canvas && Number(getComputedStyle(image).opacity) < .2 &&
-      getComputedStyle(canvas).opacity === '1';
+    return image?.complete && image.naturalWidth > 0 && getComputedStyle(image).opacity === '0.36' &&
+      canvas && getComputedStyle(canvas).opacity === '1' && getComputedStyle(stage).backgroundImage.startsWith('radial-gradient');
   });
+  await checkDimmedPhone();
   for (let i = 0; i < 8 && !(await presses(-5)); i++) { await usingPad('fire'); await delay(150); }
   assert.ok(await presses(-5), 'pad input reaches KEmulator');
   await shot(tv, 'tv-game-4k');
@@ -188,6 +180,14 @@ try {
   assert.equal(lcd.width / lcd.w, lcd.height / lcd.h);
   assert.equal(lcd.width % lcd.w, 0);
   assert.equal(await darkSkin.count(), 0, 'Game only is a separate display setting');
+
+  const sameSession = (await status()).id;
+  await usingPad('menu');
+  await menu.getByRole('button', { name: 'Lights Out', exact: true }).click();
+  await usingPad('back');
+  await menu.waitFor({ state: 'hidden' });
+  await checkDimmedPhone();
+  assert.equal((await status()).id, sameSession, 'restoring the handset keeps the current game');
 
   const stopSelector = '.tv-dialog-menu > .tv-actions:last-child button:first-child';
   const stopGame = async game => {
@@ -223,16 +223,17 @@ try {
   await until(async () => (await status())?.gameId === second.id, 'Second game did not start');
   await tv.waitForFunction(() => document.activeElement?.classList.contains('stage'));
 
-  for (const [key, code] of [['up', -1], ['left', -3], ['down', -2], ['right', -4], ['fire', -5], ['pound', 35]]) {
+  await checkDimmedPhone();
+  await shot(tv, 'tv-game-1080p');
+  for (const [key, code] of [['ArrowUp', -1], ['ArrowLeft', -3], ['ArrowDown', -2], ['ArrowRight', -4], ['Enter', -5], ['KeyZ', 35]]) {
     const initial = await presses(code);
-    await hid(tv, key);
+    await tv.keyboard.press(key);
     await until(async () => (await presses(code)) > initial, `Sony Ericsson ${key} did not reach the game`);
   }
   await usingPad('menu');
   await menu.waitFor();
   await tv.waitForFunction(() => document.activeElement?.textContent.trim() === 'Resume');
-  await hid(tv, 'down');
-  await hid(tv, 'fire');
+  await phoneVolumeUp(tv);
   assert.equal(await tv.evaluate(() => document.activeElement?.textContent.trim()), 'Resume');
   await stopGame(second);
   await usingPad('menu');
@@ -247,7 +248,7 @@ try {
   await scaled.locator(tile(second)).waitFor();
   assert.ok(await scaled.evaluate(() => devicePixelRatio === 2 && document.documentElement.scrollWidth === innerWidth));
   assert.deepEqual(errors, []);
-  console.log('PASS: 1080p/DPR 2 layout, gamepad search and exit, Sony Ericsson HID stays in gameplay');
+  console.log('PASS: 1080p/DPR 2 layout, gamepad search and exit, Sony Ericsson arrow keys reach the emulator');
 } finally {
   await browser?.close();
   const stopped = once(server, 'exit');

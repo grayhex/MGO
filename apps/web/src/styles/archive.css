@@ -63,7 +63,8 @@
 }
 
 .archive-mark { display: inline-flex; color: var(--muted); vertical-align: middle; }
-.archive-mark.exact { color: var(--success); }
+.archive-mark:is(.exact, .downloaded) { color: var(--archive-confirmed); }
+.archive-mark:is(.exact, .downloaded) .icon-svg { width: 1.1em; height: 1.1em; stroke-width: 1.55; }
 .archive-mark.review { color: var(--warning); }
 .curated-rows { list-style: none; margin: 0; padding: 0; max-height: 225px; overflow: auto; display: grid; gap: 6px; }
 .curated-rows .field { display: grid; grid-template-columns: minmax(100px, .65fr) minmax(0, 1fr); align-items: center; gap: 8px; }
