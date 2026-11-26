@@ -2,26 +2,43 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { it } from 'node:test';
 import { ACTIONS, InputController, codeFor, type InputSource } from './input';
-import { K790I_KEYS, K790I_PROFILE_FILE, phoneAction } from './phoneRemote';
+import { PHONE_REMOTE_PROFILES, SONY_ERICSSON_KEYS, phoneAction } from './phoneRemote';
 
 function key(code: string, options: Partial<KeyboardEvent> = {}): KeyboardEvent {
   return Object.assign(new Event('key', { cancelable: true }), { code }, options) as KeyboardEvent;
 }
 
-it('ships a Sony configuration for each supported physical key and decodes its HID usage', () => {
-  const file = readFileSync(new URL(`../public${K790I_PROFILE_FILE}`, import.meta.url));
-  assert.equal(file.toString('ascii', 257, 262), 'ustar');
-  const bindings = Array.from(file.toString('latin1').matchAll(/<(KEY_\w+)><ACTION><KEYBOARD MODIFIERS="(\d{2})" USAGEID="([0-9A-F]{2})" \/><\/ACTION><\/\1>/g));
-  assert.equal(bindings.length, Object.keys(K790I_KEYS).length);
-  const actions = bindings.map(([, physical, modifiers, usage]) => {
-    const [action, id, shift] = K790I_KEYS[physical as keyof typeof K790I_KEYS];
-    assert.equal(Number.parseInt(usage!, 16), id);
-    assert.equal(modifiers, shift ? '02' : '00');
-    assert.equal(phoneAction(key(`F${13 + id - 0x68}`, { shiftKey: shift })), action);
-    return action;
+function tarMember(archive: Buffer, offset: number, name: string) {
+  assert.equal(archive.toString('ascii', offset, offset + 100).replace(/\0.*$/, ''), name);
+  assert.equal(archive.toString('ascii', offset + 257, offset + 262), 'ustar');
+  const size = Number.parseInt(archive.toString('ascii', offset + 124, offset + 136), 8);
+  const start = offset + 512;
+  return { data: archive.subarray(start, start + size), next: start + Math.ceil(size / 512) * 512 };
+}
+
+for (const { model, name, url, width, height } of PHONE_REMOTE_PROFILES) {
+  it(`ships a ${model} profile with a correctly sized screen and the supported keys`, () => {
+    const file = readFileSync(new URL(`../public${url}`, import.meta.url));
+    const image = tarMember(file, 0, `${name}.jpg`);
+    assert.equal(image.data.readUInt16BE(0), 0xffd8);
+    const frame = image.data.indexOf(Buffer.from([0xff, 0xc0])); // baseline JPEG frame header
+    assert.ok(frame > 0);
+    assert.equal(image.data.readUInt16BE(frame + 5), height);
+    assert.equal(image.data.readUInt16BE(frame + 7), width);
+    const configuration = tarMember(file, image.next, `${name}.kcf`);
+    assert.equal(file.readUInt32BE(configuration.next), 0);
+    const bindings = Array.from(configuration.data.toString('ascii').matchAll(/<(KEY_\w+)><ACTION><KEYBOARD MODIFIERS="(\d{2})" USAGEID="([0-9A-F]{2})" \/><\/ACTION><\/\1>/g));
+    assert.equal(bindings.length, Object.keys(SONY_ERICSSON_KEYS).length);
+    const actions = bindings.map(([, physical, modifiers, usage]) => {
+      const [action, id, shift] = SONY_ERICSSON_KEYS[physical as keyof typeof SONY_ERICSSON_KEYS];
+      assert.equal(Number.parseInt(usage!, 16), id);
+      assert.equal(modifiers, shift ? '02' : '00');
+      assert.equal(phoneAction(key(`F${13 + id - 0x68}`, { shiftKey: shift })), action);
+      return action;
+    });
+    assert.deepEqual(actions.sort(), ACTIONS.filter(action => action !== 'clear').sort());
   });
-  assert.deepEqual(actions.sort(), ACTIONS.filter(action => action !== 'clear').sort());
-});
+}
 
 it('forwards phone input immediately, shares held keys with other devices and releases after Shift goes up', () => {
   const events: unknown[] = [];

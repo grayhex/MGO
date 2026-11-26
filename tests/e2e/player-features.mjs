@@ -151,8 +151,8 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  }, { code, shiftKey });
  const nineBefore = await presses(57);
  await remoteKey('F21', true); // K790i digit 9
- await p.getByRole('img', { name: 'Input: Bluetooth phone (K790i)' }).waitFor();
- assert.equal(await inputSource.getAttribute('aria-label'), 'Input: Bluetooth phone (K790i)');
+ await p.getByRole('img', { name: 'Input: Bluetooth phone' }).waitFor();
+ assert.equal(await inputSource.getAttribute('aria-label'), 'Input: Bluetooth phone');
  await wait(async () => (await presses(57)) > nineBefore);
  const phoneFireBefore = await presses(-5);
  await remoteKey('F17'); // K790i joystick press
@@ -200,13 +200,15 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  assert.deepEqual(errors, []);
  console.log('PASS: Java ME vibration reaches the gamepad and the control can switch it off.');
  await p.goto(base + '/settings#sound');
- await p.getByText('Bluetooth phone · Sony Ericsson K790i', { exact: true }).click();
- const ready = p.waitForEvent('download');
- await p.getByRole('link', { name: 'Download .hid profile' }).click();
- const download = await ready;
- assert.equal(download.suggestedFilename(), 'MGO-K790i.hid');
- assert.equal(readFileSync(await download.path()).toString('ascii', 257, 262), 'ustar');
- await p.getByRole('button', { name: 'Test K790i buttons' }).click();
+ await p.getByText('Bluetooth phone · Sony Ericsson', { exact: true }).click();
+ for (const model of ['K790i', 'K750i', 'W995']) {
+   const ready = p.waitForEvent('download');
+   await p.getByRole('link', { name: `Download ${model} .hid profile` }).click();
+   const download = await ready;
+   assert.equal(download.suggestedFilename(), `MGO-${model}.hid`);
+   assert.equal(readFileSync(await download.path()).toString('ascii', 257, 262), 'ustar');
+ }
+ await p.getByRole('button', { name: 'Test phone buttons' }).click();
  await remoteKey('F13');
  await p.getByText('Received D-pad up', { exact: true }).waitFor();
  console.log('PASS: Bluetooth profile download and tester, phone keys reach KEmulator, and input icons follow each device.');

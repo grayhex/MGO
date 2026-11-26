@@ -140,7 +140,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const [lastInput, setLastInput] = useState<InputSource>();
   const activeInput = lastInput === 'phone' ? 'phone'
     : controls.gamepad && pad && lastInput !== 'keyboard' ? 'gamepad' : 'keyboard';
-  const inputLabel = translateUI(activeInput === 'phone' ? 'Input: Bluetooth phone (K790i)'
+  const inputLabel = translateUI(activeInput === 'phone' ? 'Input: Bluetooth phone'
     : activeInput === 'gamepad' ? 'Input: Gamepad' : 'Input: Keyboard');
   const [busy, setBusy] = useState(false);
   const [frameSize, setFrameSize] = useState({ w: 240, h: 320 });
