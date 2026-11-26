@@ -15,6 +15,18 @@ const prefixFor = (root: string, kind: string) => `${kind}/${createHash('sha256'
 const tick = () => new Promise<void>((r) => setImmediate(r));
 type ScanRoot = { real: string; prefix: string; kind: string | null };
 
+function acceptsFile(root: ScanRoot, name: string): boolean {
+  if (!root.kind) return true;
+  const platform = platformOfFile(name);
+  if (root.kind === 'ngage') return platform === 'ngage2' || /\.zip$/i.test(name);
+  return platform === root.kind || (root.kind === 'j2me' && /\.jad$/i.test(name));
+}
+
+function sourceInScope(root: ScanRoot, relative: string): boolean {
+  const inside = root.prefix ? relative.startsWith(root.prefix) : !/^(j2me|ngage|symbian)\/[a-f0-9]{8}\//.test(relative);
+  return inside && acceptsFile(root, relative);
+}
+
 /** The "default phone" of the settings, as the settings a freshly added game starts with. */
 export function gameDefaults(p: PublicSettings['phone'], explicit: Partial<PublicSettings['phone']> = {}): Partial<GameSettings> {
   // the phone picture is only pinned to a new game when somebody chose a default phone: otherwise the player keeps using the browser's own choice
@@ -96,12 +108,13 @@ export class ScanManager {
     if (resolveInsideRoots(this.cfg, directory)?.real !== directory)
       throw new UploadError('library_unavailable', 'The configured library directories are missing or outside the allowed locations', 400);
     const prefix = this.archivePrefix(root) + segments.map(segment => segment + '/').join('');
-    const report = this.beginScan('update', [{ real: directory, prefix, kind: 'j2me' }], []);
+    const scope = { real: directory, prefix, kind: 'j2me' };
+    const report = this.beginScan('update', [scope], []);
     const cancel = () => { if (this.report === report) this.cancel(); };
     signal.addEventListener('abort', cancel, { once: true });
     const done = () => signal.removeEventListener('abort', cancel);
     void this.idle().then(done, done);
-    return { report, gameIds: () => [...new Set(this.library.allSources().filter(source => !source.missing && source.rel_path.startsWith(prefix)).map(source => source.game_id))] };
+    return { report, gameIds: () => [...new Set(this.library.allSources().filter(source => !source.missing && sourceInScope(scope, source.rel_path)).map(source => source.game_id))] };
   }
 
   private beginScan(mode: 'update' | 'full', roots: ScanRoot[], unavailable: string[]): ScanReport {
@@ -138,8 +151,7 @@ export class ScanManager {
       const pkgs = new Map<string, WalkEntry>();
       const counts = new Map(roots.map(root => [root.prefix, 0]));
       for (const source of roots) for await (const found of walkLibrary(source.real, stats, () => this.cancelled, source.kind === 'ngage')) {
-        const platform = (source.kind === 'ngage' && found.rel.toLowerCase().endsWith('.zip') ? 'ngage' : platformOfFile(found.rel)) ?? (found.kind === 'jar' || found.kind === 'jad' ? 'j2me' : null);
-        if (source.kind && (source.kind === 'ngage' ? platform !== 'ngage' && platform !== 'ngage2' : platform !== source.kind)) continue;
+        if (!acceptsFile(source, found.rel)) continue;
         counts.set(source.prefix, (counts.get(source.prefix) ?? 0) + 1);
         const e = { ...found, rel: source.prefix + found.rel };
 
@@ -203,12 +215,14 @@ export class ScanManager {
       if (this.cancelled) return this.finish(r, 'cancelled');
 
       // sources that were not seen: flag, never delete
-      const inScope = (rel: string) => roots.some(root => root.prefix ? rel.startsWith(root.prefix) : !/^(j2me|ngage|symbian)\/[a-f0-9]{8}\//.test(rel));
-      const known = this.library.allSources().filter(s => inScope(s.rel_path));
+      const known = this.library.allSources().filter(source => roots.some(root => sourceInScope(root, source.rel_path)));
       if (seen.size === 0 && known.length > 0) {
         r.error = 'The library directory looks empty although it was scanned before: is the folder mounted? Nothing was marked as missing.';
       } else if (!stats.truncated) {
-        for (const s of known) if (roots.some(root => (root.prefix ? s.rel_path.startsWith(root.prefix) : !/^(j2me|ngage|symbian)\/[a-f0-9]{8}\//.test(s.rel_path)) && (counts.get(root.prefix) ?? 0) > 0) && !seen.has(s.rel_path) && !s.missing) this.library.markMissing(s.rel_path);
+        for (const source of known) {
+          if (source.missing || seen.has(source.rel_path)) continue;
+          if (roots.some(root => (counts.get(root.prefix) ?? 0) > 0 && sourceInScope(root, source.rel_path))) this.library.markMissing(source.rel_path);
+        }
       }
       r.missing = this.library.allSources().filter((s) => s.missing).length;
       this.collectGroups(r, seen);

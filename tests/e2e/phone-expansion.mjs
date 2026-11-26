@@ -126,10 +126,11 @@ try {
     assert.deepEqual([still.width, still.height], [c.screen.width, c.screen.height]);
     assert.equal(await page.locator('.stage .skin-hit polygon').count(), 0, 'the zoomed display itself has no body hitboxes');
     if (c.input.kind === 'keypad' && c.views.full.width < c.views.full.height) {
-      assert.ok(await page.getByTestId('phone-keypad').locator('polygon[data-action=d5]').count(), 'the original numeric key is on the side keypad');
+      await page.getByTestId('phone-keypad').locator('polygon[data-action=d5]').waitFor({ state: 'attached' });
     }
     if (id.startsWith('nokia-n-gage-')) {
       const halves = page.getByTestId('phone-keypad');
+      await halves.nth(1).waitFor();
       assert.equal(await halves.count(), 2, 'the actual left and right parts of the N-Gage');
       const left = await halves.nth(0).boundingBox(), right = await halves.nth(1).boundingBox();
       assert.ok(left.y + left.height < right.y && right.x + right.width < (await page.locator('.stage').boundingBox()).x,
