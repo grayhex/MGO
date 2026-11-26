@@ -1,4 +1,5 @@
 import type { Action } from './input';
+import type { TvKey } from '@mgo/protocol';
 
 export const PHONE_REMOTE_PROFILES = ([
   { model: 'K790i', width: 240, height: 320 },
@@ -33,6 +34,11 @@ export const SONY_ERICSSON_KEYS = {
   KEY_HASH: ['pound', 0x73, true],
 } satisfies Record<string, [Action, number, boolean?]>;
 
+export const SONY_TV_KEYS = {
+  KEY_VOL_UP: ['menu', 0x44, true],
+  KEY_VOL_DOWN: ['back', 0x45, true],
+} satisfies Record<string, [Extract<TvKey, 'menu' | 'back'>, number, boolean]>;
+
 const keys = new Map<string, Action>();
 for (const [action, usage, shifted] of Object.values(SONY_ERICSSON_KEYS)) {
   const code = `F${13 + usage - 0x68}`;
@@ -42,4 +48,9 @@ for (const [action, usage, shifted] of Object.values(SONY_ERICSSON_KEYS)) {
 export function phoneAction(event: Pick<KeyboardEvent, 'code' | 'shiftKey' | 'altKey' | 'ctrlKey' | 'metaKey'>): Action | undefined {
   if (event.altKey || event.ctrlKey || event.metaKey) return;
   return (event.shiftKey ? keys.get(`Shift+${event.code}`) : undefined) ?? keys.get(event.code);
+}
+
+export function phoneMenuAction(event: Parameters<typeof phoneAction>[0]): 'menu' | 'back' | undefined {
+  if (!event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+  return event.code === 'F11' ? 'menu' : event.code === 'F12' ? 'back' : undefined;
 }

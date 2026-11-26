@@ -39,6 +39,7 @@ export class GamepadPoller {
   private vibration?: { index: number; id: string; actuator: GamepadHapticActuator };
   profile: PadProfile;
   uiMode = false;
+  reserveMenu = false;
   onUi?: (action: PadAction) => void;
   onState?: (state: PadState) => void;
   capture?: (binding: PadBinding) => void;
@@ -47,6 +48,12 @@ export class GamepadPoller {
   private focus = () => { this.suspended = false; };
   private visibility = () => { if (document.hidden) this.blur(); else this.focus(); };
   release(): void { for (const source of this.active.keys()) this.input.release(source); this.active.clear(); }
+  setUiMode(uiMode: boolean): void {
+    if (this.uiMode === uiMode) return;
+    for (const source of this.active.keys()) this.blocked.add(source);
+    this.release();
+    this.uiMode = uiMode;
+  }
   setProfile(profile: PadProfile): void { this.release(); this.profile = sanitizeProfile(profile); }
   rumble(ms: number): void {
     if (!Number.isFinite(ms) || ms <= 0) { this.stopRumble(); return; }
@@ -84,6 +91,13 @@ export class GamepadPoller {
       }
     }
     for(const source of this.blocked) if(!present.has(source)) this.blocked.delete(source);
+    if (this.reserveMenu && [...now].some(([source, action]) => (action === 'ui:menu' || action === 'ui:back') && !this.active.has(source))) {
+      for (const [source, action] of now) {
+        if (action.startsWith('ui:')) continue;
+        now.delete(source);
+        this.blocked.add(source);
+      }
+    }
     for (const source of this.active.keys()) if (!now.has(source)) this.input.release(source);
     for (const [source,action] of now) {
       if (action.startsWith('ui:') || this.uiMode) {

@@ -106,6 +106,7 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
           </Link>}
           {item('/phones', 'phone', 'Phones', path === '/phones')}
           {item('/settings', 'sliders', 'Settings', path === '/settings')}
+          {item('/tv', 'device', 'TV Mode', false)}
         </nav>
         <div className="sidebar-foot">
           <div className="runtime-list" aria-label={translateUI('Application and emulators')}>

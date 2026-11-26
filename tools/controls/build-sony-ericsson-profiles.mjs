@@ -3,9 +3,9 @@ import { chmodSync, copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PHONE_REMOTE_PROFILES, SONY_ERICSSON_KEYS } from '../../apps/web/src/phoneRemote.ts';
+import { PHONE_REMOTE_PROFILES, SONY_ERICSSON_KEYS, SONY_TV_KEYS } from '../../apps/web/src/phoneRemote.ts';
 
-const bindings = Object.entries(SONY_ERICSSON_KEYS).map(([key, [, usage, shifted]]) => (
+const bindings = Object.entries({ ...SONY_ERICSSON_KEYS, ...SONY_TV_KEYS }).map(([key, [, usage, shifted]]) => (
   `    <${key}><ACTION><KEYBOARD MODIFIERS="${shifted ? '02' : '00'}" USAGEID="${usage.toString(16).toUpperCase()}" /></ACTION></${key}>`
 ));
 const config = [

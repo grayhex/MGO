@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { it } from 'node:test';
 import { ACTIONS, InputController, codeFor, type InputSource } from './input';
-import { PHONE_REMOTE_PROFILES, SONY_ERICSSON_KEYS, phoneAction } from './phoneRemote';
+import { PHONE_REMOTE_PROFILES, SONY_ERICSSON_KEYS, SONY_TV_KEYS, phoneAction, phoneMenuAction } from './phoneRemote';
 
 function key(code: string, options: Partial<KeyboardEvent> = {}): KeyboardEvent {
   return Object.assign(new Event('key', { cancelable: true }), { code }, options) as KeyboardEvent;
@@ -28,15 +28,17 @@ for (const { model, name, url, width, height } of PHONE_REMOTE_PROFILES) {
     const configuration = tarMember(file, image.next, `${name}.kcf`);
     assert.equal(file.readUInt32BE(configuration.next), 0);
     const bindings = Array.from(configuration.data.toString('ascii').matchAll(/<(KEY_\w+)><ACTION><KEYBOARD MODIFIERS="(\d{2})" USAGEID="([0-9A-F]{2})" \/><\/ACTION><\/\1>/g));
-    assert.equal(bindings.length, Object.keys(SONY_ERICSSON_KEYS).length);
+    const allKeys = { ...SONY_ERICSSON_KEYS, ...SONY_TV_KEYS };
+    assert.equal(bindings.length, Object.keys(allKeys).length);
     const actions = bindings.map(([, physical, modifiers, usage]) => {
-      const [action, id, shift] = SONY_ERICSSON_KEYS[physical as keyof typeof SONY_ERICSSON_KEYS];
+      const [action, id, shift] = allKeys[physical as keyof typeof allKeys];
       assert.equal(Number.parseInt(usage!, 16), id);
       assert.equal(modifiers, shift ? '02' : '00');
-      assert.equal(phoneAction(key(`F${13 + id - 0x68}`, { shiftKey: shift })), action);
+      if (action === 'menu' || action === 'back') assert.equal(phoneMenuAction(key(`F${id - 0x3a + 1}`, { shiftKey: shift })), action);
+      else assert.equal(phoneAction(key(`F${13 + id - 0x68}`, { shiftKey: shift })), action);
       return action;
     });
-    assert.deepEqual(actions.sort(), ACTIONS.filter(action => action !== 'clear').sort());
+    assert.deepEqual(actions.sort(), [...ACTIONS.filter(action => action !== 'clear'), 'menu', 'back'].sort());
   });
 }
 

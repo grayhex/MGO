@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -28,9 +28,13 @@ import './styles/keypad.css';
 import './styles/phones.css';
 import './styles/settings.css';
 import './styles/archive.css';
+import './styles/tv.css';
+
+const TvRemote = lazy(() => import('./tv/Remote'));
+const remote = /^\/remote\/?$/.test(location.pathname);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ErrorBoundary><App /></ErrorBoundary>
+    <ErrorBoundary>{remote ? <Suspense fallback={null}><TvRemote /></Suspense> : <App />}</ErrorBoundary>
   </StrictMode>,
 );

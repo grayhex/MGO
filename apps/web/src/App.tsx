@@ -3,6 +3,7 @@ import { t as translateUI } from './i18n';
 import { lazy, Suspense } from 'react';
 import { useDeveloperMode } from './developer';
 const DevPhones = import.meta.env.VITE_DEVELOPER_BUILD === 'true' ? lazy(()=>import('./dev/PhonesPage').then(m=>({default:m.PhonesPage}))) : null;
+const TvMode = lazy(() => import('./tv/TvMode'));
 import type { HealthStatus, SymbianStatus } from '@mgo/protocol';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api';
@@ -120,8 +121,13 @@ export function App() {
   }, [ready, needLogin]);
 
   // an address that is not a page (a mistyped link, an old bookmark) goes to the library instead of showing it under a wrong URL
-  const knownPath = path === '/' || /^\/play\/[0-9a-f]{16}\/?$/.test(path) || /^\/(phones|settings)\/?$/.test(path) || path === '/phones/lab';
+  const tv = path === '/tv' || path === '/tv/';
+  const knownPath = tv || path === '/' || /^\/play\/[0-9a-f]{16}\/?$/.test(path) || /^\/(phones|settings)\/?$/.test(path) || path === '/phones/lab';
   useEffect(() => { if (ready && !needLogin && !knownPath) go('/', true); }, [ready, needLogin, knownPath, go]);
+  useEffect(() => {
+    if (path !== '/' || !ready || needLogin || wizard) return;
+    try { if (localStorage.getItem('mgo.tv.mode') === 'on') go('/tv', true); } catch { /* optional */ }
+  }, [path, ready, needLogin, wizard, go]);
 
   if (needLogin) return <Login onDone={() => { setNeedLogin(false); void refreshHealth(); void boot(); }} />;
   if (!ready) return <main className="boot-status">
@@ -147,10 +153,10 @@ export function App() {
 
   return (
     <>
-      <Shell path={path} go={go} health={health} symbian={symbian} title={translateUI(page.title)} subtitle={translateUI(page.subtitle)}>
+      {tv ? <Suspense fallback={<main className="boot-status">{translateUI('Loading…')}</main>}><TvMode health={health} toast={toast} exit={() => go('/')} /></Suspense> : <Shell path={path} go={go} health={health} symbian={symbian} title={translateUI(page.title)} subtitle={translateUI(page.subtitle)}>
         {page.node}
-      </Shell>
-      {wizard && (
+      </Shell>}
+      {wizard && !tv && (
         <SetupWizard
           toast={toast}
           onClose={() => setWizard(false)}

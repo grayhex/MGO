@@ -34,3 +34,28 @@ it('global and per-game storage are independent and validate hostile input',()=>
  assert.equal(loadPadProfile('a').deadzone,.2);assert.equal(loadPadProfile('b').deadzone,.6);
  assert.deepEqual(sanitizeProfile({deadzone:NaN,bindings:{fire:[{kind:'axis',index:-3,direction:8}]}}),{deadzone:.35,bindings:{fire:[]}});
 });
+
+it('reserves a remapped menu chord and waits for neutral when TV input modes change', () => {
+ const events: unknown[] = [];
+ const actions: string[] = [];
+ const input = new InputController(event => events.push(event));
+ const gp = new GamepadPoller(input, undefined, structuredClone(DEFAULT_PAD));
+ gp.reserveMenu = true;
+ gp.profile.bindings.fire = [{ kind: 'button', index: 9 }];
+ gp.onUi = action => actions.push(action);
+ gp.tick([pad([9, 12])]);
+ assert.deepEqual(actions, ['ui:menu']);
+ assert.deepEqual(events, []);
+ gp.setUiMode(true);
+ gp.tick([pad([9, 12])]);
+ assert.deepEqual(actions, ['ui:menu']);
+ gp.tick([pad()]);
+ gp.tick([pad([12])]);
+ assert.deepEqual(actions, ['ui:menu', 'up']);
+ gp.setUiMode(false);
+ gp.tick([pad([12])]);
+ assert.deepEqual(events, []);
+ gp.tick([pad()]);
+ gp.tick([pad([12])]);
+ assert.deepEqual(input.heldActions(), new Set(['up']));
+});

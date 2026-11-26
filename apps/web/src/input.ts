@@ -108,6 +108,10 @@ export class InputController {
     this.emit();
   }
 
+  releaseSources(prefix: string): void {
+    for (const source of this.sources.keys()) if (source.startsWith(prefix)) this.release(source);
+  }
+
   /** Focus loss, tab hidden, disconnect, a different skin or view: nothing may stay pressed. */
   releaseAll(): void {
     const had = this.sources.size > 0;
