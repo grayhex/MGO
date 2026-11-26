@@ -199,6 +199,62 @@ test('the direct mirror retrieves only the indexed JAR and verifies it across pe
   assert.equal(requests.length, 5, 'the listing is shared across transfers');
 });
 
+test('curated recommendations try a verified alternative and scan and recognize only the download folder', async t => {
+  const { buildApp } = await import('../../apps/api/src/server.ts');
+  const { testConfig } = await import('../../apps/api/src/dev/testing.ts');
+  const { archiveFixtureWorker } = await import('../fixtures/archive-fixture.mjs');
+  const dir = tmpDir();
+  const java = path.join(dir, 'Java');
+  const out = path.join(java, 'Curated');
+  mkdirSync(out, { recursive: true });
+  writeFileSync(path.join(out, 'Extra Puzzle.jar'), makeJar('Extra Puzzle'));
+  writeFileSync(path.join(java, 'Outside.jar'), makeJar('Outside'));
+  const missing = archiveBuild(makeJar('Alpha Wing', { vendor: 'Macrospace', version: '1.0' }), { title: 'Alpha Wing', vendor: 'Macrospace' });
+  const spareJar = makeJar('Alpha Wing', { vendor: 'Macrospace Ltd.', version: '1.1' });
+  const spare = archiveBuild(spareJar, { title: 'Alpha Wing', vendor: 'Macrospace Ltd.' });
+  const calls = [];
+  const worker = archiveFixtureWorker([missing, spare], new Map([[spare.sha256, spareJar]]));
+  const app = await buildApp(testConfig({ dataDir: path.join(dir, 'data'), runDir: path.join(dir, 'run'), roots: [java] }), {
+    archiveWorker: (...args) => {
+      if (args[0][0] === 'download') calls.push(args[0][1]);
+      return worker(...args);
+    },
+    javaCatalogFetch: async url => url.hostname === 'raw.githubusercontent.com' ? Response.json({ entries: [
+      { id: 'ma:alpha-wing-fixture', title: 'Alpha Wing' }, { id: 'ma:extra-puzzle-fixture', title: 'Extra Puzzle' },
+    ] }) : new Response('<meta name="description" content="Published for Java ME">'),
+  });
+  t.after(async () => { await app.close(); rmSync(dir, { recursive: true, force: true }); });
+  const req = (url, method = 'GET', payload) => app.fastify.inject({ url, method, ...(payload ? { payload } : {}) });
+  const wait = async fn => {
+    for (let i = 0; i < 200; i++) {
+      const value = await fn();
+      if (value) return value;
+      await new Promise(resolve => setTimeout(resolve, 15));
+    }
+    assert.fail('Timed out waiting for the curated job');
+  };
+  assert.equal((await req('/api/settings', 'PATCH', { libraryPaths: { j2me: java }, archiveDownloadFolder: 'Curated' })).statusCode, 200);
+  await req('/api/archive/index', 'POST');
+  await wait(async () => (await req('/api/archive')).json().index);
+  const row = (await req('/api/archive/curated/preview')).json().titles.find(title => title.title === 'Alpha Wing');
+  assert.equal(row.suggested, missing.sha256);
+  const start = await req('/api/archive/curated', 'POST', { confirmed: true, afterDownload: true, selection: [{ title: row.title, sha256: row.suggested }] });
+  assert.equal(start.statusCode, 202, start.body);
+  const job = await wait(async () => {
+    const value = (await req('/api/archive/curated')).json().job;
+    return value?.state === 'done' ? value : null;
+  });
+  assert.deepEqual(job.followUp, { state: 'done', scanned: 2, recognized: 2 });
+  assert.deepEqual(calls, [missing.sha256, spare.sha256]);
+  assert.equal(job.substituted, 1);
+  const games = (await req('/api/games')).json();
+  assert.deepEqual(games.map(game => game.name).sort(), ['Alpha Wing', 'Extra Puzzle']);
+  const game = games.find(game => game.sha256 === spare.sha256);
+  assert.equal(game.archiveMatch.build.sha256, spare.sha256);
+  assert.equal(game.downloadedFrom, 'J2ME Archive');
+  assert.equal((await req(`/api/games/${game.id}/java-catalog`)).json().info.description, 'Published for Java ME');
+});
+
 test('free metadata uses Java ME screenshots and only a verified build for display size', async t => {
   const dir = tmpDir();
   const library = new Library(dir);
@@ -341,4 +397,28 @@ test('My Abandonware recovers from a gateway transport error and reads the Java 
   assert.equal(result.partial, undefined);
   assert.deepEqual(await service.screenshot(game, 1), { bytes: validPng, type: 'image/png' });
   assert.deepEqual(calls.map(call => call[0]), ['www.myabandonware.com', 'myabandonware.com', 'www.myabandonware.com', 'www.myabandonware.com']);
+});
+
+test('My Abandonware matches sequels and filenames and leaves ambiguous short names unresolved', async t => {
+  const dir = tmpDir();
+  const library = new Library(dir);
+  const filename = library.add(makeJar('A'), null, 1000000, { fileName: 'Miami Nights 2_K790_240x320.jar' }).game;
+  const sequel = library.add(makeJar('Assassin s creed 2'), null, 1000000).game;
+  const grim = library.add(makeJar('Darkest Fear 2: Grim Oak'), null, 1000000).game;
+  const ambiguous = library.add(makeJar('Banjo-Kazooie'), null, 1000000).game;
+  const entries = [
+    ['miami-nights-2', 'Miami Nights 2: The City is Yours'],
+    ['assassins-creed', "Assassin's Creed"],
+    ['assassins-creed-2', "Assassin's Creed II"],
+    ['darkest-fear-2', 'Darkest Fear: Grim Oak'],
+    ['banjo-kazooie-missions', "Banjo-Kazooie: Grunty's Revenge Missions"],
+    ['banjo-kazooie-mobile', "Banjo-Kazooie: Grunty's Revenge Mobile"],
+  ].map(([id, title]) => ({ id: 'ma:' + id, title }));
+  const service = new JavaCatalog(library, () => null, async url => url.hostname === 'raw.githubusercontent.com'
+    ? Response.json({ entries }) : new Response('<script type="application/ld+json">{"@type":"VideoGame","gamePlatform":["J2ME"],"description":"A Java ME release"}</script>'));
+  t.after(async () => { await service.close(); library.close(); rmSync(dir, { recursive: true, force: true }); });
+  assert.equal((await service.lookup(filename)).title, 'Miami Nights 2: The City is Yours');
+  assert.equal((await service.lookup(sequel)).title, "Assassin's Creed II");
+  assert.equal((await service.lookup(grim)).description, 'A Java ME release');
+  assert.equal(await service.lookup(ambiguous), null);
 });

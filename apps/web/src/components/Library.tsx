@@ -8,7 +8,7 @@ import { useServerSettings } from '../serverSettings';
 import { GameInfoDialog } from './GameInfoDialog';
 import { GenreDialog } from './GenreDialog';
 import { splitPlayTime } from '../playTime';
-import { compareGroups, matchesResolution, resolutionKey, SORT_KEYS, totalPlaySeconds, type SortKey } from '../libraryView';
+import { compareGroups, matchesResolution, resolutionEstimateLabel, resolutionKey, SORT_KEYS, totalPlaySeconds, type SortKey } from '../libraryView';
 import { getLastGame } from '../lastGame';
 import { isSkinId, loadPrefs } from '../skin/registry';
 import { GameSettingsDialog } from './GameSettingsDialog';
@@ -43,9 +43,9 @@ function ResolutionTag({ resolution }: { resolution: GameMeta['nativeResolution'
   if (!resolution) return <span className="resolution-tag muted" title={translateUI('Native resolution unknown')} aria-label={translateUI('Native resolution unknown')}>—</span>;
   const label = resolutionKey(resolution);
   const tone = { '240×320': 'blue', '176×208': 'green', '176×220': 'green', '128×128': 'red', '128×160': 'red' }[label] ?? 'neutral';
-  const source = resolution.source === 'frame' ? translateUI('Estimated from game frames') : resolution.source.startsWith('attribute ') ? resolution.source.slice(10) : translateUI(resolution.source);
-  const estimated = resolution.source === 'JAR images' || resolution.source === 'frame';
-  const hint = estimated ? source : translateUI('Native resolution: {source}', { source });
+  const source = resolution.source.startsWith('attribute ') ? resolution.source.slice(10) : translateUI(resolution.source);
+  const estimated = resolutionEstimateLabel(resolution);
+  const hint = estimated ? translateUI(estimated) : translateUI('Native resolution: {source}', { source });
   return <span className={`resolution-tag ${tone}`} title={hint} aria-label={`${label} · ${hint}`}>{estimated ? '≈' : ''}{label}</span>;
 }
 
@@ -182,8 +182,8 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
         setUploading((n) => n - 1);
       }
     }
-    void reload();
-  }, [reload, toast]);
+    window.dispatchEvent(new Event('j2me:library-changed'));
+  }, [toast]);
 
   // window-wide drag & drop
   useEffect(() => {
@@ -418,9 +418,9 @@ export function Library({ returnGameId, toast, onPlay, health, query, onQuery }:
       {uploading > 0 && <div className="uploading">{translateUI("Uploading")} {uploading}…</div>}
       {dragging && <div className="dropzone"><div><strong>{translateUI("Drop to add")}</strong><br />{translateUI(".jar, .jad, .sis, .sisx, .n-gage files")}</div></div>}
       {genreFor && <GenreDialog game={genreFor} toast={toast} onClose={() => setGenreFor(null)} onChanged={() => { setGenreFor(null); void reload(); }} />}
-      {archiveOpen && <ArchiveBrowser onClose={() => setArchiveOpen(false)} onImported={reload} onPlay={id => { setArchiveOpen(false); onPlay(id); }} />}
+      {archiveOpen && <ArchiveBrowser onClose={() => setArchiveOpen(false)} onImported={() => window.dispatchEvent(new Event('j2me:library-changed'))} onPlay={id => { setArchiveOpen(false); onPlay(id); }} />}
       {infoGame && <GameInfoDialog game={infoGame} toast={toast} onClose={() => setInfoFor(null)} onPlay={id => { setInfoFor(null); onPlay(id); }} playDisabled={(infoGame.platform ?? 'j2me') === 'j2me' && (infoGame.classVersion >= 49 || health?.ok === false)} onChanged={() => void reload()} onDetails={updateDetails} />}
-      {editing && <GameSettingsDialog game={editing} toast={toast} onClose={() => setEditing(null)} onChanged={() => { setEditing(null); void reload(); }} />}
+      {editing && <GameSettingsDialog game={editing} toast={toast} onClose={() => setEditing(null)} onChanged={() => { setEditing(null); window.dispatchEvent(new Event('j2me:library-changed')); }} />}
     </div>
   );
 }

@@ -34,10 +34,10 @@ export function registerArchiveRoutes(app: FastifyInstance, archive: ArchiveServ
 
   app.get(prefix + '/curated', () => ({ count: archive.curatedTitles().length, job: archive.currentCurated(), destination: archive.curatedDestination() }));
   app.get(prefix + '/curated/preview', async () => ({ titles: await archive.previewCurated() }));
-  app.post<{ Body: { selection?: { title: string; sha256: string }[]; confirmed?: boolean } }>(prefix + '/curated', async (req, reply) => {
+  app.post<{ Body: { selection?: { title: string; sha256: string }[]; confirmed?: boolean; afterDownload?: boolean } }>(prefix + '/curated', async (req, reply) => {
     if (req.body?.confirmed !== true || !Array.isArray(req.body.selection)) throw new UploadError('archive_bad_selection', 'Confirm the selected builds first');
     const selection = req.body.selection.map(row => ({ title: text(row?.title, 200), sha256: hash(row?.sha256) }));
-    return reply.code(202).send(await archive.importCurated(selection));
+    return reply.code(202).send(await archive.importCurated(selection, req.body.afterDownload === true));
   });
   app.delete(prefix + '/curated', () => ({ cancelled: archive.cancelCurated() }));
 

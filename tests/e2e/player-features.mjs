@@ -66,6 +66,12 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  await keypad.waitFor({ state: 'hidden' });
  await keypadLabel.click();
  await keypad.waitFor();
+ await p.getByRole('radio', { name: 'Phone', exact: true }).click();
+ assert.ok(await keypadToggle.isDisabled() && !await keypadToggle.isChecked());
+ await keypad.waitFor({ state: 'hidden' });
+ await p.getByRole('radio', { name: 'Screen', exact: true }).click();
+ assert.ok(await keypadToggle.isEnabled() && await keypadToggle.isChecked(), 'Screen view restores the chosen keypad preference');
+ await keypad.waitFor();
  await p.evaluate(()=>window.originalCanvas=document.querySelector('.skin-canvas'));
  await p.getByRole('button',{name:'Lights Out',exact:true}).click();
  await p.locator('.lights-out').waitFor();

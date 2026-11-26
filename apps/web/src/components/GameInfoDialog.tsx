@@ -10,7 +10,7 @@ import { PlatformTag } from './PlatformTag';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
 import { JavaCover } from './JavaCover';
-import { resolutionKey } from '../libraryView';
+import { resolutionEstimateLabel, resolutionKey } from '../libraryView';
 
 export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onChanged, onDetails }: {
   game: GameMeta; toast: (k: 'info' | 'error', text: string) => void;
@@ -78,13 +78,12 @@ export function GameInfoDialog({ game, toast, onClose, onPlay, playDisabled, onC
   const ngage = game.ngageInfo;
   const played = game.playedResolution;
   const resolution = game.nativeResolution;
-  const estimate = resolution?.source === 'frame' ? t('Estimated from game frames')
-    : resolution?.source === 'JAR images' ? t('JAR images') : null;
+  const estimate = resolutionEstimateLabel(resolution);
   const fields: [string, string | undefined][] = [
     ['Name', game.name],
     ['File name', game.fileName],
     ['Size', archiveSize(game.sizeBytes)],
-    ['Game resolution', resolution ? (estimate ? `≈${resolutionKey(resolution)} · ${estimate}` : resolutionKey(resolution)) : undefined],
+    ['Game resolution', resolution ? (estimate ? `≈${resolutionKey(resolution)} · ${t(estimate)}` : resolutionKey(resolution)) : undefined],
     ...(played?.source === 'played' && (!resolution || resolutionKey(played) !== resolutionKey(resolution))
       ? [['Emulator output on the last run', resolutionKey(played)] as [string, string]] : []),
     ['Version', game.version],

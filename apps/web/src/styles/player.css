@@ -180,6 +180,10 @@ textarea.text-editor-field { resize: vertical; min-height: 84px; }
 .stage-card .stage-bar { position: relative; z-index: 12; padding: 4px 10px; gap: 8px; }
 .lights-out .stage-card .stage-bar { position: absolute; z-index: 20; }
 .stage-card .stage-bar .title span { display: none; }
+.stage-card .stage-bar:lang(ru) .title strong { font-size: 1rem; }
+.stage-card .stage-bar:lang(ru) :is(.btn.sm, .seg button) { font-size: .72rem; }
+.stage-card .stage-bar:lang(ru) .stage-tool span { font-size: .59rem; }
+.stage-card .stage-bar:lang(ru) .stage-status .badge { font-size: .66rem; letter-spacing: .025em; }
 @media (min-width: 1400px) {
   .stage-card .stage-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }
   .stage-left { gap: 8px; }
@@ -190,6 +194,7 @@ textarea.text-editor-field { resize: vertical; min-height: 84px; }
 }
 @media (min-width: 1650px) {
   .stage-card .stage-bar { grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr); }
+  .stage-card .stage-bar:lang(ru) { grid-template-columns: minmax(0, 1fr) auto auto; }
 }
 @media (min-width: 1400px) and (max-width: 1649px) {
   .stage-bar :is(.stage-pause, .stage-lights) { padding-inline: 7px; }

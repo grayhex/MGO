@@ -42,9 +42,10 @@ export function JavaCatalogPanel({ onChanged }: { onChanged: () => void }) {
     </div>
     {job && <p className="small" role="status">{t('{processed}/{total} checked · {matched} matched · {errors} errors', { processed: job.processed, total: job.total, matched: job.matched, errors: job.errors })}
       {!!job.partial && ` · ${t('{n} with title and genre only', { n: job.partial })}`}
+      {running && !!job.detailsTotal && ` · ${t('{done}/{total} pages checked', { done: job.detailsProcessed ?? 0, total: job.detailsTotal })}`}
       {job.state === 'cancelled' && ` · ${t('Cancelled')}`}
     </p>}
-    {running && <progress aria-label={t('Metadata progress')} max={job?.total || 1} value={job?.processed ?? 0} />}
+    {running && <progress aria-label={t('Metadata progress')} max={job.detailsTotal || job.total || 1} value={job.detailsTotal ? job.detailsProcessed ?? 0 : job.processed} />}
     {(error || job?.error) && <p className="note warn">{t(error || job?.error)}</p>}
   </section>;
 }

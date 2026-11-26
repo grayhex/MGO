@@ -94,12 +94,19 @@ export interface CuratedImport {
   total: number;
   imported: number;
   duplicates: number;
-  failed: { title: string; message: string }[];
+  failed: { title: string; message: string; sha256?: string }[];
+  substituted?: number;
   current: string | null;
   currentBytes?: number;
   destination?: string;
   progress: string | null;
   source?: DownloadProvider;
+  followUp?: {
+    state: 'queued' | 'scanning' | 'recognizing' | 'done' | 'failed' | 'cancelled';
+    scanned?: number;
+    recognized?: number;
+    error?: string;
+  };
 }
 
 export interface JavaCatalogInfo {
@@ -119,5 +126,7 @@ export interface JavaCatalogJob {
   matched: number;
   errors: number;
   partial?: number;
+  detailsProcessed?: number;
+  detailsTotal?: number;
   error?: string;
 }

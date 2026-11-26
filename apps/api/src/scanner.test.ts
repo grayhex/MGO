@@ -24,6 +24,47 @@ function setup(extra: { quotaMb?: number } = {}) {
 }
 
 describe('library scan', () => {
+  it('checks old rows during an incremental scan and keeps the host folder hint separate from emulator settings', async () => {
+    const { root, cfg, library, run } = setup();
+    try {
+      put(root, '176x220/Puzzle.jar', makeJar('Puzzle'));
+      assert.equal((await run()).added, 1);
+      const game = library.list()[0]!;
+      library.db.prepare('UPDATE games SET screen_probed=1, native_resolution_json = NULL WHERE id=?').run(game.id);
+      assert.equal((await run()).unchanged, 1);
+      assert.deepEqual(library.get(game.id)?.nativeResolution, { width: 176, height: 220, source: 'folder label' });
+      assert.deepEqual(library.get(game.id)?.settings, game.settings);
+    } finally {
+      library.close();
+      rmSync(root, { recursive: true, force: true });
+      rmSync(cfg.dataDir, { recursive: true, force: true });
+    }
+  });
+  it('reconciles only Java sources inside a curated subfolder of a legacy mixed library', async () => {
+    const { root, cfg, library, run, scan } = setup();
+    try {
+      put(root, 'Curated/Keep.jar', makeJar('Keep'));
+      const removed = put(root, 'Curated/Removed.jar', makeJar('Removed'));
+      put(root, 'Curated/Symbian.sis', Buffer.from('SIS fixture'));
+      put(root, 'Curated/N-Gage.n-gage', Buffer.from('N-Gage fixture'));
+      const outside = put(root, 'Outside.jar', makeJar('Outside'));
+      assert.equal((await run()).added, 5);
+      rmSync(removed);
+      rmSync(outside);
+
+      const followUp = scan.startArchiveScan(root, ['Curated'], new AbortController().signal);
+      await scan.idle();
+      const games = Object.fromEntries(library.list().map(game => [game.name, game]));
+      assert.equal(followUp.report.state, 'done');
+      assert.equal(followUp.report.jars, 1);
+      assert.deepEqual(followUp.gameIds(), [games.Keep!.id]);
+      assert.deepEqual(library.allSources().filter(source => source.missing).map(source => source.rel_path), ['Curated/Removed.jar']);
+    } finally {
+      library.close();
+      rmSync(root, { recursive: true, force: true });
+      rmSync(cfg.dataDir, { recursive: true, force: true });
+    }
+  });
   it('imports recursively with the manifest, JAD pairing and the default phone', async () => {
     const t = setup();
     t.store.update({ phone: { width: 176, height: 220, layout: 'sonyericsson', heapMb: 128 } });

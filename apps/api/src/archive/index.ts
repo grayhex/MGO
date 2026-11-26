@@ -2,7 +2,7 @@ import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { statSync } from 'node:fs';
 import type { ArchiveBuild, ArchiveStatus } from '@mgo/protocol';
 import { UploadError } from '../jar.js';
-import { cleanTitle } from '../title.js';
+import { cleanTitle, cleanVendor } from '../title.js';
 
 const project = 'toca-1/new-j2me-software-archive-search';
 export const SEARCH_URL = 'https://toca-1.github.io/new-j2me-software-archive-search/';
@@ -24,6 +24,9 @@ const titleAliases = new Map([
   ['asphalturbangt2', 'asphalt2'],
   ['asphalt3', 'asphalt3streetrules'],
   ['asphalt6', 'asphalt6adrenaline'],
+  ['dawnofsorrow', 'castlevaniadawnofsorrow'],
+  ['duke3d', 'dukenukemmobile3d'],
+  ['ageofempiresii', 'ageofempires2'],
 ]);
 
 /** Compare titles across Java ME manifests without losing sequel numbers or the 3D edition marker. */
@@ -31,6 +34,22 @@ export const archiveTitleKey = (title: string) => {
   const key = normalized(cleanTitle(title)).replaceAll(' ', '');
   return titleAliases.get(key) ?? key;
 };
+
+export function archiveVendorKey(vendor: string): string {
+  const key = normalized(cleanVendor(vendor)).replace(/\b(?:provided|supplied|cracked|translated|repacked) by\b.*$/, '').trim();
+  const publishers = [
+    [/\bgameloft\b/, 'gameloft'], [/\b(?:electronic arts|ea mobile)\b/, 'electronic arts'],
+    [/\b(?:hands on(?: mobile)?|mforma)\b/, 'handson mobile'], [/\b(?:namco|nbgi|nbne)\b/, 'namco'],
+    [/\btaito\b/, 'taito'], [/\bglu(?: mobile)?\b/, 'glu'], [/\bcodemasters\b/, 'codemasters'],
+    [/\b(?:warner bros|warner brothers)\b/, 'warner bros'], [/\b(?:vivendi|vugames|vug)\b/, 'vivendi'],
+    [/\b(?:konami|capcom|nokia|popcap|thq|digital chocolate|fishlabs|sega)\b/, ''],
+  ] as const;
+  for (const [pattern, family] of publishers) {
+    const match = key.match(pattern)?.[0];
+    if (match) return family || match;
+  }
+  return key.replace(/^(?:c|copyright)\s+(?:\d{4}\s+)?/, '').replace(/\s+(?:inc|corp|ltd|llc|limited|s a|sa|gmbh)$/, '') || 'unknown';
+}
 
 export class ArchiveIndex {
   readonly info: NonNullable<ArchiveStatus['index']>;
@@ -74,23 +93,40 @@ export class ArchiveIndex {
     return { builds: builds.slice(0, PAGE_SIZE), more: page < 49 && builds.length > PAGE_SIZE };
   }
 
-  curatedCandidates(title: string): { builds: ArchiveBuild[]; suggested: string | null } {
+  curatedCandidates(title: string, directSizes: number[] = []): { builds: ArchiveBuild[]; suggested: string | null } {
     const key = normalized(title);
+    const canonical = archiveTitleKey(title);
     const vendors = this.db.prepare(`SELECT vendorKey,count(*) AS count FROM builds WHERE titleKey=?
-      GROUP BY vendorKey ORDER BY count DESC,vendorKey LIMIT 2`).all(key) as unknown as { vendorKey: string; count: number }[];
+      GROUP BY vendorKey ORDER BY count DESC,vendorKey LIMIT 256`).all(key) as unknown as { vendorKey: string; count: number }[];
     if (vendors.length) {
-      const top = vendors[0]!;
+      const families = new Map<string, { count: number; keys: string[] }>();
+      for (const row of vendors) {
+        const family = archiveVendorKey(row.vendorKey);
+        const entry = families.get(family) ?? { count: 0, keys: [] };
+        entry.count += row.count;
+        entry.keys.push(row.vendorKey);
+        families.set(family, entry);
+      }
+      const ranked = [...families].sort((a, b) => b[1].count - a[1].count);
+      const [vendor, best] = ranked[0]!;
+      const keys = best.keys.slice(0, 32);
+      const sizes = directSizes.slice(0, 32);
+      const directOrder = sizes.length ? `(size IN (${sizes.map(() => '?').join(',')})) DESC,` : '';
       const builds = this.db.prepare(`SELECT ${columns} FROM builds b WHERE titleKey=?
-        ORDER BY (vendorKey=?) DESC, (filename LIKE '%240x320%') DESC, id LIMIT 5`).all(key, top.vendorKey) as unknown as ArchiveBuild[];
-      const preferred = top.vendorKey && top.vendorKey !== 'unknown' && top.count > (vendors[1]?.count ?? 0) * 2;
+        ORDER BY (vendorKey IN (${keys.map(() => '?').join(',')})) DESC,
+          ${directOrder} (collection = '96x65pixels J2ME mini') DESC, (filename LIKE '%240x320%') DESC, id LIMIT 24`).all(key, ...keys, ...sizes) as unknown as ArchiveBuild[];
+      const preferred = vendor !== 'unknown' && best.count > (ranked[1]?.[1].count ?? 0) * 2;
       return { builds, suggested: preferred ? builds[0]?.sha256 ?? null : null };
     }
     const searchTitle = key === 'ewjim' ? 'Earthworm Jim' : title;
-    const compact = normalized(searchTitle).replaceAll(' ', '');
-    const builds = this.search(searchTitle, '', 0).builds
-      .sort((a, b) => Number(normalized(b.title).replaceAll(' ', '') === compact) - Number(normalized(a.title).replaceAll(' ', '') === compact))
-      .slice(0, 5);
-    return { builds, suggested: null };
+    const wordBuilds = this.search(searchTitle, '', 0).builds;
+    const compactBuilds = this.search(canonical, '', 0).builds;
+    const builds = [...new Map([...wordBuilds, ...compactBuilds].map(build => [build.sha256, build])).values()];
+    const exact = builds.filter(build => archiveTitleKey(build.title) === canonical);
+    // The FTS result is only a sample, but if there is exactly one publisher among exact titles it can be tried safely.
+    const publisher = exact[0] && archiveVendorKey(exact[0].vendor);
+    const suggestion = publisher && publisher !== 'unknown' && exact.every(build => archiveVendorKey(build.vendor) === publisher) ? exact[0] : undefined;
+    return { builds: [...exact, ...builds.filter(build => !exact.includes(build))].slice(0, 24), suggested: suggestion?.sha256 ?? null };
   }
 
   candidates(title: string, vendor: string, version: string, except: string): ArchiveBuild[] {

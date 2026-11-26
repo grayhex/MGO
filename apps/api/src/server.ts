@@ -91,7 +91,7 @@ export interface App {
   close(): Promise<void>;
 }
 
-export async function buildApp(cfg: Config = loadConfig(), options: { archiveWorker?: ArchiveWorker } = {}): Promise<App> {
+export async function buildApp(cfg: Config = loadConfig(), options: { archiveWorker?: ArchiveWorker; javaCatalogFetch?: typeof fetch } = {}): Promise<App> {
   const app = Fastify({ logger: { level: cfg.logLevel }, bodyLimit: 64 * 1024, trustProxy: process.env.TRUST_PROXY === '1' });
   cfg = { ...cfg };
   const kemulatorUpdates = new KemulatorUpdates(cfg);
@@ -111,6 +111,7 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
   const scan = new ScanManager(cfg, library, {
     settings: () => settings.get(),
     explicitPhone: () => settings.explicitPhone(),
+    onJavaGame: game => { javaCatalog.findExactResolution(game); },
     onFinished: (r) => {
       if (r.state === 'done') ngageCatalog.schedule();
       if (r.state === 'done' && settings.get().autoMetadata && moby.hasKey()) {
@@ -119,8 +120,9 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
     },
   });
   const javaFetch = javaSourceFetch(metadataGateway);
-  const archive = new ArchiveService(cfg, library, scan, options.archiveWorker, () => settings.get(), options.archiveWorker ? null : new JarMirror(javaFetch));
-  const javaCatalog = new JavaCatalog(library, sha => archive.exactBuild(sha), javaFetch);
+  const archive: ArchiveService = new ArchiveService(cfg, library, scan, options.archiveWorker, () => settings.get(),
+    options.archiveWorker ? null : new JarMirror(javaFetch), (ids, signal) => javaCatalog.recognizeDownloaded(ids, signal));
+  const javaCatalog = new JavaCatalog(library, sha => archive.exactBuild(sha), options.javaCatalogFetch ?? javaFetch);
   library.enrich = game => javaCatalog.enrich(archive.matching.enrich(ngageCatalog.enrich(game)));
   let emuClasses: { dir: string; classes: Set<string> } | null = null;
   const devicePresets = () => {
@@ -261,6 +263,8 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
   });
 
   // --- games ---
+  app.get('/api/games/summary', () => library.platformCounts());
+
   app.get<{ Querystring: { genre?: string } }>('/api/games', async (req) => {
     const g = req.query.genre;
     if (g !== undefined && g !== 'unclassified' && !isGenre(g)) throw new UploadError('bad_request', 'Unknown genre', 400);
