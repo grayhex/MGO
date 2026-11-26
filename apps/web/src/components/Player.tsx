@@ -420,6 +420,10 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const tvPaused = !!tv && live && pausedByPlayer;
   const tvTextOpen = !!tv && live && !tvPaused && !!textArea && textField !== dismissedText && !(textArea.constraints & TEXT_CONSTRAINT.UNEDITABLE);
   const suppressInput = !!(menu || perm || keymap || (tv && link) || tvTextOpen);
+  const focusTvResume = useCallback((button: HTMLButtonElement | null) => {
+    // Loading the handset can remount the paused controls without changing the TV player status.
+    if (conn === 'open' && !suppressInput && !tv?.blocked) button?.focus({ preventScroll: true });
+  }, [conn, suppressInput, tv?.blocked]);
   useEffect(() => {
     const enabled = live && conn === 'open' && !suppressInput && !tvPaused && !tv?.blocked;
     input.enabled = enabled;
@@ -720,7 +724,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const overlay = tvPaused ? (
     <div className="tv-stage-pause">
       <p role="status">{translateUI('Game paused')}</p>
-      <button className="btn primary" type="button" data-tv-prefer disabled={conn !== 'open'} onClick={resume}>
+      <button ref={focusTvResume} className="btn primary" type="button" data-tv-prefer disabled={conn !== 'open'} onClick={resume}>
         <Icon name="play" /> {translateUI('Resume')}
       </button>
     </div>
