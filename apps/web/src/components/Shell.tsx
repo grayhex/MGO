@@ -54,6 +54,21 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
     return () => request.abort();
   }, [lastGame, inPlayer]);
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(COLLAPSE) === '1'; } catch { return false; } });
+  const [counts, setCounts] = useState<Awaited<ReturnType<typeof api.gameCounts>> | null>(null);
+  useEffect(() => {
+    let request: AbortController | undefined;
+    const refresh = () => {
+      request?.abort();
+      const pending = request = new AbortController();
+      void api.gameCounts(AbortSignal.any([pending.signal, AbortSignal.timeout(5000)])).then(value => {
+        if (!pending.signal.aborted) setCounts(value);
+      }, () => undefined);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 15000);
+    window.addEventListener('j2me:library-changed', refresh);
+    return () => { request?.abort(); window.clearInterval(timer); window.removeEventListener('j2me:library-changed', refresh); };
+  }, [path]);
   const [drawer, setDrawer] = useState(false);
   useEffect(() => { try { localStorage.setItem(COLLAPSE, collapsed ? '1' : '0'); } catch { /* private mode */ } }, [collapsed]);
   useEffect(() => { setDrawer(false); }, [path]);
@@ -80,6 +95,11 @@ export function Shell({ path, go, health, symbian, title, subtitle, children }: 
         </Link>
         <nav className="nav">
           {item('/', 'library', 'Library', path === '/')}
+          {counts && <dl className="nav-library-counts" aria-label={translateUI('Library by platform')} data-testid="library-counts">
+            {([['J2ME', 'j2me'], ['N-Gage', 'ngage'], ['Symbian', 'symbian']] as const).map(([label, kind]) => <div key={kind}>
+              <dt>{label}</dt><dd>{counts[kind].toLocaleString()}</dd>
+            </div>)}
+          </dl>}
           {lastGame && <Link to={`/play/${lastGame.id}`} onNavigate={go} data-testid="current-game" className={`nav-item current-game ${inPlayer ? 'active' : ''}`} title={lastGame.name} aria-label={translateUI('Current game: {name}', { name: lastGame.name })}>
             <Icon name="play" />
             <span className="nav-label"><small>{translateUI('Current game')}</small><strong>{lastGame.name}</strong>{lastGame.platform && <small><PlatformTag platform={lastGame.platform} size="sm" className="bare" /></small>}</span>

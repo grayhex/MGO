@@ -15,6 +15,7 @@ export function CuratedSetup() {
   const [titles, setTitles] = useState<CuratedTitle[] | null>(null);
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [reviewAll, setReviewAll] = useState(false);
+  const [afterDownload, setAfterDownload] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   async function refresh() {
@@ -33,8 +34,8 @@ export function CuratedSetup() {
     return () => window.clearInterval(timer);
   }, [installing, running]);
   useEffect(() => {
-    if (job?.state && job.state !== 'running' && job.imported) window.dispatchEvent(new Event('j2me:library-changed'));
-  }, [job?.state, job?.imported]);
+    if (job?.state && job.state !== 'running' && (job.imported || job.followUp?.scanned)) window.dispatchEvent(new Event('j2me:library-changed'));
+  }, [job?.state, job?.imported, job?.followUp?.scanned]);
 
   const act = async (action: () => Promise<void>) => {
     setBusy(true); setError('');
@@ -55,6 +56,13 @@ export function CuratedSetup() {
   const installed = titles?.filter(row => row.installedGameId).length ?? 0;
   const needsReview = titles?.filter(row => !row.installedGameId && !row.suggested && row.builds.length).length ?? 0;
   const missing = titles?.filter(row => !row.installedGameId && !row.builds.length).length ?? 0;
+  const retries = job?.failed.flatMap(item => item.sha256 ? [{ title: item.title, sha256: item.sha256 }] : []) ?? [];
+  const start = (selection: { title: string; sha256: string }[], follow = afterDownload) => act(async () => {
+    setJob(await api.curatedImport(selection, follow));
+    setTitles(null);
+  });
+  const followUp = job?.followUp;
+  const followUpLabel = followUp && ({ queued: '', scanning: 'Scanning the download folder…', recognizing: 'Looking up metadata in My Abandonware…', done: '', failed: '', cancelled: 'Follow-up cancelled' })[followUp.state];
 
   return <section className="archive-settings" aria-label={t('Curated Java ME library')}>
     <div className="archive-settings-head"><div>
@@ -103,15 +111,25 @@ export function CuratedSetup() {
         </li>)}
       </ul>
       <p className="hint">{t('MGO tries direct JARs first and skips archive blocks that exceed the download or unpacking limit.')}</p>
-      <div><button className="btn sm primary" type="button" disabled={busy || !selection.length || !destination?.writable || folder.trim() !== savedFolder} onClick={() => void act(async () => { setJob(await api.curatedImport(selection)); setTitles(null); })}>{t('Download {n} selected games', { n: selection.length })}</button></div>
+      <p className="hint">{t('If a recommended build is unavailable, MGO can use another verified build of the same game.')}</p>
+      <label className="switch-line">
+        <input type="checkbox" checked={afterDownload} onChange={event => setAfterDownload(event.target.checked)} />
+        <span>{t('After downloading, scan the folder and find metadata in My Abandonware')}</span>
+      </label>
+      <div><button className="btn sm primary" type="button" disabled={busy || !selection.length || !destination?.writable || folder.trim() !== savedFolder} onClick={() => void start(selection)}>{t('Download {n} selected games', { n: selection.length })}</button></div>
     </>}
     {job && <div className="archive-progress">
       <div className="btn-row">
         <span role="status">{t('{done}/{total} imported · {duplicates} already installed · {errors} failed', { done: job.imported, total: job.total, duplicates: job.duplicates, errors: job.failed.length })}</span>
-        {running && <button className="btn sm" type="button" disabled={busy} onClick={() => void act(async () => { await api.curatedCancel(); await refresh(); })}>{t('Cancel download')}</button>}
+        {running && <button className="btn sm" type="button" disabled={busy} onClick={() => void act(async () => { await api.curatedCancel(); await refresh(); })}>{t(followUp && followUp.state !== 'queued' ? 'Cancel follow-up' : 'Cancel download')}</button>}
+        {!running && !!retries.length && <button className="btn sm" type="button" disabled={busy || !destination?.writable || folder.trim() !== savedFolder} onClick={() => void start(retries, !!job.followUp)}>{t('Retry failed games')}</button>}
       </div>
-      {running && <><progress aria-label={t('Download progress')} max={job.total} value={job.imported + job.duplicates + job.failed.length} /><p className="small"><strong>{job.current}</strong>{job.currentBytes ? ` · ${archiveSize(job.currentBytes)} JAR` : ''}</p>
+      {running && (!followUp || followUp.state === 'queued') && <><progress aria-label={t('Download progress')} max={job.total} value={job.imported + job.duplicates + job.failed.length} /><p className="small"><strong>{job.current}</strong>{job.currentBytes ? ` · ${archiveSize(job.currentBytes)} JAR` : ''}</p>
         <p className="hint">{job.source && `${job.source} · `}{blockProgress(job.progress)}</p></>}
+      {!!job.substituted && <p className="small">{t('Used another verified build for {n} games', { n: job.substituted })}</p>}
+      {followUpLabel && <p className="small" role="status">{t(followUpLabel)}</p>}
+      {followUp?.scanned !== undefined && <p className="small">{t('{n} files scanned', { n: followUp.scanned })}{followUp.recognized !== undefined && ` · ${t('{n} titles recognized', { n: followUp.recognized })}`}</p>}
+      {followUp?.error && <p className="note warn">{t(followUp.error)}</p>}
       {job.destination && <p className="small muted">{t('Destination')} <code>{job.destination}</code></p>}
       {!!job.failed.length && <details className="more"><summary>{t('Errors')} ({job.failed.length})</summary><ul>{job.failed.map(failure => <li key={failure.title}>{failure.title} · {t(failure.message)}</li>)}</ul></details>}
     </div>}

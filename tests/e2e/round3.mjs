@@ -42,6 +42,7 @@ try {
   // ---- the keypad looks like a handset keypad ----
   await p.goto(base + '/play/' + game.id);
   await p.locator('.stage .skin-box').waitFor();
+  await p.locator('.stage-bar').getByRole('radio', { name: 'Screen', exact: true }).click();
   const keypad = p.getByTestId('phone-keypad');
   await keypad.waitFor();
   assert.equal(await keypad.getAttribute('data-skin'), 'nokia-n95');
@@ -54,7 +55,6 @@ try {
   // ---- Lights Out keeps the body faintly visible ----
   await p.locator('.skin-lcd-overlay button.primary').click();
   await wait(async () => (await (await fetch(base + '/api/sessions')).json()).some((x) => x.state === 'running'), 'running again');
-  await p.locator('.stage-bar').getByRole('radio', { name: 'Screen', exact: true }).click();
   await p.getByRole('button', { name: 'Lights Out' }).first().click();
   await p.locator('.player-grid.lights-out').waitFor();
   await sleep(500);

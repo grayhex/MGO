@@ -79,4 +79,12 @@ test('an installed Java build can be checked without running it, and stronger ev
   const updated = library.add(jar, Buffer.from('Nokia-MIDlet-Original-Display-Size: 320,240'), 1 << 20).game;
   assert.deepEqual(updated.nativeResolution, { width: 320, height: 240, source: 'attribute Nokia-MIDlet-Original-Display-Size' });
   assert.equal(updated.id, game.id, 'additional evidence does not create another game');
+  const packed = zipSync({ ...unzipSync(makeJar('Packed art')), 'scene.bin': Buffer.concat([
+    Buffer.from('GAME-DATA'), pngHeader(240, 320, 3), Buffer.alloc(100), pngHeader(240, 320, 4),
+    Buffer.alloc(100), pngHeader(240, 320, 5),
+  ]) });
+  assert.deepEqual(screenHintFromImages(packed), assets);
+  assert.deepEqual(readScreenHints({}, 'Puzzle_SE_K750i.jar')[0], { width: 176, height: 220, source: 'device label' });
+  assert.deepEqual(readScreenHints({ 'MIDlet-Screen-Width': '132', 'MIDlet-Screen-Height': '176' }, 'Puzzle.jar')[0],
+    { width: 132, height: 176, source: 'attribute midlet-screen-width/-height' });
 });

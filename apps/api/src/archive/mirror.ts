@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ArchiveBuild } from '@mgo/protocol';
-import { normalized } from './index.js';
+import { archiveTitleKey } from './index.js';
 import { readRemote } from './remote.js';
 
 const repository = 'M5-Dev/j2me-vault';
@@ -8,14 +8,20 @@ const revision = '251c5e6409242e1f36585e4c86823b98cf1683d8';
 const hub = 'https://huggingface.co';
 const treePath = `/api/datasets/${repository}/tree/${revision}/Games`;
 const allowsJar = ({ hostname }: URL) => /^(?:(?:cdn-lfs(?:-[a-z0-9]+)?\.)?huggingface\.co|cas-bridge\.xethub\.hf\.co|[a-z]+\.aws\.cdn\.hf\.co)$/.test(hostname);
-const nameKey = (name: string) => normalized(name.replace(/\.jar$/i, '').replace(/[-_ ](?:\d{2,4}x\d{2,4}|\d{2,3})$/i, '')).replaceAll(' ', '');
+const nameKey = (name: string) => archiveTitleKey(name.replace(/\.jar$/i, '')
+  .replace(/(?:[-_ ]+(?:\d{2,4}x\d{2,4}|en|ru|eng|rus|multi|s[346]0v?\d?))+$/i, ''));
 interface FileEntry { path: string; size: number; sha?: string }
 
 /** The tree contains sizes and LFS SHA-256 values. Small Git blobs carry only a Git object ID. */
 class VaultFiles {
   readonly byHash = new Map<string, FileEntry>();
   private bySize = new Map<number, FileEntry[]>();
+  private byName = new Map<string, Set<number>>();
   add(entry: FileEntry) {
+    const name = nameKey(entry.path.slice(6));
+    const sizes = this.byName.get(name) ?? new Set<number>();
+    sizes.add(entry.size);
+    this.byName.set(name, sizes);
     if (entry.sha) this.byHash.set(entry.sha, entry);
     else {
       const files = this.bySize.get(entry.size) ?? [];
@@ -23,13 +29,14 @@ class VaultFiles {
       this.bySize.set(entry.size, files);
     }
   }
+  sizes(title: string) { return [...(this.byName.get(nameKey(title)) ?? [])]; }
   candidates(build: ArchiveBuild): FileEntry[] {
     const exact = this.byHash.get(build.sha256);
     if (exact) return [exact];
     const names = [nameKey(build.filename), nameKey(build.title)].filter(Boolean);
     const sameSize = this.bySize.get(build.size) ?? [];
     const likely = sameSize.filter(file => names.includes(nameKey(file.path.slice(6))));
-    return (likely.length ? likely : sameSize.length <= 2 ? sameSize : []).slice(0, 2);
+    return (likely.length ? likely : sameSize.length === 1 ? sameSize : []).slice(0, 3);
   }
 }
 

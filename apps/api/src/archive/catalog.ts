@@ -8,7 +8,8 @@ import type { Library } from '../library.js';
 import { UploadError } from '../jar.js';
 import { readScreenHints, resolutionPriority } from '../analysis/screenHints.js';
 import { imageType, sniffImage } from '../image.js';
-import { archiveTitleKey as key, MIB } from './index.js';
+import { archiveTitleKey as key, MIB, normalized } from './index.js';
+import { cleanTitle } from '../title.js';
 import { readRemote, RemoteResponseError } from './remote.js';
 
 const indexUrls = [
@@ -26,6 +27,57 @@ const decode = (html: string) => html.replace(/&([#a-z0-9]+);/gi, (whole, entity
 type Listing = { id: string; title: string; aliases: string[]; genres: string[]; listed_year: string };
 type Stored = Omit<JavaCatalogInfo, 'screenshots'> & { images: string[] };
 type Screenshot = { bytes: Buffer; type: string };
+type CatalogIndex = { titles: Map<string, Listing[]>; aliases: Map<string, Listing[]>; short: Map<string, Listing[]> };
+
+const roman: Record<string, string> = { ii: '2', iii: '3', iv: '4', v: '5', vi: '6', vii: '7', viii: '8', ix: '9', x: '10' };
+// MIDlet and archive names for known Java ME releases whose directory entries use a different title.
+const alternateTitles = new Map([
+  ['Colin McRae 05', 'Colin McRae Rally 2005'],
+  ['Colin McRae Rally 4', 'Colin McRae Rally 04'],
+  ['Darkest Fear 2: Grim Oak', 'Darkest Fear: Grim Oak'],
+  ['FIFA World Cup 2006', 'FIFA World Cup: Germany 2006'],
+  ['Garfield In Robocats From Outer Space', 'Garfield: Robocats from Outer Space'],
+  ['Rainbow Six 3', "Tom Clancy's Rainbow Six 3"],
+  ['Rainbow Six Vegas', "Tom Clancy's Rainbow Six: Vegas"],
+  ['Resident Evil(R) Uprising', 'Resident Evil: Uprising'],
+  ['Siberian Ep II', 'Siberian Strike: Episode II'],
+  ['Silent Hill', 'Silent Hill: Orphan'],
+  ['SplinterCell', "Tom Clancy's Splinter Cell"],
+  ['TDE - Among Pirates', 'The Dark Eye: Among Pirates'],
+  ['TDE - Crypt Raiders', 'The Dark Eye: Crypt Raiders'],
+  ['TDE - Swamp of Doom', 'The Dark Eye: Swamp of Doom'],
+  ['TDE - The Caliphs Daughter', "The Dark Eye: Nedime - The Caliph's Daughter"],
+].map(([alias, title]) => [key(alias!), title!]));
+const fold = (value: string) => value.normalize('NFKD').replace(/\p{M}/gu, '');
+const titleForm = (value: string) => key(normalized(cleanTitle(fold(value))).split(' ').map(word => roman[word] ?? word).join(' '));
+const shortEnough = (value: string) => normalized(value).split(' ').length >= 2 && titleForm(value).length >= 9;
+const edition = (value: string) => {
+  const tokens = normalized(cleanTitle(value)).split(' ');
+  return tokens.filter(token => roman[token] || /^\d{1,4}$|^3d$/.test(token)).map(token => roman[token] ?? token).join(' ');
+};
+const filenameTitle = (name: string) => name.replaceAll('_', ' ').replace(/\.(?:jar|jad)$/i, '').replace(/\[[a-f0-9]{8,16}\]$/i, '')
+  .replace(/(?:\s*\[[^\]]+\]|\s*\([^()]+\))\s*$/g, match => /\d{2,4}\s*[x×]\s*\d{2,4}|\b(?:nokia|siemens|sony ericsson|english|russian|multiscreen)\b/i.test(match) ? '' : match)
+  .replace(/(?:[ _-]+v?\d+\.\d+(?:\.\d+)?|[ _-]+(?:en|ru|eng|rus|multi|nokias?[346]0|s[346]0v?\d?|k[578]\d{2}i?|n(?:70|95)|s65)|[ _-]+\d{2,4}\s*[x×]\s*\d{2,4})+$/i, '').trim();
+
+function addListing(map: Map<string, Listing[]>, form: string, row: Listing) {
+  if (!form) return;
+  const entries = map.get(form) ?? [];
+  if (!entries.some(entry => entry.id === row.id)) entries.push(row);
+  map.set(form, entries);
+}
+
+function matchListing(index: CatalogIndex, names: string[]) {
+  const forms = [...new Set(names.map(name => titleForm(alternateTitles.get(key(name)) ?? name)).filter(Boolean))];
+  for (const map of [index.titles, index.aliases, index.short]) {
+    const matches = new Map<string, Listing>();
+    for (const form of forms) {
+      const entries = map.get(form) ?? [];
+      if (entries.length === 1) matches.set(entries[0]!.id, entries[0]!);
+    }
+    if (matches.size) return matches.size === 1 ? matches.values().next().value : undefined;
+  }
+  return undefined;
+}
 
 function screenshotPath(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -56,6 +108,15 @@ export function parseJavaCatalogPage(html: string) {
       break;
     }
   }
+  if (!description) for (const [, json] of html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([^]*?)<\/script>/gi)) {
+    try {
+      const item = JSON.parse(json!);
+      if (item?.['@type'] === 'VideoGame' && javaPlatform.test(String(item.gamePlatform ?? item.operatingSystem ?? '')) && typeof item.description === 'string') {
+        description = decode(item.description).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 600);
+        if (description) break;
+      }
+    } catch { /* malformed structured data can coexist with a useful gallery */ }
+  }
   return { images, description };
 }
 
@@ -72,7 +133,7 @@ function providerError(error: unknown, provider: string): string {
 }
 
 export class JavaCatalog {
-  private index?: { until: number; entries: Map<string, Listing[]> };
+  private index?: { until: number; entries: CatalogIndex };
   private job: JavaCatalogJob | null = null;
   private active?: Promise<void>;
   private jobAbort?: AbortController;
@@ -107,7 +168,7 @@ export class JavaCatalog {
       if (this.shutdown.signal.aborted) throw error;
       return readIndex(indexUrls[1]!);
     });
-    const index = new Map<string, Listing[]>();
+    const index: CatalogIndex = { titles: new Map(), aliases: new Map(), short: new Map() };
     for (const entry of entries) {
       if (typeof entry?.id !== 'string' || !/^ma:[a-z0-9]+(?:-[a-z0-9]+)+$/.test(entry.id) || typeof entry.title !== 'string') continue;
       const row: Listing = {
@@ -116,18 +177,19 @@ export class JavaCatalog {
         genres: Array.isArray(entry.genres) ? entry.genres.filter((value: unknown) => typeof value === 'string') : [],
         listed_year: String(entry.listed_year ?? ''),
       };
-      for (const name of new Set([row.title, ...row.aliases].map(key))) {
-        if (!name) continue;
-        const list = index.get(name) ?? [];
-        list.push(row);
-        index.set(name, list);
+      addListing(index.titles, titleForm(row.title), row);
+      for (const alias of row.aliases) addListing(index.aliases, titleForm(alias), row);
+      const parts = row.title.split(/\s*:\s*|\s+[-–—]\s+/);
+      if (/\bmobile(?: game)?$/i.test(row.title)) parts.push(row.title.replace(/\s+mobile(?: game)?$/i, ''));
+      if (parts.length > 1) for (const part of [parts[0]!, parts.at(-1)!]) {
+        if (shortEnough(part) && edition(part) === edition(row.title)) addListing(index.short, titleForm(part), row);
       }
     }
     return index;
   }
 
   // The gateway can spend time on DNS before starting its HTTPS connect and read timers.
-  private signal(signal = this.shutdown.signal) { return AbortSignal.any([signal, this.shutdown.signal, AbortSignal.timeout(30_000)]); }
+  private signal(signal = this.shutdown.signal) { return AbortSignal.any([signal, this.shutdown.signal, AbortSignal.timeout(12_000)]); }
 
   private async site(pathname: string, allowedPath: (path: string) => boolean, maxBytes: number, accept: string, signal = this.shutdown.signal) {
     const allowed = (at: URL) => allowedSite(at) && allowedPath(at.pathname);
@@ -135,7 +197,9 @@ export class JavaCatalog {
     const preferred = this.preferredOrigin;
     const read = (host: string) => readRemote(this.fetcher, new URL(pathname, host), allowed, maxBytes, this.signal(signal), headers);
     try {
-      return await read(preferred);
+      const response = await read(preferred);
+      this.preferredOrigin = response.url.origin;
+      return response;
     } catch (error) {
       signal.throwIfAborted();
       this.shutdown.signal.throwIfAborted();
@@ -175,17 +239,18 @@ export class JavaCatalog {
 
   private applyArchiveResolution(game: GameMeta, build: ArchiveBuild) {
     if (resolutionPriority(game.nativeResolution) >= 4) return;
-    const hint = readScreenHints({}, build.filename)[0] ?? readScreenHints({}, build.archivePath)[0];
-    if (hint) game.nativeResolution = { ...hint, source: 'J2ME Archive' };
+    const hints = [readScreenHints({}, build.filename)[0], readScreenHints({}, build.archivePath)[0]];
+    const hint = hints.find(value => value?.source === 'file name') ?? hints.find(Boolean);
+    if (hint?.source === 'file name') game.nativeResolution = { ...hint, source: 'J2ME Archive' };
+    else if (hint && resolutionPriority(hint) > resolutionPriority(game.nativeResolution)) game.nativeResolution = hint;
   }
 
   /** Look up the exact binary in an installed index without running a metadata job. */
-  findExactResolution(game: GameMeta): GameMeta {
+  findExactResolution(game: GameMeta, build = this.exactBuild(game.sha256)): GameMeta {
     if ((game.platform ?? 'j2me') !== 'j2me' || resolutionPriority(game.nativeResolution) >= 4) return game;
-    const build = this.exactBuild(game.sha256);
     if (build?.sha256 === game.sha256) {
       this.applyArchiveResolution(game, build);
-      if (game.nativeResolution?.source === 'J2ME Archive') this.library.recordGameResolution(game.id, game.nativeResolution);
+      if (game.nativeResolution) this.library.recordGameResolution(game.id, game.nativeResolution);
     }
     return game;
   }
@@ -194,19 +259,18 @@ export class JavaCatalog {
     return (await this.lookupGame(game, this.shutdown.signal, true)).info;
   }
 
-  private async lookupGame(game: GameMeta, signal: AbortSignal, fetchPage: boolean): Promise<{ info: JavaCatalogInfo | null; error?: string; unavailable?: boolean }> {
+  private async lookupGame(game: GameMeta, signal: AbortSignal, fetchPage: boolean, versions = [game]): Promise<{ info: JavaCatalogInfo | null; error?: string; unavailable?: boolean }> {
     if ((game.platform ?? 'j2me') !== 'j2me') return { info: null };
     signal.throwIfAborted();
-    const archive = this.exactBuild(game.sha256);
-    if (archive?.sha256 === game.sha256) {
-      this.applyArchiveResolution(game, archive);
-      if (game.nativeResolution?.source === 'J2ME Archive') this.library.recordGameResolution(game.id, game.nativeResolution);
-    }
     const index = await this.catalog(signal);
-    const known = archive?.title ? index.get(key(archive.title)) : undefined;
-    const candidates = known ?? index.get(key(game.name)) ?? [];
-    if (candidates.length !== 1) return { info: null };
-    const match = candidates[0]!;
+    const archiveTitles = versions.flatMap(version => {
+      const build = this.exactBuild(version.sha256);
+      this.findExactResolution(version, build);
+      return build?.sha256 === version.sha256 && build.title ? [build.title] : [];
+    });
+    const match = matchListing(index, archiveTitles) ?? matchListing(index, versions.map(version => version.name)) ??
+      matchListing(index, versions.flatMap(version => version.fileName ? [filenameTitle(version.fileName)] : []));
+    if (!match) return { info: null };
     const url = new URL(`/game/${match.id.slice(3)}`, origin);
     const data: Stored = { title: match.title, sourceUrl: url.href, genres: match.genres, description: '', images: [],
       year: /^\d{4}$/.test(match.listed_year) ? Number(match.listed_year) : null, partial: true };
@@ -316,39 +380,72 @@ export class JavaCatalog {
     return true;
   }
 
-  start(): JavaCatalogJob {
+  start(ids?: ReadonlySet<string>, parent?: AbortSignal): JavaCatalogJob {
     if (this.active) throw new UploadError('catalog_busy', 'The Java ME metadata lookup is already running', 409);
-    const groups = new Map<string, GameMeta>();
+    const groups = new Map<string, GameMeta[]>();
     for (const game of this.library.list()) {
-      if ((game.platform ?? 'j2me') === 'j2me' && (!game.javaCatalog || game.javaCatalog.partial) && !groups.has(game.groupKey)) groups.set(game.groupKey, game);
+      if ((!ids || ids.has(game.id)) && (game.platform ?? 'j2me') === 'j2me' && (!game.javaCatalog || game.javaCatalog.partial)) {
+        const versions = groups.get(game.groupKey) ?? [];
+        versions.push(game);
+        groups.set(game.groupKey, versions);
+      }
     }
     const report: JavaCatalogJob = { state: 'running', total: groups.size, processed: 0, matched: 0, errors: 0, partial: 0 };
     this.job = report;
     const abort = new AbortController();
     this.jobAbort = abort;
-    this.active = this.run([...groups.values()], report, AbortSignal.any([abort.signal, this.shutdown.signal]))
+    this.active = this.run([...groups.values()], report, AbortSignal.any([abort.signal, this.shutdown.signal, ...(parent ? [parent] : [])]))
       .finally(() => { this.active = undefined; this.jobAbort = undefined; });
     return report;
   }
 
-  private async run(games: GameMeta[], report: JavaCatalogJob, signal: AbortSignal) {
+  async recognizeDownloaded(ids: readonly string[], signal: AbortSignal): Promise<JavaCatalogJob | null> {
+    if (!ids.length) return null;
+    const stop = AbortSignal.any([signal, this.shutdown.signal]);
+    while (this.active) await delay(350, undefined, { signal: stop });
+    stop.throwIfAborted();
+    const report = this.start(new Set(ids), stop);
+    await this.active;
+    return report;
+  }
+
+  private async run(games: GameMeta[][], report: JavaCatalogJob, signal: AbortSignal) {
     let consecutiveErrors = 0;
+    let retried = false;
     try {
       if (games.length) await this.catalog(signal);
-      for (const game of games) {
+      const matched: GameMeta[][] = [];
+      for (const versions of games) {
         signal.throwIfAborted();
-        const result = await this.lookupGame(game, signal, consecutiveErrors < 3);
+        const result = await this.lookupGame(versions[0]!, signal, false, versions);
         report.processed++;
         if (!result.info) continue;
         report.matched++;
-        if (result.info.partial) report.partial = (report.partial ?? 0) + 1;
+        if (result.info.partial) {
+          report.partial = (report.partial ?? 0) + 1;
+          matched.push(versions);
+        }
+      }
+      report.detailsTotal = matched.length;
+      for (const versions of matched) {
+        signal.throwIfAborted();
+        if (consecutiveErrors >= 3) {
+          if (retried) break;
+          await delay(5000, undefined, { signal });
+          retried = true;
+        }
+        const result = await this.lookupGame(versions[0]!, signal, true, versions);
+        report.detailsProcessed = (report.detailsProcessed ?? 0) + 1;
         if (result.error) {
           report.error = result.error;
           report.errors++;
           consecutiveErrors = result.unavailable ? consecutiveErrors + 1 : 0;
-        } else if (!result.info.partial) consecutiveErrors = 0;
-        if (consecutiveErrors < 3) await delay(500, undefined, { signal });
-        else await delay(0, undefined, { signal });
+        } else if (result.info && !result.info.partial) {
+          consecutiveErrors = 0;
+          retried = false;
+          report.partial = Math.max(0, (report.partial ?? 1) - 1);
+        }
+        await delay(300, undefined, { signal });
       }
       report.state = 'done';
     } catch (error) {

@@ -89,6 +89,7 @@ try {
   await panel.getByTestId('change-phone').getByText('K790i', { exact: true }).waitFor();
   await p.getByRole('radio', { name: 'Screen', exact: true }).click();
   const toolbar = p.locator('.stage-bar');
+  const toolbarFonts = [];
   const toolbarFits = () => toolbar.evaluate(bar => {
     const bounds = bar.getBoundingClientRect();
     const buttons = bar.querySelectorAll('.stage-left > button, .stage-view > *, .stage-status > *, .stage-tools > *');
@@ -120,8 +121,10 @@ try {
     });
     assert.ok(fits.bottom <= fits.height && fits.documentHeight <= fits.height + 1 && !fits.nested && fits.oneLine, `compact side panel fits at Full HD in ${language}: ${JSON.stringify(fits)}`);
     assert.ok(await toolbarFits(), `the player toolbar is one line at Full HD in ${language}`);
+    toolbarFonts.push(await toolbar.locator('.title strong').evaluate(node => Number.parseFloat(getComputedStyle(node).fontSize)));
     assert.equal(await panel.getByText('Game files', { exact: true }).count(), 0);
   }
+  assert.ok(toolbarFonts[0] < toolbarFonts[1], 'the Russian toolbar uses a smaller title font');
   const frameLimitButton = p.locator('.stage-fps-limit summary');
   await frameLimitButton.click();
   const limits = p.getByRole('radiogroup', { name: 'Frame limit (fps)' });

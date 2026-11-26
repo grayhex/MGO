@@ -13,6 +13,9 @@ const original = makeJar('3D Bomberman');
 const build = archiveBuild(original, { title: '3D Bomberman', filename: '3D Bomberman.jar' });
 const app = await buildApp(testConfig({ dataDir: dir, runDir: path.join(dir, 'run'), lanMode: true }), {
   archiveWorker: archiveFixtureWorker([build], new Map([[build.sha256, original]])),
+  javaCatalogFetch: async url => url.hostname === 'raw.githubusercontent.com' ? Response.json({ entries: [
+    { id: 'ma:3d-bomberman-test', title: '3D Bomberman', genres: ['Action'] },
+  ] }) : new Response('<meta name="description" content="J2ME action game">'),
 });
 const base = await app.fastify.listen({ port: 0, host: '127.0.0.1' });
 let browser;
@@ -36,11 +39,14 @@ try {
   assert.equal(app.library.count(), 0, 'preview alone does not import');
   const bad = await app.fastify.inject({ url: '/api/archive/curated', method: 'POST', payload: { confirmed: true, selection: [{ title: 'Not on the list', sha256: build.sha256 }] } });
   assert.equal(bad.statusCode, 400);
+  assert.ok(await curated.getByRole('checkbox', { name: 'After downloading, scan the folder and find metadata in My Abandonware' }).isChecked());
   await curated.getByRole('button', { name: 'Download 1 selected games' }).click();
   await curated.getByText('1/1 imported', { exact: false }).waitFor();
   assert.equal(readdirSync(path.join(dir, 'import/Curated Java ME')).length, 1);
   const game = app.library.findBySha(build.sha256);
   assert.ok(game);
+  await curated.getByText('1 files scanned · 1 titles recognized').waitFor();
+  assert.equal((await app.fastify.inject(`/api/games/${game.id}/java-catalog`)).json().info.description, 'J2ME action game');
   await wizard.getByRole('button', { name: 'Skip setup' }).click();
   await page.locator('.runtime-list').getByText('v1.5.0', { exact: true }).waitFor();
   assert.match(await page.locator('.runtime-list').innerText(), /Frontend web app[\s\S]*Java ME emulator[\s\S]*Symbian \/ N-Gage emulator/);

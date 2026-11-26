@@ -2,21 +2,24 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ArchiveBuild, ArchiveDownload, ArchiveSearchItem, ArchiveStatus, ArchiveTransfer, CuratedTitle, CuratedImport, GameMeta, PublicSettings } from '@mgo/protocol';
+import type { ArchiveBuild, ArchiveDownload, ArchiveSearchItem, ArchiveStatus, ArchiveTransfer, CuratedTitle, CuratedImport, GameMeta, JavaCatalogJob, PublicSettings } from '@mgo/protocol';
 import type { Config } from '../config.js';
 import { javaGroupKey, type Library } from '../library.js';
 import type { ScanManager } from '../scanner.js';
 import { parseJar, UploadError } from '../jar.js';
 import { resolveInsideRoots } from '../libraryPath.js';
 import { assertSpace, folderSegments, managedRoot, publishedJarName, publishJar, removePublishedJar, withDestination, writable } from './destination.js';
-import { ArchiveIndex, archiveTitleKey as titleKey, MIB, normalized, SHA256, SOURCE } from './index.js';
+import { ArchiveIndex, archiveTitleKey as titleKey, archiveVendorKey, MIB, SHA256, SOURCE } from './index.js';
 import { ArchiveMatching } from './matching.js';
 import type { JarMirror } from './mirror.js';
 
 export type ArchiveWorker = (args: string[], workspace: string, proxy: string, signal: AbortSignal, progress: (line: string) => void) => Promise<void>;
 type Job = { abort: AbortController; task: Promise<void> };
+type CuratedSelection = { title: string; sha256: string };
+type CuratedDestination = { rootId: string; root: string; folder: string };
 const curatedPath = fileURLToPath(new URL('../../archive-tools/java_curated_top.txt', import.meta.url));
 const workerPath = fileURLToPath(new URL('../../archive-tools/worker.py', import.meta.url));
 
@@ -69,10 +72,10 @@ export class ArchiveService {
   private curated: CuratedImport | null = null;
   private curatedTask: Promise<void> | null = null;
   private curatedAbort: AbortController | null = null;
-  private curatedPlan: { index: ArchiveIndex; rows: Promise<CuratedTitle[]> } | null = null;
+  private curatedPlan: { index: ArchiveIndex; mirror?: ReturnType<JarMirror['catalog']>; rows: Promise<CuratedTitle[]> } | null = null;
 
   constructor(private cfg: Config, private library: Library, private scanner: ScanManager, private worker: ArchiveWorker = runArchiveWorker, private settings?: () => PublicSettings,
-    private mirror: JarMirror | null = null) {
+    private mirror: JarMirror | null = null, private recognize?: (ids: readonly string[], signal: AbortSignal) => Promise<JavaCatalogJob | null>) {
     this.matching = new ArchiveMatching(library);
     this.dir = path.join(cfg.dataDir, 'j2me-archive');
     this.indexPath = path.join(this.dir, 'index.sqlite');
@@ -245,7 +248,7 @@ export class ArchiveService {
 
   currentDownload(): ArchiveDownload | null { return this.download; }
 
-  startDownload(sha: string, rootId: string, folder: string, curated?: { root: string; title: string }): ArchiveDownload {
+  startDownload(sha: string, rootId: string, folder: string, curated?: { root: string; title: string; alternatives: ArchiveSearchItem[] }): ArchiveDownload {
     const fromCurated = !!curated;
     this.ensureIdle(fromCurated);
     if (!SHA256.test(sha)) throw new UploadError('archive_bad_hash', 'Select a valid SHA-256 from the archive');
@@ -277,6 +280,7 @@ export class ArchiveService {
     rmSync(file, { force: true });
     this.attemptedAt = Date.now();
     this.download = report;
+    const startedWith = curated ? this.library.db.prepare('SELECT total_changes() AS n').get()?.n : undefined;
     this.start(report, async signal => {
       try {
         const progress = (line: string) => {
@@ -286,28 +290,23 @@ export class ArchiveService {
             if (report.source) this.curated.source = report.source;
           }
         };
-        report.source = 'J2ME Vault';
-        progress('Looking for a direct JAR…');
-        const direct = await this.mirror?.download(build, signal);
-        if (direct) writeFileSync(file, direct, { mode: 0o600 });
-        else {
-          report.source = 'J2ME Archive';
-          progress('Checking the archive fallback…');
-          await this.worker(['download', sha, file, path.join(staging, 'cache'), String(Math.min(64, Math.ceil(this.cfg.maxUploadBytes / MIB))),
-            build.collection === '96x65pixels J2ME mini' ? 'mini' : 'auto'], staging, this.proxy(), signal, progress);
-        }
+        const freeBytes = this.cfg.libraryQuotaBytes - this.library.totalBytes();
+        const alternatives = (curated?.alternatives ?? []).filter(candidate => candidate.size <= build.size + 2 * MIB &&
+          candidate.size <= this.cfg.maxUploadBytes && candidate.size <= freeBytes);
+        const received = await this.fetchBuild(build, alternatives, file, staging, report, signal, progress);
         signal.throwIfAborted();
+        report.sha256 = received.sha256;
         report.phase = 'verifying';
         const stat = lstatSync(file);
-        if (!stat.isFile() || stat.size !== build.size) throw new Error('Downloaded JAR size mismatch');
+        if (!stat.isFile() || stat.size !== received.size) throw new Error('Downloaded JAR size mismatch');
         const bytes = await readFile(file);
-        if (bytes.length !== build.size || createHash('sha256').update(bytes).digest('hex') !== sha) throw new Error('Downloaded JAR SHA-256 mismatch');
+        if (bytes.length !== received.size || createHash('sha256').update(bytes).digest('hex') !== received.sha256) throw new Error('Downloaded JAR SHA-256 mismatch');
         parseJar(bytes);
         signal.throwIfAborted();
         report.phase = 'importing';
         // It may have been uploaded while the archive job was still transferring.
-        const duplicate = this.library.findBySha(sha);
-        if (!duplicate && curated) {
+        const duplicate = this.library.findBySha(received.sha256);
+        if (!duplicate && curated && this.library.db.prepare('SELECT total_changes() AS n').get()?.n !== startedWith) {
           const installed = this.installedTitle(curated.title, build.title);
           if (installed) {
             report.gameId = installed;
@@ -315,13 +314,16 @@ export class ArchiveService {
             return;
           }
         }
-        const game = duplicate ?? withDestination(root, segments, dir => publishJar(dir, build.filename, sha, bytes, (name, mtime) => {
-          const relative = [...segments, name].join('/');
-          const result = this.scanner.importArchiveJar(root, relative, bytes, sha, mtime);
-          if (!result.duplicate) this.library.recordDownload(result.game.id, { root, relative, provider: report.source! });
-          return result.game;
-        }));
-        this.matching.exact(game.id, index.info.version, build);
+        const game = duplicate ?? withDestination(root, segments, dir => {
+          assertSpace(dir, received.size);
+          return publishJar(dir, received.filename, received.sha256, bytes, (name, mtime) => {
+            const relative = [...segments, name].join('/');
+            const result = this.scanner.importArchiveJar(root, relative, bytes, received.sha256, mtime);
+            if (!result.duplicate) this.library.recordDownload(result.game.id, { root, relative, provider: report.source! });
+            return result.game;
+          });
+        });
+        this.matching.exact(game.id, index.info.version, received);
         report.gameId = game.id;
         report.duplicate = !!duplicate;
       } finally {
@@ -331,15 +333,49 @@ export class ArchiveService {
     return report;
   }
 
+  private async fetchBuild(preferred: ArchiveBuild, alternatives: ArchiveSearchItem[], file: string, staging: string,
+    report: ArchiveDownload, signal: AbortSignal, progress: (message: string) => void): Promise<ArchiveBuild> {
+    const budget = alternatives.length ? AbortSignal.any([signal, AbortSignal.timeout(75_000)]) : signal;
+    report.source = 'J2ME Vault';
+    progress('Looking for a direct JAR…');
+    if (this.mirror) for (const candidate of [preferred, ...alternatives.filter(build => build.direct).slice(0, 3)]) {
+      const direct = await this.mirror.download(candidate, budget);
+      budget.throwIfAborted();
+      if (!direct) continue;
+      writeFileSync(file, direct, { mode: 0o600 });
+      return candidate;
+    }
+    report.source = 'J2ME Archive';
+    progress('Checking the archive fallback…');
+    let failure: unknown;
+    const backups = alternatives.filter(build => build.collection === '96x65pixels J2ME mini');
+    const backup = backups[0] ?? alternatives[0];
+    for (const candidate of backup ? [preferred, backup] : [preferred]) {
+      budget.throwIfAborted();
+      try {
+        await this.worker(['download', candidate.sha256, file, path.join(staging, 'cache'),
+          String(Math.min(64, Math.ceil(this.cfg.maxUploadBytes / MIB))),
+          candidate.collection === '96x65pixels J2ME mini' ? 'mini' : 'auto'], staging, this.proxy(), budget, progress);
+        return candidate;
+      } catch (error) {
+        failure = error;
+        rmSync(file, { force: true });
+        budget.throwIfAborted();
+      }
+    }
+    throw failure;
+  }
+
   curatedTitles(): string[] {
     return [...new Set(readFileSync(curatedPath, 'utf8').split(/\r?\n/).map(line => line.trim()).filter(Boolean))];
   }
 
   async previewCurated(): Promise<CuratedTitle[]> {
     const index = this.requireIndex();
-    if (this.curatedPlan?.index !== index) {
+    const mirror = this.mirror?.catalog();
+    if (this.curatedPlan?.index !== index || this.curatedPlan.mirror !== mirror) {
       const rows = async () => {
-        const files = await this.mirror?.catalog();
+        const files = await mirror;
         if (index !== this.index) throw new UploadError('archive_index_changed', 'The archive index changed. Refresh the list.', 409);
         const titles = this.curatedTitles();
         const wanted = new Set(titles.map(titleKey));
@@ -357,17 +393,19 @@ export class ArchiveService {
         for (const title of titles) {
           await new Promise<void>(done => setImmediate(done));
           if (index !== this.index) throw new UploadError('archive_index_changed', 'The archive index changed. Refresh the list.', 409);
-          const { builds, suggested } = index.curatedCandidates(title);
+          const { builds, suggested } = index.curatedCandidates(title, files?.sizes(title));
           const typical = builds.find(build => build.sha256 === suggested);
           const direct = directBuilds.get(titleKey(title)) ?? [];
           const options = [...new Map([...direct, ...builds].map(build => [build.sha256, build])).values()]
             .sort((a, b) => Number(!!files?.candidates(b).length) - Number(!!files?.candidates(a).length));
-          const recommended = typical && (options.find(build => normalized(build.vendor) === normalized(typical.vendor) && !!files?.candidates(build).length) ?? typical);
-          plan.push({ title, builds: options.map(build => ({ ...this.decorate(build), ...(files?.candidates(build).length ? { direct: true } : {}) })), suggested: recommended?.sha256 ?? null });
+          const recommended = typical && (options.find(build => titleKey(build.title) === titleKey(typical.title) &&
+            archiveVendorKey(build.vendor) === archiveVendorKey(typical.vendor) && !!files?.candidates(build).length) ?? typical);
+          plan.push({ title, builds: options.map(build => ({ ...build, gameId: null, otherBuildsInLibrary: 0,
+            ...(files?.candidates(build).length ? { direct: true } : {}) })), suggested: recommended?.sha256 ?? null });
         }
         return plan;
       };
-      this.curatedPlan = { index, rows: rows() };
+      this.curatedPlan = { index, ...(mirror ? { mirror } : {}), rows: rows() };
     }
     // Installed status is live even after completing an earlier import.
     const plan = await this.curatedPlan.rows;
@@ -401,7 +439,7 @@ export class ArchiveService {
 
   currentCurated(): CuratedImport | null { return this.curated; }
 
-  async importCurated(selection: { title: string; sha256: string }[]): Promise<CuratedImport> {
+  async importCurated(selection: CuratedSelection[], afterDownload = false): Promise<CuratedImport> {
     this.ensureIdle();
     const index = this.requireIndex();
     const plan = new Map((await this.previewCurated()).map(row => [row.title, row]));
@@ -419,12 +457,16 @@ export class ArchiveService {
     if (!destination.writable) throw new UploadError('archive_read_only', 'The archive destination is unavailable or read-only', 403);
     if (!java) mkdirSync(root, { mode: 0o700, recursive: true });
     withDestination(root, folderSegments(folder), dir => assertSpace(dir, 0));
-    const report: CuratedImport = { state: 'running', total: selection.length, imported: 0, duplicates: 0, failed: [], current: null, progress: null, destination: destination.path };
+    const report: CuratedImport = { state: 'running', total: selection.length, imported: 0, duplicates: 0, failed: [], current: null, progress: null, destination: destination.path,
+      ...(afterDownload ? { followUp: { state: 'queued' as const } } : {}) };
     const abort = new AbortController();
     this.curated = report;
     this.curatedAbort = abort;
-    this.curatedTask = this.runCurated(selection, report, abort.signal, { rootId, root, folder }).finally(() => {
+    this.curatedTask = this.runCurated(selection, plan, report, abort.signal, { rootId, root, folder }).then(async () => {
+      if (report.followUp && !abort.signal.aborted) await this.finishCurated(report.followUp, root, folder, abort.signal);
+    }).finally(() => {
       report.state = abort.signal.aborted ? 'cancelled' : 'done';
+      if (abort.signal.aborted && report.followUp && report.followUp.state !== 'done') report.followUp.state = 'cancelled';
       report.current = null;
       report.progress = null;
       this.curatedTask = null;
@@ -433,7 +475,7 @@ export class ArchiveService {
     return report;
   }
 
-  private async runCurated(selection: { title: string; sha256: string }[], report: CuratedImport, signal: AbortSignal, destination: { rootId: string; root: string; folder: string }): Promise<void> {
+  private async runCurated(selection: CuratedSelection[], plan: Map<string, CuratedTitle>, report: CuratedImport, signal: AbortSignal, destination: CuratedDestination): Promise<void> {
     await new Promise<void>(done => setImmediate(done));
     for (const item of selection) {
       if (signal.aborted) break;
@@ -447,15 +489,49 @@ export class ArchiveService {
           report.duplicates++;
           continue;
         }
-        const job = this.startDownload(item.sha256, destination.rootId, destination.folder, { root: destination.root, title: item.title });
+        const row = plan.get(item.title);
+        const alternatives = row?.suggested === item.sha256 && build ? row.builds.filter(candidate =>
+          candidate.sha256 !== item.sha256 && titleKey(candidate.title) === titleKey(build.title) &&
+          archiveVendorKey(candidate.vendor) === archiveVendorKey(build.vendor)) : [];
+        const job = this.startDownload(item.sha256, destination.rootId, destination.folder, { root: destination.root, title: item.title, alternatives });
         await this.job?.task;
         if (signal.aborted) break;
         if (job.state !== 'done') throw new Error(job.message ?? 'Archive source is unavailable');
         if (job.duplicate) report.duplicates++;
-        else report.imported++;
+        else {
+          report.imported++;
+          if (job.sha256 !== item.sha256) report.substituted = (report.substituted ?? 0) + 1;
+        }
       } catch (error) {
-        report.failed.push({ title: item.title, message: (error as Error).message });
+        if (signal.aborted) break;
+        report.failed.push({ title: item.title, sha256: item.sha256, message: (error as Error).message });
       }
+    }
+  }
+
+  private async finishCurated(followUp: NonNullable<CuratedImport['followUp']>, root: string, folder: string, signal: AbortSignal) {
+    try {
+      while (this.scanner.isRunning()) await delay(500, undefined, { signal });
+      followUp.state = 'scanning';
+      const scan = this.scanner.startArchiveScan(root, folderSegments(folder), signal);
+      await this.scanner.idle();
+      signal.throwIfAborted();
+      if (scan.report.state === 'cancelled') { followUp.state = 'cancelled'; return; }
+      if (scan.report.state !== 'done') throw new Error(scan.report.error ?? 'Library scan failed');
+      followUp.scanned = scan.report.jars;
+      if (this.index && this.recognize) {
+        followUp.state = 'recognizing';
+        const metadata = await this.recognize(scan.gameIds(), signal);
+        if (metadata) {
+          followUp.recognized = metadata.matched;
+          if (metadata.state === 'failed') throw new Error(metadata.error ?? 'Java ME metadata lookup failed');
+          if (metadata.state === 'cancelled') { followUp.state = 'cancelled'; return; }
+        }
+      }
+      followUp.state = 'done';
+    } catch (error) {
+      followUp.state = signal.aborted ? 'cancelled' : 'failed';
+      if (!signal.aborted) followUp.error = (error as Error).message;
     }
   }
 

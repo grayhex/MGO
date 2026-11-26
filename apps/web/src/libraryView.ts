@@ -6,6 +6,8 @@ export type SortKey = 'name' | 'name-desc' | 'added' | 'played' | 'time' | 'genr
 export const SORT_KEYS: SortKey[] = ['name', 'name-desc', 'added', 'played', 'time', 'genre'];
 
 export const resolutionKey = (size: { width: number; height: number }) => `${size.width}×${size.height}`;
+export const resolutionEstimateLabel = (size?: GameMeta['nativeResolution']) => size?.source === 'frame' ? 'Estimated from game frames'
+  : size?.source === 'JAR images' || size?.source === 'device label' || size?.source === 'folder label' ? size.source : null;
 
 export function matchesResolution(game: GameMeta, filter: string): boolean {
   const size = game.nativeResolution;

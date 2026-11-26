@@ -22,6 +22,7 @@ import { PcmAudio } from '../audio';
 import { InputController } from '../input';
 import { isSkinId, useCatalog, usePrefs, useSkin } from '../skin/registry';
 import { keypadCrops } from '../skin/hitboxes';
+import { resolutionEstimateLabel } from '../libraryView';
 import { PhoneSkin } from '../skin/PhoneSkin';
 import type { LoadedSkin } from '../skin/types';
 import { useHeld } from '../skin/useHeld';
@@ -590,8 +591,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   useEffect(() => { if (game && !j2me) api.phones().then(setPhoneCatalog, () => undefined); }, [game?.id, j2me, native.data?.plan.firmwareCode]);
   const [tipHidden, setTipHidden] = useState<string | null>(null);
   const actualGameSize = game?.nativeResolution;
-  const sizeEstimate = actualGameSize?.source === 'frame' ? 'Estimated from game frames'
-    : actualGameSize?.source === 'JAR images' ? 'JAR images' : null;
+  const sizeEstimate = resolutionEstimateLabel(actualGameSize);
   const gameSizeLabel = sizeEstimate ?? (actualGameSize ? 'Native game resolution' : 'Native resolution unknown');
   const displayProfile = live && session ? { width: session.width, height: session.height } : res;
   const mismatch = j2me && actualGameSize && displayProfile &&
@@ -643,7 +643,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const res_ = session?.resources ?? null;
   const keypadDefault = controls.keypad === 'always' || (controls.keypad === 'auto'
     && (view === 'screen' || skin?.config.input?.externalKeypad === true || matchMedia('(pointer: coarse)').matches));
-  const showKeypad = keypadOverride ?? keypadDefault;
+  const canShowKeypad = view === 'screen' || skin?.config.input?.externalKeypad === true;
+  const showKeypad = canShowKeypad && (keypadOverride ?? keypadDefault);
   const external = lightsActive ? touchControls : showKeypad;
   const keypadReady = loaded && (skin !== null || !!skinError) && (j2me || !!native.data || !!native.error);
   const crops = useMemo(() => skin ? keypadCrops(skin) : [], [skin]);
@@ -885,7 +886,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
 
         <Panel icon="gamepad" title={translateUI("Controls")}>
           <div className="control-line">
-            <Switch checked={showKeypad} onChange={enabled => { setKeypadOverride(enabled); saveControlPreference('keypad', enabled ? 'on' : 'off'); }}>{translateUI("On-screen keypad")}</Switch>
+            <Switch checked={showKeypad} disabled={!canShowKeypad} onChange={enabled => { setKeypadOverride(enabled); saveControlPreference('keypad', enabled ? 'on' : 'off'); }}>{translateUI("On-screen keypad")}</Switch>
             <div className="btn-row">
               <Hint text={`${translateUI("Arrows · Enter = OK · Q/W = soft keys · 0–9 · X = * · Z = #.")}${pad ? ` ${pad.slice(0, 28)}` : ''}`} />
               <button className="btn sm icon" type="button" title={translateUI("Remap keyboard")} aria-label={translateUI("Remap keyboard")} onClick={() => setKeymap(true)}><Icon name="keypad" /></button>

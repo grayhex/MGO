@@ -49,6 +49,7 @@ try {
     for (const t of ['dragenter', 'dragover', 'drop']) window.dispatchEvent(new DragEvent(t, { dataTransfer: dt, bubbles: true, cancelable: true }));
   }, bytes);
   await page.waitForSelector('article.game-card h3:has-text("KemTest")');
+  await page.getByTestId('library-counts').getByText('1', { exact: true }).waitFor();
   ok('drag-and-drop upload creates a library card with MIDlet-Name', true);
   await page.screenshot({ path: path.join(outDir, '02-library.png') });
 
@@ -122,7 +123,9 @@ try {
   await page.keyboard.up('Digit7');
 
   // on-screen keypad (touch/pointer) works too
-  await page.getByText('On-screen keypad', { exact: true }).click();
+  const keypad = page.getByRole('checkbox', { name: 'On-screen keypad', exact: true });
+  ok('full phone view disables the duplicate keypad', await keypad.isDisabled() && !await keypad.isChecked());
+  await page.getByRole('radio', { name: 'Screen', exact: true }).click();
   await page.waitForSelector('[data-testid=phone-keypad]');
   const k0loc = page.locator('[data-testid=phone-keypad] polygon[data-action=d0]');
   await k0loc.scrollIntoViewIfNeeded();
@@ -177,6 +180,7 @@ try {
   await mp.screenshot({ path: path.join(outDir, '08-mobile-library.png') });
   await mp.locator('article.game-card .play-game').click();
   await mp.waitForFunction(() => document.querySelector('[data-testid=state-badge]')?.textContent?.includes('running'), null, { timeout: 20000 });
+  await mp.getByRole('radio', { name: 'Screen', exact: true }).click();
   await mp.waitForSelector('[data-testid=phone-keypad]');
   await mp.waitForTimeout(500);
   await mp.screenshot({ path: path.join(outDir, '09-mobile-player.png') });

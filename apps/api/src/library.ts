@@ -7,10 +7,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { emulatedDevice, PHONE_COMPATIBILITY, isPlatform, nativeGameDefaults, sisFormatOf, skinSupportsPlatform, type PackageFormat, type Platform, DEFAULT_SETTINGS, EMULATION_LIMITS, type EmulationTweaks, type GameInfoSummary, type GameMeta, type GameSettings, KEY_LAYOUTS, SCREEN_PRESETS, type LayoutId, type MetaStatus } from '@mgo/protocol';
 import { parseJad, parseJar, readJarIcon, sanitizeText, UploadError } from './jar.js';
 import { readAttributes } from './analysis/analyze.js';
-import { readScreenHints, resolutionPriority, screenHintFromImages, type ScreenHint } from './analysis/screenHints.js';
+import { folderScreenHint, readScreenHints, resolutionPriority, screenHintFromImages, type ScreenHint } from './analysis/screenHints.js';
 import { Classifications } from './classification.js';
 import { cleanTitle, cleanVendor } from './title.js';
 import { sniffImage } from './image.js';
+
+const SCREEN_PROBE_VERSION = 2;
 
 function originalFileName(name?: string): string | null {
   return name ? sanitizeText(path.basename(name.replaceAll('\\', '/')), 255) || null : null;
@@ -67,6 +69,7 @@ export interface SourceRow {
 export interface AddOptions {
   origin?: 'upload' | 'import';
   fileName?: string;
+  folderLabel?: string;
   /** Settings a new game starts with (the "default phone"); explicit MIDlet choices still win. */
   defaults?: Partial<GameSettings>;
 }
@@ -343,26 +346,36 @@ export class Library {
   }
 
   /** Reuse an in-memory package during import or a full rescan. Cache an inconclusive probe too. */
-  probeGameResolution(game: GameMeta, jar: Uint8Array, jad?: Uint8Array | null, filename = game.fileName ?? game.name): void {
+  probeGameResolution(game: GameMeta, jar: Uint8Array, jad?: Uint8Array | null, filename = game.fileName ?? game.name, folder?: string): void {
     if ((game.platform ?? 'j2me') !== 'j2me' || (resolutionPriority(game.nativeResolution) >= 5 && !jad)) return;
     const row = this.db.prepare('SELECT screen_probed FROM games WHERE id = ?').get(game.id);
     if (!row) return;
-    if (row.screen_probed && !jad && filename === (game.fileName ?? game.name)) return;
+    const current = Number(row.screen_probed) >= SCREEN_PROBE_VERSION;
+    if (current && !jad && filename === (game.fileName ?? game.name)) {
+      const hint = folderScreenHint(folder);
+      if (hint) this.recordGameResolution(game.id, hint);
+      return;
+    }
     const hint = readScreenHints(readAttributes(jar, jad ?? undefined), filename)[0]
-      ?? (!row.screen_probed ? screenHintFromImages(jar) : undefined);
+      ?? folderScreenHint(folder)
+      ?? (!current ? screenHintFromImages(jar) : undefined);
     if (hint) this.recordGameResolution(game.id, hint);
-    if (!row.screen_probed) this.db.prepare('UPDATE games SET screen_probed = 1 WHERE id = ?').run(game.id);
+    if (!current) this.db.prepare('UPDATE games SET screen_probed = ? WHERE id = ?').run(SCREEN_PROBE_VERSION, game.id);
   }
 
   /** Older libraries do the extra work on opening the game, so startup and list requests stay cheap. */
-  async inspectGameResolution(game: GameMeta): Promise<GameMeta> {
+  async inspectGameResolution(game: GameMeta, folder?: string): Promise<GameMeta> {
     if ((game.platform ?? 'j2me') !== 'j2me' || resolutionPriority(game.nativeResolution) >= 5) return game;
     const row = this.db.prepare('SELECT screen_probed FROM games WHERE id = ?').get(game.id);
-    if (row?.screen_probed !== 0) return game;
+    if (!row) return game;
+    if (Number(row.screen_probed) >= SCREEN_PROBE_VERSION) {
+      const hint = folderScreenHint(folder);
+      return hint && this.recordGameResolution(game.id, hint) ? { ...game, nativeResolution: hint } : game;
+    }
     const files = this.paths(game.id);
     try {
       const [jar, jad] = await Promise.all([readFile(files.jar), files.jad ? readFile(files.jad).catch(() => null) : null]);
-      this.probeGameResolution(game, jar, jad);
+      this.probeGameResolution(game, jar, jad, undefined, folder);
     } catch { return game; } // an unavailable package should not make game details unavailable
     return this.get(game.id) ?? game;
   }
@@ -527,6 +540,15 @@ export class Library {
     return r.n;
   }
 
+  platformCounts(): { j2me: number; ngage: number; symbian: number } {
+    const counts = { j2me: 0, ngage: 0, symbian: 0 };
+    for (const row of this.db.prepare('SELECT platform, COUNT(DISTINCT group_key) AS games FROM games GROUP BY platform').all()) {
+      const kind = row.platform === 'ngage' || row.platform === 'ngage2' ? 'ngage' : row.platform === 'symbian' ? 'symbian' : 'j2me';
+      counts[kind] += Number(row.games);
+    }
+    return counts;
+  }
+
   paths(id: string): { dir: string; jar: string; jad: string | null; icon: string | null } {
     const dir = path.join(this.gamesDir, id);
     const jad = path.join(dir, 'game.jad');
@@ -580,7 +602,7 @@ export class Library {
     const sha = createHash('sha256').update(jar).digest('hex');
     const dup = this.db.prepare('SELECT * FROM games WHERE sha256 = ?').get(sha) as unknown as Row | undefined;
     if (dup) {
-      this.probeGameResolution(this.toMeta(dup), jar, jadBytes, opts.fileName);
+      this.probeGameResolution(this.toMeta(dup), jar, jadBytes, opts.fileName, opts.folderLabel);
       return { game: this.get(dup.id)!, duplicate: true };
     }
     if (this.totalBytes() + jar.length > quotaBytes) throw new UploadError('quota_exceeded', 'Library quota exceeded; delete some games first', 507);
@@ -600,17 +622,17 @@ export class Library {
     const firstMidlet = info.midlets[0];
     if (info.midlets.length > 1 && firstMidlet) settings.midlet = firstMidlet.className;
     const groupKey = javaGroupKey(name, vendor);
-    const resolution = readScreenHints(info.attributes, opts.fileName ?? name)[0] ?? screenHintFromImages(jar);
+    const resolution = readScreenHints(info.attributes, opts.fileName ?? name)[0] ?? folderScreenHint(opts.folderLabel) ?? screenHintFromImages(jar);
     this.db
       .prepare(
         `INSERT INTO games (id, sha256, name, vendor, version, group_key, midlets_json, class_version, size_bytes, has_icon, has_jad,
-          favorite, created_at, last_played_at, settings_json, warnings_json, origin, native_resolution_json, file_name, screen_probed) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,?,?,?,1)`,
+          favorite, created_at, last_played_at, settings_json, warnings_json, origin, native_resolution_json, file_name, screen_probed) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,NULL,?,?,?,?,?,?)`,
       )
       .run(
         id, sha, name, vendor, sanitizeText(info.version, 40), groupKey,
         JSON.stringify(info.midlets.map((m) => ({ name: sanitizeText(m.name), className: m.className }))),
         info.classVersion, jar.length, info.icon ? 1 : -2, jadBytes ? 1 : 0,
-        new Date().toISOString(), JSON.stringify(settings), JSON.stringify(info.warnings), opts.origin ?? 'upload', JSON.stringify(resolution ?? null), originalFileName(opts.fileName),
+        new Date().toISOString(), JSON.stringify(settings), JSON.stringify(info.warnings), opts.origin ?? 'upload', JSON.stringify(resolution ?? null), originalFileName(opts.fileName), SCREEN_PROBE_VERSION,
       );
     return { game: this.get(id)!, duplicate: false };
   }

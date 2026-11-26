@@ -20,6 +20,9 @@
   .nav-item:active, .nav-item:hover .icon-svg { transform: none; }
 }
 .nav-item .nav-label { overflow: hidden; text-overflow: ellipsis; }
+.nav-library-counts { margin: 0 5px 3px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--shell-border); padding: 0 0 7px; text-align: center; font-size: .65rem; color: var(--on-shell-muted); }
+.nav-library-counts dd { margin: 1px 0 0; font-size: .75rem; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--on-shell); }
+.shell-collapsed:not(.shell-drawer) .nav-library-counts { display: none; }
 .nav-item[aria-disabled='true'] { opacity: 0.4; pointer-events: none; }
 .sidebar-foot { margin-top: auto; display: grid; gap: 12px; }
 .runtime { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--shell-border); font-size: 0.75rem; line-height: 1rem; color: var(--on-shell-muted); }

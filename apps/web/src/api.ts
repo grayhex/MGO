@@ -64,7 +64,7 @@ export const api = {
   login: (token: string) => req<{ ok: true }>('/api/auth/login', jsonInit('POST', { token })),
   curatedStatus: () => req<{ count: number; job: CuratedImport | null; destination: import('@mgo/protocol').CuratedDestination }>('/api/archive/curated'),
   curatedPreview: () => req<{ titles: CuratedTitle[] }>('/api/archive/curated/preview'),
-  curatedImport: (selection: { title: string; sha256: string }[]) => req<CuratedImport>('/api/archive/curated', jsonInit('POST', { selection, confirmed: true })),
+  curatedImport: (selection: { title: string; sha256: string }[], afterDownload = false) => req<CuratedImport>('/api/archive/curated', jsonInit('POST', { selection, confirmed: true, afterDownload })),
   curatedCancel: () => req<{ cancelled: boolean }>('/api/archive/curated', { method: 'DELETE' }),
   archiveStatus: (signal?: AbortSignal) => req<ArchiveStatus>('/api/archive', signal ? { signal } : undefined),
   archiveIndex: () => req<ArchiveTransfer>('/api/archive/index', { method: 'POST' }),
@@ -81,6 +81,7 @@ export const api = {
   archiveStartDownload: (sha256: string, root: string, folder: string) => req<ArchiveDownload>('/api/archive/download', jsonInit('POST', { sha256, root, folder })),
   archiveCancelDownload: () => req<{ cancelled: boolean }>('/api/archive/download', { method: 'DELETE' }),
   games: () => req<GameMeta[]>('/api/games'),
+  gameCounts: (signal?: AbortSignal) => req<{ j2me: number; ngage: number; symbian: number }>('/api/games/summary', { signal }),
   upload: async (jar: File, jad?: File) => {
     const fd = new FormData();
     fd.append('jar', jar, jar.name);

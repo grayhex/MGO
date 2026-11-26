@@ -24,6 +24,22 @@ function setup(extra: { quotaMb?: number } = {}) {
 }
 
 describe('library scan', () => {
+  it('checks old rows during an incremental scan and keeps the host folder hint separate from emulator settings', async () => {
+    const { root, cfg, library, run } = setup();
+    try {
+      put(root, '176x220/Puzzle.jar', makeJar('Puzzle'));
+      assert.equal((await run()).added, 1);
+      const game = library.list()[0]!;
+      library.db.prepare('UPDATE games SET screen_probed=1, native_resolution_json = NULL WHERE id=?').run(game.id);
+      assert.equal((await run()).unchanged, 1);
+      assert.deepEqual(library.get(game.id)?.nativeResolution, { width: 176, height: 220, source: 'folder label' });
+      assert.deepEqual(library.get(game.id)?.settings, game.settings);
+    } finally {
+      library.close();
+      rmSync(root, { recursive: true, force: true });
+      rmSync(cfg.dataDir, { recursive: true, force: true });
+    }
+  });
   it('imports recursively with the manifest, JAD pairing and the default phone', async () => {
     const t = setup();
     t.store.update({ phone: { width: 176, height: 220, layout: 'sonyericsson', heapMb: 128 } });

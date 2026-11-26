@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { isPhoneId, platformOfFile, selectPhone, profilesForSkin, type SymbianStatus, type GameSettings, type PublicSettings, type ScanReport } from '@mgo/protocol';
+import { isPhoneId, platformOfFile, selectPhone, profilesForSkin, type GameMeta, type SymbianStatus, type GameSettings, type PublicSettings, type ScanReport } from '@mgo/protocol';
 import type { Config } from './config.js';
 import { UploadError } from './jar.js';
 import type { Library } from './library.js';
@@ -13,6 +13,7 @@ import { newId } from './library.js';
 const MAX_REPORTED_ERRORS = 200;
 const prefixFor = (root: string, kind: string) => `${kind}/${createHash('sha256').update(root).digest('hex').slice(0, 8)}/`;
 const tick = () => new Promise<void>((r) => setImmediate(r));
+type ScanRoot = { real: string; prefix: string; kind: string | null };
 
 /** The "default phone" of the settings, as the settings a freshly added game starts with. */
 export function gameDefaults(p: PublicSettings['phone'], explicit: Partial<PublicSettings['phone']> = {}): Partial<GameSettings> {
@@ -25,6 +26,7 @@ export interface ScanHooks {
   /** The phone values somebody actually chose (not the built-in defaults). */
   explicitPhone?(): Partial<PublicSettings['phone']>;
   onFinished?(report: ScanReport): void;
+  onJavaGame?(game: GameMeta): void;
 }
 
 /**
@@ -60,7 +62,7 @@ export class ScanManager {
   start(mode: 'update' | 'full', kinds?: readonly ('j2me' | 'ngage' | 'symbian')[]): ScanReport {
     if (this.running) throw new UploadError('scan_running', 'A scan is already running', 409);
     const settings = this.hooks.settings();
-    const roots: { real: string; prefix: string; kind: string | null }[] = [];
+    const roots: ScanRoot[] = [];
     const unavailable: string[] = [];
     const add = (dir: string, kind: string | null) => {
       const hit = resolveInsideRoots(this.cfg, dir);
@@ -78,6 +80,31 @@ export class ScanManager {
     }
     if (!roots.length && unavailable.length) throw new UploadError('library_unavailable', 'The configured library directories are missing or outside the allowed locations', 400);
     if (!roots.length) throw new UploadError('no_library', kinds && kinds.length < 3 ? 'No folder is chosen for this kind of games (Settings > Game library)' : 'No library directory is configured (Settings > Game library)', 400);
+    return this.beginScan(mode, roots, unavailable);
+  }
+
+  private archivePrefix(root: string) {
+    const settings = this.hooks.settings();
+    return settings.libraryPath === root && !settings.libraryPaths?.j2me ? '' : prefixFor(root, 'j2me');
+  }
+
+  /** Scan just the downloaded folder using the same source IDs as a scan of its parent. */
+  startArchiveScan(root: string, segments: readonly string[], signal: AbortSignal): { report: ScanReport; gameIds: () => string[] } {
+    if (this.running) throw new UploadError('scan_running', 'A scan is already running', 409);
+    signal.throwIfAborted();
+    const directory = path.join(root, ...segments);
+    if (resolveInsideRoots(this.cfg, directory)?.real !== directory)
+      throw new UploadError('library_unavailable', 'The configured library directories are missing or outside the allowed locations', 400);
+    const prefix = this.archivePrefix(root) + segments.map(segment => segment + '/').join('');
+    const report = this.beginScan('update', [{ real: directory, prefix, kind: 'j2me' }], []);
+    const cancel = () => { if (this.report === report) this.cancel(); };
+    signal.addEventListener('abort', cancel, { once: true });
+    const done = () => signal.removeEventListener('abort', cancel);
+    void this.idle().then(done, done);
+    return { report, gameIds: () => [...new Set(this.library.allSources().filter(source => !source.missing && source.rel_path.startsWith(prefix)).map(source => source.game_id))] };
+  }
+
+  private beginScan(mode: 'update' | 'full', roots: ScanRoot[], unavailable: string[]): ScanReport {
     const r: ScanReport = {
       id: newId(6), mode, state: 'running', root: roots.map(r => r.real).join(' · '), startedAt: new Date().toISOString(), finishedAt: null,
       filesSeen: 0, jars: 0, added: 0, updated: 0, unchanged: 0, duplicates: 0, newVersions: 0, missing: 0, skipped: 0,
@@ -103,7 +130,7 @@ export class ScanManager {
     if (r.errors.length < MAX_REPORTED_ERRORS) r.errors.push({ path: path_, code, message });
   }
 
-  private async run(r: ScanReport, roots: { real: string; prefix: string; kind: string | null }[]): Promise<void> {
+  private async run(r: ScanReport, roots: ScanRoot[]): Promise<void> {
     try {
       const stats: WalkStats = { entries: 0, symlinksSkipped: 0, truncated: false, unreadableDirs: [] };
       const jars = new Map<string, WalkEntry>();
@@ -223,10 +250,11 @@ export class ScanManager {
   /** A completed single-JAR transfer, indexed with the same importer and source metadata as a folder scan. */
   importArchiveJar(root: string, relative: string, bytes: Buffer, sha: string, mtimeMs: number) {
     const settings = this.hooks.settings();
-    const legacy = settings.libraryPath === root && !settings.libraryPaths?.j2me;
-    const rel = (legacy ? '' : prefixFor(root, 'j2me')) + relative;
+    const rel = this.archivePrefix(root) + relative;
     const defaults = gameDefaults(settings.phone, this.hooks.explicitPhone?.());
-    return this.addJarSource({ rel, size: bytes.length, mtimeMs }, null, bytes, null, sha, defaults);
+    const result = this.addJarSource({ rel, size: bytes.length, mtimeMs }, null, bytes, null, sha, defaults);
+    this.hooks.onJavaGame?.(result.game);
+    return result;
   }
 
   /** Reverse the scanner's source prefixes for JARs published by an earlier version of MGO. */
@@ -241,14 +269,19 @@ export class ScanManager {
   }
 
   private addJarSource(jar: Pick<WalkEntry, 'rel' | 'size' | 'mtimeMs'>, jad: WalkEntry | null, bytes: Buffer, jadBytes: Buffer | null, sha: string, defaults: Partial<GameSettings>) {
-    const result = this.library.add(bytes, jadBytes, this.cfg.libraryQuotaBytes, { origin: 'import', fileName: path.basename(jar.rel), defaults });
+    const result = this.library.add(bytes, jadBytes, this.cfg.libraryQuotaBytes, { origin: 'import', fileName: path.basename(jar.rel),
+      folderLabel: path.basename(path.dirname(jar.rel)), defaults });
     this.library.upsertSource({ rel_path: jar.rel, jad_rel_path: jad?.rel ?? null, game_id: result.game.id, size: jar.size, mtime_ms: jar.mtimeMs, jad_size: jad?.size ?? 0, jad_mtime_ms: jad?.mtimeMs ?? 0, sha256: sha });
     return result;
   }
 
   private async importOne(r: ScanReport, jar: WalkEntry, jad: WalkEntry | null, defaults: Partial<GameSettings>): Promise<void> {
     const prev = this.library.getSource(jar.rel);
-    if (r.mode === 'update' && prev && prev.size === jar.size && prev.mtime_ms === jar.mtimeMs && prev.jad_size === (jad?.size ?? 0) && prev.jad_mtime_ms === (jad?.mtimeMs ?? 0) && this.library.get(prev.game_id)) {
+    const unchanged = r.mode === 'update' && prev && prev.size === jar.size && prev.mtime_ms === jar.mtimeMs && prev.jad_size === (jad?.size ?? 0) && prev.jad_mtime_ms === (jad?.mtimeMs ?? 0);
+    const stored = unchanged ? this.library.get(prev.game_id) : null;
+    if (prev && stored) {
+      const inspected = await this.library.inspectGameResolution(stored, path.basename(path.dirname(jar.rel)));
+      this.hooks.onJavaGame?.(inspected);
       this.library.touchSource(jar.rel);
       r.unchanged++;
       return;
@@ -262,13 +295,15 @@ export class ScanManager {
     let gameId: string;
     if (existing) {
       gameId = existing.id;
-      this.library.probeGameResolution(existing, bytes, jadBytes, path.basename(jar.rel));
+      this.library.probeGameResolution(existing, bytes, jadBytes, path.basename(jar.rel), path.basename(path.dirname(jar.rel)));
+      this.hooks.onJavaGame?.(this.library.get(existing.id) ?? existing);
       if (prev && prev.sha256 === sha) r.unchanged++;
       else if (prev) r.updated++;
       else if (this.library.sourcesOf(existing.id).some((s) => !s.missing && s.rel_path !== jar.rel)) r.unchanged++; // counted as a duplicate when the groups are collected
       else r.unchanged++;
     } else {
       const { game } = this.addJarSource(jar, jad, bytes, jadBytes, sha, defaults);
+      this.hooks.onJavaGame?.(game);
       gameId = game.id;
       if (prev) r.updated++;
       else r.added++;
