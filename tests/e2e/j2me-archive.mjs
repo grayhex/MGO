@@ -122,6 +122,20 @@ try {
   assert.equal((await send('/download', 'POST', { sha256: builds[1].sha256 })).status, 202);
   assert.equal((await job()).duplicate, true);
 
+  await page.goto(base + '/');
+  const card = page.locator('.game-card').filter({ hasText: 'My locked title' });
+  await card.getByRole('combobox', { name: 'Version' }).selectOption(imported.gameId);
+  for (const view of ['List', 'Tiles']) {
+    await page.getByRole('radio', { name: view, exact: true }).click();
+    for (const [theme, mutedGreen] of [['dark', 'rgb(99, 126, 110)'], ['light', 'rgb(104, 121, 109)']]) {
+      await page.locator('html').evaluate((root, theme) => { root.dataset.theme = theme; }, theme);
+      for (const mark of ['exact', 'downloaded']) {
+        const icon = card.locator(`.archive-mark.${mark} svg`).first();
+        assert.equal(await icon.evaluate(element => getComputedStyle(element).stroke), mutedGreen);
+      }
+    }
+  }
+
   assert.equal((await send('/download', 'POST', { sha256: builds[2].sha256, folder: '../outside' })).status, 400);
   symlinkSync(root, path.join(external, 'link'), 'dir');
   await new Promise(resolve => setTimeout(resolve, 2100));

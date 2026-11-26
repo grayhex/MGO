@@ -149,19 +149,20 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  assert.equal(await keyboardIcon.getAttribute('data-active'), 'true');
  await padIcon.waitFor();
  await phoneIcon.waitFor({ state: 'hidden' });
- const remoteKey = code => p.evaluate(code => {
-   const target = document.activeElement;
-   target.dispatchEvent(new KeyboardEvent('keydown', { code, altKey: true, ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
-   target.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true, cancelable: true }));
- }, code);
- for (const [physical, code] of [['KeyI', -1], ['KeyJ', -3], ['KeyL', -4], ['KeyU', -5], ['KeyB', 57]]) {
+ const identifyPhone = () => p.keyboard.press('Control+Alt+Shift+KeyP');
+ await identifyPhone();
+ await phoneIcon.waitFor();
+ assert.equal(await phoneIcon.getAttribute('data-active'), 'true');
+ assert.equal(await padIcon.textContent(), 'Gamepad');
+ assert.equal(await phoneIcon.textContent(), 'SE');
+ for (const [physical, code] of [['ArrowUp', -1], ['ArrowLeft', -3], ['ArrowRight', -4], ['Enter', -5], ['Digit9', 57]]) {
    const before = await presses(code);
-   await remoteKey(physical);
+   await p.keyboard.press(physical);
    await wait(async () => (await presses(code)) > before);
  }
- assert.equal(await p.locator('.lights-out').count(), 0, 'the phone’s Right key does not activate the desktop shortcut');
- assert.equal(await phoneIcon.getAttribute('data-active'), 'true');
- await padIcon.waitFor();
+ assert.equal(await p.locator('.lights-out').count(), 0);
+ assert.equal(await phoneIcon.isVisible(), true, 'ordinary keyboard events do not hide the phone badge');
+ assert.equal(await padIcon.isVisible(), true);
  await pressPad(0);
  assert.equal(await padIcon.getAttribute('data-active'), 'true');
  assert.equal(await phoneIcon.getAttribute('data-active'), 'false');
@@ -211,15 +212,17 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  console.log('PASS: Java ME vibration reaches the gamepad and the control can switch it off.');
  await p.goto(base + '/settings#sound');
  await p.getByText('Bluetooth phone · Sony Ericsson', { exact: true }).click();
- for (const model of ['K790i', 'K750i', 'W995']) {
+ for (const [model, name] of [['K790i', 'MGO790A2'], ['K750i', 'MGO750A2'], ['W995', 'MGO995A2']]) {
    const ready = p.waitForEvent('download');
    await p.getByRole('link', { name: `Download ${model} .hid profile` }).click();
    const download = await ready;
-   assert.equal(download.suggestedFilename(), `MGO-${model}.hid`);
+   assert.equal(download.suggestedFilename(), `${name}.hid`);
    assert.equal(readFileSync(await download.path()).toString('ascii', 257, 262), 'ustar');
  }
  await p.getByRole('button', { name: 'Test phone buttons' }).click();
- await remoteKey('KeyI');
+ await p.keyboard.press('ArrowUp');
  await p.getByText('Received D-pad up', { exact: true }).waitFor();
+ await identifyPhone();
+ await p.getByText('Sony Ericsson HID input detected', { exact: true }).waitFor();
  console.log('PASS: Bluetooth profile download and tester, phone keys reach KEmulator, and input icons follow each device.');
 } finally {await browser?.close();server.kill('SIGTERM');await new Promise(r=>server.once('exit',r));rmSync(dir,{recursive:true,force:true});}

@@ -32,6 +32,7 @@
   --scrim: #0f172a66;
 
   --success: #22c55e;
+  --archive-confirmed: #68796d;
   --ok: #15803d;
   --warning: #eab308;
   --danger: #b91c1c;
@@ -103,6 +104,7 @@
   --on-shell-muted: var(--muted);
   --scrim: #020617a8;
 
+  --archive-confirmed: #637e6e;
   --ok: #86dca8;
   --warning: #facc59;
   --danger: #fda4af;

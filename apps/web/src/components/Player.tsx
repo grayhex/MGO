@@ -20,6 +20,7 @@ import { api, ApiError, type JarAnalysisView } from '../api';
 import type { Toast } from '../App';
 import { PcmAudio } from '../audio';
 import { InputController, type InputSource } from '../input';
+import { rememberSonyPhone, sonyPhoneSeen } from '../phoneRemote';
 import { isSkinId, useCatalog, usePrefs, useSkin } from '../skin/registry';
 import { keypadCrops } from '../skin/hitboxes';
 import { resolutionEstimateLabel } from '../libraryView';
@@ -153,13 +154,13 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   }, [!!tv]);
   const [pad, setPad] = useState<string | null>(null);
   const [lastInput, setLastInput] = useState<InputSource>();
-  const [phoneSeen, setPhoneSeen] = useState(false);
+  const [phoneSeen, setPhoneSeen] = useState(sonyPhoneSeen);
   const connectedPad = controls.gamepad ? pad : null;
   const padConnected = connectedPad !== null;
   const activeInput = lastInput === 'gamepad' && !padConnected ? undefined : lastInput;
   const inputSources = [
-    { kind: 'gamepad', visible: padConnected, label: 'Gamepad connected', title: connectedPad },
-    { kind: 'phone', visible: phoneSeen, label: 'Sony Ericsson HID input detected' },
+    { kind: 'gamepad', visible: padConnected, label: 'Gamepad connected', caption: translateUI('Gamepad'), title: connectedPad },
+    { kind: 'phone', visible: phoneSeen, label: 'Sony Ericsson HID input detected', caption: 'SE' },
     { kind: 'keyboard', visible: activeInput === 'keyboard' || (!padConnected && !phoneSeen), label: 'Input: Keyboard' },
   ];
   const [busy, setBusy] = useState(false);
@@ -178,7 +179,10 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const sessionRef = useRef<SessionStatus | null>(null);
   const ownInput = useMemo(() => new InputController(() => undefined, source => {
     setLastInput(source);
-    if (source === 'phone') setPhoneSeen(true);
+    if (source === 'phone') {
+      rememberSonyPhone();
+      setPhoneSeen(true);
+    }
   }), []);
   const input = tv?.input ?? ownInput;
   const tvSize = useTvLcd(stage, tv?.display === 'bare', frameSize.w, frameSize.h, tv?.integer ?? true);
@@ -741,7 +745,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   ) : undefined;
 
   return (
-    <div className={`player-grid ${tv ? 'tv-player' : ''} ${lightsActive ? 'lights-out' : tvLights ? 'tv-lights-out' : ''} ${awake ? 'hud-awake' : ''} ${touchControls ? 'touch-controls' : ''}`} onPointerMove={tv ? undefined : wake} onPointerDown={tv ? undefined : wake}>
+    <div className={`player-grid ${tv ? 'tv-player' : ''} ${lightsActive ? 'lights-out' : tvLights ? 'tv-lights-out' : ''} ${lightsActive || tvLights ? 'dim-phone' : ''} ${awake ? 'hud-awake' : ''} ${touchControls ? 'touch-controls' : ''}`} onPointerMove={tv ? undefined : wake} onPointerDown={tv ? undefined : wake}>
       <section className={`card stage-card ${view === 'screen' ? 'is-screen' : ''}`} ref={card} aria-label={translateUI("Phone")}>
         {lightsActive && (
           <div className="lights-hud" role="group" aria-label={translateUI('Lights Out controls')}>
@@ -949,10 +953,11 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
 
         <Panel icon="gamepad" title={translateUI("Controls")} right={
           <span className="input-sources">
-            {inputSources.filter(source => source.visible).map(({ kind, label, title }) => (
+            {inputSources.filter(source => source.visible).map(({ kind, label, title, caption }) => (
               <span key={kind} className="input-source" data-input={kind} data-active={activeInput === kind}
                 role="img" aria-label={translateUI(label)} title={[translateUI(label), title].filter(Boolean).join(' · ')}>
                 <Icon name={kind} />
+                {caption && <span aria-hidden="true">{caption}</span>}
               </span>
             ))}
           </span>
