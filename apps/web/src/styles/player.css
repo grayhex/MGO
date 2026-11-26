@@ -58,9 +58,13 @@
 .ctrl-col .panel-glyph .icon-svg { width: 15px; height: 15px; }
 .ctrl-col .panel > summary .badge { margin-left: auto; border-radius: var(--r-pill); }
 .ctrl-col .panel > summary .badge + .chev { margin-left: 0; }
-.ctrl-col .panel > summary .input-source { margin-inline-start: auto; display: grid; place-items: center; color: var(--muted); }
-.ctrl-col .panel > summary .input-source .icon-svg { width: 15px; height: 15px; }
-.ctrl-col .panel > summary .input-source + .chev { margin-inline-start: 0; }
+.ctrl-col .panel > summary .input-sources { margin-inline-start: auto; display: inline-flex; gap: 4px; }
+.input-source { --input-tone: var(--muted); display: grid; place-items: center; width: 23px; height: 23px; border-radius: 6px; color: var(--input-tone); background: color-mix(in srgb, var(--input-tone) 18%, var(--surface)); }
+.input-source[data-input='gamepad'] { --input-tone: var(--panel-green); }
+.input-source[data-input='phone'] { --input-tone: var(--panel-blue); }
+.input-source[data-active='true'] { box-shadow: inset 0 0 0 1px var(--input-tone); }
+.input-source .icon-svg { width: 16px; height: 16px; }
+.ctrl-col .panel > summary .input-sources + .chev { margin-inline-start: 0; }
 .ctrl-col .panel > summary .chev { color: var(--subtle); }
 .ctrl-col .panel-body { padding: 3px 10px 7px; gap: 6px; font-size: .875rem; }
 .ctrl-col .panel-body .input, .ctrl-col .panel-body .select { background-color: var(--surface-soft); }
@@ -127,9 +131,9 @@
 .lights-out .ctrl-col,.lights-out .skin-picker { display:none; }
 .lights-out .stage-bar { position:absolute;top:0;z-index:20;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s; }
 .lights-out .stage { height:100%;flex:1;min-height:0;padding:12px;background:#010203; }
-.lights-out :is(.skin-body,.skin-legends) { opacity:.16;transition:opacity .3s; }
-.lights-out .skin-glass { opacity:.04;transition:opacity .3s; }
-.lights-out .skin-lcd { background:#000;box-shadow:none; }
+:is(.lights-out,.tv-lights-out) :is(.skin-body,.skin-legends) { opacity:.16;transition:opacity .3s; }
+:is(.lights-out,.tv-lights-out) .skin-glass { opacity:.04;transition:opacity .3s; }
+:is(.lights-out,.tv-lights-out) .skin-lcd { background:#000;box-shadow:none; }
 .lights-out .stage-foot { display:none;background:#010203;border:0; }
 .lights-out.touch-controls .stage-foot { display:grid;position:absolute;bottom:0;left:0;right:0;z-index:10;max-height:45dvh;overflow:auto; }
 .lights-hud { position: fixed; inset: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) auto auto; z-index: 1001; display: flex; gap: 5px; }
@@ -140,9 +144,9 @@
 .lights-hud :is(.lights-action:hover, .lights-action:focus-visible) { opacity: 1; color: #e6eee9; border-color: #8aa398; }
 @media (pointer: coarse) { .lights-action { width: 36px; height: 36px; } }
 .lights-out:not(.hud-awake) { cursor:none; }
-@media(prefers-reduced-motion:reduce){.lights-out *{transition:none!important;}}
+@media(prefers-reduced-motion:reduce){:is(.lights-out,.tv-lights-out) *{transition:none!important;}}
 
-.lights-out .skin-box { filter:none; }
+:is(.lights-out,.tv-lights-out) .skin-box { filter:none; }
 /* the emulation-profile fieldset lays its fields out like the rest of the panel */
 .panel-body fieldset { display: grid; gap: 12px; min-width: 0; }
 .panel-body .kv { margin: 0; }

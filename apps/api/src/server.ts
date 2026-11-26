@@ -21,7 +21,6 @@ import { fileURLToPath } from 'node:url';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
-import { registerTvRemote, TV_REMOTE } from './tvRemote.js';
 import type { ClientEvent, GameSettings, HealthStatus } from '@mgo/protocol';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { type Config, loadConfig, readKemCommit, readKemVersion } from './config.js';
@@ -199,7 +198,7 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
     }
     if (!cfg.authToken) return;
     const url = req.url.split('?')[0]!;
-    if (url === '/api/health' || url === '/api/auth/login' || url === '/api/auth/logout' || !url.startsWith('/api/') || (url === TV_REMOTE && req.headers.upgrade?.toLowerCase() === 'websocket')) return;
+    if (url === '/api/health' || url === '/api/auth/login' || url === '/api/auth/logout' || !url.startsWith('/api/')) return;
     const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
     const ck = cookieOf(req);
     const ok = (bearer && safeEq(bearer, cfg.authToken)) || (ck && authCookie && safeEq(ck, authCookie));
@@ -224,7 +223,6 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
 
   await app.register(fastifyMultipart, { limits: { fileSize: Math.max(cfg.maxUploadBytes, cfg.maxPackageBytes), files: 2, fields: 4, parts: 8, headerPairs: 50 } });
   await app.register(fastifyWebsocket, { options: { maxPayload: 8 * 1024, perMessageDeflate: false } });
-  const closeTvRemote = registerTvRemote(app);
 
   // --- health ---
   app.get('/api/health', async (): Promise<HealthStatus> => ({
@@ -603,7 +601,7 @@ export async function buildApp(cfg: Config = loadConfig(), options: { archiveWor
     close() {
       draining=true;
       return closing ??= (async()=>{
-        scan.cancel();metadata.cancel();ngageCatalog.stop();closeTvRemote();
+        scan.cancel();metadata.cancel();ngageCatalog.stop();
         // Save MIDlet RMS promptly even if a cancelled metadata request is slow to finish.
         await Promise.all([sessions.stopAll(),Promise.allSettled([scan.idle(),metadata.idle(),ngageCatalog.idle(),archive.close(),javaCatalog.close()])]);
         await app.close();library.close();

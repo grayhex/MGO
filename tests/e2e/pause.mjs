@@ -55,7 +55,6 @@ try {
   await wait(async () => (await session()).paused === true, 'manual pause before switching views');
   const pausedSession = await session();
   await p.getByRole('link', { name: 'TV Mode' }).click();
-  await p.getByRole('dialog', { name: 'Phone controller' }).getByRole('button', { name: 'Back' }).click();
   await p.locator('.tv-game-tile').filter({ hasText: game.name }).click();
   await p.locator('.tv-details [data-tv-prefer]').click();
   const resumeFromStage = p.locator('.tv-player').getByRole('button', { name: 'Resume', exact: true });

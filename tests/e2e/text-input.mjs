@@ -53,7 +53,6 @@ try {
   await wait(async () => (await field.getAttribute('type')) === 'password', 'password field masked');
 
   await p.getByRole('link', { name: 'TV Mode' }).click();
-  await p.getByRole('dialog', { name: 'Phone controller' }).getByRole('button', { name: 'Back' }).click();
   await p.locator('.tv-game-tile').filter({ hasText: game.name }).click();
   await p.locator('.tv-details [data-tv-prefer]').click();
   const tvEditor = p.getByRole('dialog', { name: 'Text input' });

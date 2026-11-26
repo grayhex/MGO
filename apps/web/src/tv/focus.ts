@@ -1,4 +1,4 @@
-import type { TvKey } from '@mgo/protocol';
+import type { TvKey } from './Input';
 
 const SELECTOR = 'button:not(:disabled),a[href],summary,select:not(:disabled),input:not([type=hidden]):not(:disabled),textarea:not(:disabled),[data-tv-focus]';
 export function tvTargets(root: HTMLElement): HTMLElement[] {

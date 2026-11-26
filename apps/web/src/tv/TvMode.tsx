@@ -1,4 +1,4 @@
-import { GAME_PLATFORM_LABELS, generationOfOs, generationOfPackage, phoneHasTouch, profilesForSkin, type GameInfo, type GameMeta, type HealthStatus, type PhoneCatalog, type TvKey, type TvRemoteInput } from '@mgo/protocol';
+import { GAME_PLATFORM_LABELS, generationOfOs, generationOfPackage, phoneHasTouch, profilesForSkin, type GameInfo, type GameMeta, type HealthStatus, type PhoneCatalog } from '@mgo/protocol';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import type { Toast } from '../App';
@@ -11,15 +11,13 @@ import { t } from '../i18n';
 import { InputController } from '../input';
 import { controlSettings } from '../serverSettings';
 import { isSkinId, skinBase, useCatalog } from '../skin/registry';
-import { useTvInput } from './Input';
+import { useTvInput, type TvKey } from './Input';
 import { focusTv, moveTvFocus, tvTargets } from './focus';
 import { TvKeyboard } from './Keyboard';
 import { GameArtwork, TvFilters, TvGameTile, tvLibrary, tvPlatform, type TvFilter } from './Library';
-import { Pairing } from './Pairing';
 import type { TvDisplay, TvPlayerHandle, TvPlayerStatus } from './player';
-import { pairingUrl, useTvRelay } from './relay';
 
-type Overlay = 'menu' | 'search' | 'pair' | 'address' | 'build' | 'phone' | 'options' | 'controls' | 'confirm';
+type Overlay = 'menu' | 'search' | 'build' | 'phone' | 'options' | 'controls' | 'confirm';
 const preference = {
   read: (key: string) => { try { return localStorage.getItem('mgo.tv.' + key); } catch { return null; } },
   write: (key: string, value: string) => { try { localStorage.setItem('mgo.tv.' + key, value); } catch { /* optional */ } },
@@ -40,7 +38,7 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
   const [builds, setBuilds] = useState<GameMeta[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [lastGroup, setLastGroup] = useState('');
-  const [overlay, setOverlay] = useState<Overlay | null>(() => preference.read('used') ? null : 'pair');
+  const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [playerStatus, report] = useState<TvPlayerStatus>('opening');
   const [info, setInfo] = useState<GameInfo | null>(null);
   const [picture, setPicture] = useState(0);
@@ -48,11 +46,9 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
   const [phoneCatalog, setPhoneCatalog] = useState<PhoneCatalog | null>(null);
   const [actionError, setActionError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [address, setAddress] = useState(() => preference.read('origin') || location.origin);
-  const [addressDraft, setAddressDraft] = useState(address);
   const [display, setDisplay] = useState<TvDisplay>(() => {
     const saved = preference.read('display');
-    return saved === 'screen' || saved === 'full' ? saved : 'clean';
+    return saved === 'screen' || saved === 'full' || saved === 'bare' ? saved : 'lights';
   });
   const [integer, setInteger] = useState(() => preference.read('integer') !== 'off');
   const [volume, setVolume] = useState(() => {
@@ -67,8 +63,7 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
   const [stopTarget, setStopTarget] = useState<'library' | 'desktop'>('library');
   const [stopping, setStopping] = useState(false);
   const [fullscreenError, setFullscreenError] = useState('');
-  const relayActive = active !== null && playerStatus === 'game' && !overlay;
-  const mode = overlay === 'search' ? 'search' : overlay === 'address' ? 'address' : relayActive ? 'game' : 'navigation';
+  const gameplay = active !== null && playerStatus === 'game' && !overlay;
   const { skins, error: skinsError } = useCatalog(overlay === 'phone');
   const rememberOverlay = (next: Overlay) => {
     if (!overlay && document.activeElement instanceof HTMLElement) previousFocus.current = document.activeElement;
@@ -79,7 +74,6 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
 
   useEffect(() => {
     preference.write('mode', 'on');
-    preference.write('used', '1');
     document.documentElement.classList.add('mgo-tv');
     return () => document.documentElement.classList.remove('mgo-tv');
   }, []);
@@ -126,7 +120,6 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
   };
   const closeOverlay = () => { setActionError(''); setOverlay(null); };
   const onBack = () => {
-    if (overlay === 'address') { setOverlay('pair'); return; }
     if (overlay === 'confirm' || overlay === 'controls') { setOverlay('menu'); return; }
     if (overlay) { closeOverlay(); return; }
     if (active) {
@@ -142,34 +135,13 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
   const ui = (key: TvKey) => {
     if (key === 'menu') { if (overlay === 'menu') closeOverlay(); else rememberOverlay('menu'); return; }
     if (key === 'back') { onBack(); return; }
-    if (relayActive) return;
+    if (gameplay) return;
     const target = scope();
     if (target) moveTvFocus(target, key);
   };
-  const gamepad = useTvInput(input, selected?.id ?? active, relayActive, controlSettings().gamepad, ui, state => {
+  const gamepad = useTvInput(input, selected?.id ?? active, gameplay, controlSettings().gamepad, ui, state => {
     if (overlay === 'controls') setPadState(old => JSON.stringify(old) === JSON.stringify(state) ? old : state);
   });
-
-  const onRemoteInput = (message: TvRemoteInput) => {
-    if (message.t === 'release') { input.releaseSources('remote:'); return; }
-    if (document.hidden) return;
-    if (message.t === 'text') {
-      if (overlay === 'search') setQuery(message.value);
-      if (overlay === 'address') setAddressDraft(message.value);
-      return;
-    }
-    if (message.key === 'menu' || message.key === 'back') {
-      if (message.down) ui(message.key);
-      return;
-    }
-    if (!message.down) { input.release('remote:' + message.key); return; }
-    if (relayActive) input.press('remote:' + message.key, message.key);
-    else ui(message.key);
-  };
-  const relay = useTvRelay(mode, onRemoteInput);
-  useEffect(() => {
-    if (relay.notice.t === 'pending' && overlay !== 'pair') setOverlay('pair');
-  }, [relay.notice]);
 
   useLayoutEffect(() => {
     if (!body.current) return;
@@ -208,7 +180,7 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
       focusTv(page.querySelector<HTMLElement>('[data-tv-prefer]:not(:disabled)') ?? tvTargets(page)[0]);
     });
     return () => cancelAnimationFrame(frame);
-  }, [overlay, selected?.id, active, playerStatus, relay.notice.t === 'pending', !!games]);
+  }, [overlay, selected?.id, active, playerStatus, !!games]);
 
   async function updateGame(patch: Parameters<typeof api.patchGame>[1]) {
     if (!selected || saving) return;
@@ -251,7 +223,7 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
   };
 
   const screenshots = info?.screenshots || selected?.info?.screenshots || selected?.javaCatalog?.screenshots || 0;
-  const title: Record<Overlay, string> = { menu: 'TV menu', search: 'Search games', pair: 'Phone controller', address: 'LAN address',
+  const title: Record<Overlay, string> = { menu: 'TV menu', search: 'Search games',
     build: 'Choose a build', phone: 'Choose a phone', options: 'Game compatibility options', controls: 'Controller mapping', confirm: 'Stop game?' };
 
   return <div ref={root} className={`tv ${active ? 'tv-playing' : ''}`} data-testid="tv-mode">
@@ -309,13 +281,6 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
       <div className={`tv-dialog tv-dialog-${overlay}`} role="dialog" aria-modal="true" aria-label={t(title[overlay])} ref={dialog}>
         <header><h2>{t(title[overlay])}</h2><button type="button" onClick={onBack}>{t('Back')}</button></header>
         {actionError && <p className="error" role="alert">{t(actionError)}</p>}
-        {overlay === 'pair' && <Pairing {...relay} address={address} editAddress={() => { setAddressDraft(address); rememberOverlay('address'); }} />}
-        {overlay === 'address' && <TvKeyboard label={t('LAN address')} value={addressDraft} onChange={setAddressDraft} onDone={() => {
-          const url = pairingUrl(addressDraft.trim());
-          if (!url) { setActionError('Enter the MGO LAN address, including https:// and the port if needed.'); return; }
-          const origin = new URL(url).origin;
-          setAddress(origin); preference.write('origin', origin); setOverlay('pair'); setActionError('');
-        }} />}
         {overlay === 'search' && <TvKeyboard label={t('Search games')} value={query} onChange={setQuery} onDone={closeOverlay} />}
         {overlay === 'build' && <div className="tv-choices">{builds.map(build =>
           <button type="button" key={build.id} aria-pressed={selected?.id === build.id} onClick={() => { setSelected(build); closeOverlay(); }}>
@@ -353,13 +318,12 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
         {overlay === 'menu' && <>
           <div className="tv-actions">
             {active && <button type="button" data-tv-prefer onClick={() => { handle.current?.resume(); closeOverlay(); }}>{t('Resume')}</button>}
-            <button type="button" onClick={() => setOverlay('pair')}>{t('Pair a phone')}</button>
             <button type="button" onClick={() => setOverlay('controls')}>{t('Controller mapping')}</button>
             <button type="button" onClick={() => void fullscreen()}>{t('Toggle fullscreen')}</button>
           </div>
           {fullscreenError && <p className="note warn">{t(fullscreenError)}</p>}
           <div className="tv-setting">
-            <span>{t('Display')}</span><div className="tv-actions">{([['clean', 'Lights Out'], ['screen', 'Screen'], ['full', 'Phone']] as const).map(([value, label]) =>
+            <span>{t('Display')}</span><div className="tv-actions">{([['lights', 'Lights Out'], ['screen', 'Screen'], ['full', 'Phone'], ['bare', 'Game only']] as const).map(([value, label]) =>
               <button type="button" key={value} aria-pressed={display === value} onClick={() => { setDisplay(value); preference.write('display', value); }}>{t(label)}</button>)}</div>
           </div>
           <div className="tv-setting">

@@ -18,17 +18,18 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  const p=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];p.on('pageerror',e=>errors.push(e.message));
  await p.addInitScript(() => {
    window.padButtons = [];
+   window.padConnected = true;
    window.padEffects = [];
    window.padResets = 0;
    const vibrationActuator = {
      playEffect: async (effect, params) => { window.padEffects.push({ effect, ...params }); return 'complete'; },
      reset: async () => { window.padResets++; return 'complete'; },
    };
-   Object.defineProperty(navigator, 'getGamepads', { value: () => [{
+   Object.defineProperty(navigator, 'getGamepads', { value: () => window.padConnected ? [{
      index: 0, id: 'Simulated Xbox standard', connected: true, mapping: 'standard', timestamp: performance.now(),
      axes: [0, 0], buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: window.padButtons.includes(i), value: window.padButtons.includes(i) ? 1 : 0 })),
      vibrationActuator,
-   }] });
+   }] : [] });
  });
  // the phones are chosen on /phones (the player has no picker): a click sets the phone of the game opened last
  const choosePhone=async(re)=>{await p.getByTestId('current-game').waitFor();await p.getByRole('link',{name:'Phones'}).click();await p.getByRole('button',{name:re}).click();await p.waitForURL('**/play/'+game.id,{waitUntil:'commit'});};
@@ -142,23 +143,32 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  const keyboardBefore = await presses(53);
  await p.keyboard.press('Digit5');
  await wait(async () => (await presses(53)) > keyboardBefore);
- const inputSource = p.getByTestId('input-source');
- assert.equal(await inputSource.getAttribute('aria-label'), 'Input: Keyboard');
- const remoteKey = (code, shiftKey = false) => p.evaluate(({ code, shiftKey }) => {
+ const keyboardIcon = p.getByRole('img', { name: 'Input: Keyboard' });
+ const padIcon = p.getByRole('img', { name: 'Gamepad connected' });
+ const phoneIcon = p.getByRole('img', { name: 'Sony Ericsson HID input detected' });
+ assert.equal(await keyboardIcon.getAttribute('data-active'), 'true');
+ await padIcon.waitFor();
+ await phoneIcon.waitFor({ state: 'hidden' });
+ const remoteKey = code => p.evaluate(code => {
    const target = document.activeElement;
-   target.dispatchEvent(new KeyboardEvent('keydown', { code, shiftKey, bubbles: true, cancelable: true }));
+   target.dispatchEvent(new KeyboardEvent('keydown', { code, altKey: true, ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
    target.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true, cancelable: true }));
- }, { code, shiftKey });
- const nineBefore = await presses(57);
- await remoteKey('F21', true); // K790i digit 9
- await p.getByRole('img', { name: 'Input: Bluetooth phone' }).waitFor();
- assert.equal(await inputSource.getAttribute('aria-label'), 'Input: Bluetooth phone');
- await wait(async () => (await presses(57)) > nineBefore);
- const phoneFireBefore = await presses(-5);
- await remoteKey('F17'); // K790i joystick press
- await wait(async () => (await presses(-5)) > phoneFireBefore);
+ }, code);
+ for (const [physical, code] of [['KeyI', -1], ['KeyJ', -3], ['KeyL', -4], ['KeyU', -5], ['KeyB', 57]]) {
+   const before = await presses(code);
+   await remoteKey(physical);
+   await wait(async () => (await presses(code)) > before);
+ }
+ assert.equal(await p.locator('.lights-out').count(), 0, 'the phone’s Right key does not activate the desktop shortcut');
+ assert.equal(await phoneIcon.getAttribute('data-active'), 'true');
+ await padIcon.waitFor();
  await pressPad(0);
- assert.equal(await inputSource.getAttribute('aria-label'), 'Input: Gamepad');
+ assert.equal(await padIcon.getAttribute('data-active'), 'true');
+ assert.equal(await phoneIcon.getAttribute('data-active'), 'false');
+ await p.evaluate(() => { window.padConnected = false; });
+ await padIcon.waitFor({ state: 'hidden' });
+ await phoneIcon.waitFor();
+ await p.evaluate(() => { window.padConnected = true; });
  const volume = p.getByRole('slider', { name: 'Volume' });
  assert.deepEqual(await p.locator('.volume-ticks span').allTextContents(), ['0%', '25%', '50%', '75%', '100%']);
  await volume.fill('61');
@@ -209,7 +219,7 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
    assert.equal(readFileSync(await download.path()).toString('ascii', 257, 262), 'ustar');
  }
  await p.getByRole('button', { name: 'Test phone buttons' }).click();
- await remoteKey('F13');
+ await remoteKey('KeyI');
  await p.getByText('Received D-pad up', { exact: true }).waitFor();
  console.log('PASS: Bluetooth profile download and tester, phone keys reach KEmulator, and input icons follow each device.');
 } finally {await browser?.close();server.kill('SIGTERM');await new Promise(r=>server.once('exit',r));rmSync(dir,{recursive:true,force:true});}
