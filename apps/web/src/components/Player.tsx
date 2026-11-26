@@ -135,6 +135,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const monoblock = skin?.config.input?.kind === 'touchscreen';
   const view: 'full' | 'screen' = tv ? (tv.display === 'full' ? 'full' : 'screen') : monoblock && skin?.config.id !== 'nokia-n8' ? 'full' : prefs.view;
   const lightsActive = !tv && lights && view === 'screen';
+  const tvLights = tv?.display === 'lights';
   const wake = () => { setAwake(true); clearTimeout(wakeTimer.current); wakeTimer.current = setTimeout(() => setAwake(false), 2500); };
   useEffect(() => { try { localStorage.setItem('j2me-web.lights.v1', String(lights)); } catch {} }, [lights]);
   useEffect(() => {
@@ -147,15 +148,20 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   }, [lightsActive]);
   useEffect(() => {
     if (tv) return;
-    const key=(e:KeyboardEvent)=>{if(e.altKey && e.code==='KeyL' && !e.repeat){e.preventDefault();setPrefs({view:'screen'});setLights(v=>!v);}};
+    const key=(e:KeyboardEvent)=>{if(e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && e.code==='KeyL' && !e.repeat){e.preventDefault();setPrefs({view:'screen'});setLights(v=>!v);}};
     window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
   }, [!!tv]);
   const [pad, setPad] = useState<string | null>(null);
   const [lastInput, setLastInput] = useState<InputSource>();
-  const activeInput = lastInput === 'phone' ? 'phone'
-    : controls.gamepad && pad && lastInput !== 'keyboard' ? 'gamepad' : 'keyboard';
-  const inputLabel = translateUI(activeInput === 'phone' ? 'Input: Bluetooth phone'
-    : activeInput === 'gamepad' ? 'Input: Gamepad' : 'Input: Keyboard');
+  const [phoneSeen, setPhoneSeen] = useState(false);
+  const connectedPad = controls.gamepad ? pad : null;
+  const padConnected = connectedPad !== null;
+  const activeInput = lastInput === 'gamepad' && !padConnected ? undefined : lastInput;
+  const inputSources = [
+    { kind: 'gamepad', visible: padConnected, label: 'Gamepad connected', title: connectedPad },
+    { kind: 'phone', visible: phoneSeen, label: 'Sony Ericsson HID input detected' },
+    { kind: 'keyboard', visible: activeInput === 'keyboard' || (!padConnected && !phoneSeen), label: 'Input: Keyboard' },
+  ];
   const [busy, setBusy] = useState(false);
   const [frameSize, setFrameSize] = useState({ w: 240, h: 320 });
   const [vol, setVol] = useState(() => { try { return Number(localStorage.getItem('j2me-web.volume') ?? audioSettings().volume); } catch { return audioSettings().volume; } });
@@ -170,9 +176,12 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const fpsMenu = useRef<HTMLDetailsElement>(null);
   const streamRef = useRef<SessionStream | null>(null);
   const sessionRef = useRef<SessionStatus | null>(null);
-  const ownInput = useMemo(() => new InputController(() => undefined, setLastInput), []);
+  const ownInput = useMemo(() => new InputController(() => undefined, source => {
+    setLastInput(source);
+    if (source === 'phone') setPhoneSeen(true);
+  }), []);
   const input = tv?.input ?? ownInput;
-  const tvSize = useTvLcd(stage, tv?.display === 'clean', frameSize.w, frameSize.h, tv?.integer ?? true);
+  const tvSize = useTvLcd(stage, tv?.display === 'bare', frameSize.w, frameSize.h, tv?.integer ?? true);
   const [bindings, setBindings] = useState(input.bindings);
 
   useEffect(() => {
@@ -411,6 +420,10 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const tvPaused = !!tv && live && pausedByPlayer;
   const tvTextOpen = !!tv && live && !tvPaused && !!textArea && textField !== dismissedText && !(textArea.constraints & TEXT_CONSTRAINT.UNEDITABLE);
   const suppressInput = !!(menu || perm || keymap || (tv && link) || tvTextOpen);
+  const focusTvResume = useCallback((button: HTMLButtonElement | null) => {
+    // Loading the handset can remount the paused controls without changing the TV player status.
+    if (conn === 'open' && !suppressInput && !tv?.blocked) button?.focus({ preventScroll: true });
+  }, [conn, suppressInput, tv?.blocked]);
   useEffect(() => {
     const enabled = live && conn === 'open' && !suppressInput && !tvPaused && !tv?.blocked;
     input.enabled = enabled;
@@ -711,7 +724,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const overlay = tvPaused ? (
     <div className="tv-stage-pause">
       <p role="status">{translateUI('Game paused')}</p>
-      <button className="btn primary" type="button" data-tv-prefer disabled={conn !== 'open'} onClick={resume}>
+      <button ref={focusTvResume} className="btn primary" type="button" data-tv-prefer disabled={conn !== 'open'} onClick={resume}>
         <Icon name="play" /> {translateUI('Resume')}
       </button>
     </div>
@@ -728,7 +741,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   ) : undefined;
 
   return (
-    <div className={`player-grid ${tv ? 'tv-player' : ''} ${lightsActive ? 'lights-out' : ''} ${awake ? 'hud-awake' : ''} ${touchControls ? 'touch-controls' : ''}`} onPointerMove={tv ? undefined : wake} onPointerDown={tv ? undefined : wake}>
+    <div className={`player-grid ${tv ? 'tv-player' : ''} ${lightsActive ? 'lights-out' : tvLights ? 'tv-lights-out' : ''} ${awake ? 'hud-awake' : ''} ${touchControls ? 'touch-controls' : ''}`} onPointerMove={tv ? undefined : wake} onPointerDown={tv ? undefined : wake}>
       <section className={`card stage-card ${view === 'screen' ? 'is-screen' : ''}`} ref={card} aria-label={translateUI("Phone")}>
         {lightsActive && (
           <div className="lights-hud" role="group" aria-label={translateUI('Lights Out controls')}>
@@ -799,7 +812,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
             </div>
           )}
           <div ref={stage} tabIndex={-1} className={`stage ${view === 'screen' ? 'stage-screen' : ''} ${skin?.config.input?.kind === 'touchscreen' ? 'stage-touchscreen' : ''}`}>
-            {shownSkin.current && tv?.display !== 'clean' ? (
+            {shownSkin.current && tv?.display !== 'bare' ? (
               <PhoneSkin
                 skin={shownSkin.current}
                 view={view}
@@ -821,7 +834,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
                 onPointerDown={pointer('D')} onPointerMove={pointer('M')} onPointerUp={pointer('U')} onPointerCancel={pointer('U')} />
               {overlay && <div className="player-bare-controls">{overlay}</div>}
             </div>}
-            {loaded && !skin && tv?.display !== 'clean' && <div className="phone-load-status" role="status">
+            {loaded && !skin && tv?.display !== 'bare' && <div className="phone-load-status" role="status">
               <span>{translateUI(skinError ? 'Could not load the phone skin' : 'Loading the phone…')}</span>
               {skinError && <button className="btn sm" type="button" onClick={retrySkin}>{translateUI('Retry phone skin')}</button>}
             </div>}
@@ -935,8 +948,13 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
         </Panel>
 
         <Panel icon="gamepad" title={translateUI("Controls")} right={
-          <span className="input-source" data-testid="input-source" title={inputLabel} role="img" aria-label={inputLabel}>
-            <Icon name={activeInput} />
+          <span className="input-sources">
+            {inputSources.filter(source => source.visible).map(({ kind, label, title }) => (
+              <span key={kind} className="input-source" data-input={kind} data-active={activeInput === kind}
+                role="img" aria-label={translateUI(label)} title={[translateUI(label), title].filter(Boolean).join(' · ')}>
+                <Icon name={kind} />
+              </span>
+            ))}
           </span>
         }>
           <div className="control-line">

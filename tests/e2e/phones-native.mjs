@@ -120,7 +120,6 @@ try {
   const nativeSession = await runningNative();
   await p.setViewportSize({ width: 1920, height: 1080 });
   await p.goto(base + '/tv');
-  await p.getByRole('dialog', { name: 'Phone controller' }).getByRole('button', { name: 'Back' }).click();
   await p.locator('.tv-game-tile').filter({ hasText: game.name }).click();
   await p.getByRole('button', { name: 'Choose a phone', exact: true }).click();
   const chooser = p.getByRole('dialog', { name: 'Choose a phone' });
@@ -130,7 +129,7 @@ try {
   assert.ok(await qd.isDisabled());
   await classic.click();
   await p.locator('.tv-details [data-tv-prefer]').click();
-  const lcd = p.locator('.tv-player .player-bare-screen canvas');
+  const lcd = p.locator('.tv-player.tv-lights-out .skin-lcd canvas');
   await lcd.waitFor();
   await wait(async () => (await lcd.getAttribute('width')) === '176' && (await lcd.getAttribute('height')) === '208', 'TV shows native output size');
   assert.equal((await runningNative()).id, nativeSession.id, 'TV reattaches the same running N-Gage session');

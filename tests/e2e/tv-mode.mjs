@@ -1,20 +1,16 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { request } from 'node:http';
-import { createServer } from 'node:https';
 import { chromium } from 'playwright';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'mgo-tv-'));
 const port = 19400 + Math.floor(Math.random() * 250);
-const local = `http://127.0.0.1:${port}`;
-const accessToken = 'mgo-tv-test-installation-token';
-const headers = { Authorization: 'Bearer ' + accessToken };
+const base = `http://127.0.0.1:${port}`;
 const server = spawn('node', ['apps/api/dist/server.js'], {
-  env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', AUTH_TOKEN: accessToken, DATA_DIR: dir, LOG_LEVEL: 'warn' },
+  env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dir, LOG_LEVEL: 'warn' },
   stdio: ['ignore', 'inherit', 'inherit'],
 });
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -34,7 +30,7 @@ async function shot(page, name) {
 }
 
 const padIndex = { up: 12, down: 13, left: 14, right: 15, fire: 0, menu: 9, back: 8 };
-const hidCode = { up: 'F13', down: 'F14', left: 'F15', right: 'F16', fire: 'F17', menu: 'F11', back: 'F12' };
+const hidCode = { up: 'KeyI', down: 'KeyK', left: 'KeyJ', right: 'KeyL', fire: 'KeyU', pound: 'KeyT' };
 const frames = page => page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
 async function pad(page, key) {
   await page.evaluate(index => { window.tvButtons = [index]; }, padIndex[key]);
@@ -42,14 +38,13 @@ async function pad(page, key) {
   await page.evaluate(() => { window.tvButtons = []; });
   await frames(page);
 }
-async function hid(page, key, shiftKey = false) {
-  const code = hidCode[key] ?? key;
-  await page.evaluate(({ code, shiftKey }) => {
+async function hid(page, key) {
+  await page.evaluate(code => {
     const target = document.activeElement;
-    const init = { code, shiftKey, bubbles: true, cancelable: true };
-    target.dispatchEvent(new KeyboardEvent('keydown', init));
+    const init = { code, bubbles: true, cancelable: true };
+    target.dispatchEvent(new KeyboardEvent('keydown', { ...init, altKey: true, ctrlKey: true, shiftKey: true }));
     target.dispatchEvent(new KeyboardEvent('keyup', init));
-  }, { code, shiftKey: shiftKey || key === 'menu' || key === 'back' });
+  }, hidCode[key]);
 }
 
 // The browser geometry determines a sequence of real controller direction presses.
@@ -102,83 +97,49 @@ const openBy = async (page, selector, drive) => { await focusWith(page, selector
 const tile = game => `[data-tv-game="j2me:${game.groupKey}"]`;
 
 let browser;
-let gateway;
-const connections = new Set();
 try {
-  await until(async () => (await fetch(local + '/api/health')).ok, 'API did not start');
-  await fetch(local + '/api/setup/skip', { method: 'POST', headers });
+  await until(async () => (await fetch(base + '/api/health')).ok, 'API did not start');
+  await fetch(base + '/api/setup/skip', { method: 'POST' });
   const fixtures = ['tests/fixtures/testmidlet/build/kemtest.jar', 'tests/fixtures/testmidlet/build/kemtest2.jar'];
   const games = [];
   for (const fixture of fixtures) {
     const body = new FormData();
     body.append('jar', new Blob([readFileSync(fixture)]), path.basename(fixture));
-    const response = await fetch(local + '/api/games', { method: 'POST', body, headers });
+    const response = await fetch(base + '/api/games', { method: 'POST', body });
     assert.equal(response.status, 201);
     games.push((await response.json()).game);
   }
   const [first, second] = games;
-  const certificate = path.join(dir, 'tv.crt');
-  const privateKey = path.join(dir, 'tv.key');
-  execFileSync('openssl', ['req', '-x509', '-nodes', '-newkey', 'rsa:2048', '-days', '1', '-subj', '/CN=mgo-tv.local',
-    '-addext', 'subjectAltName=DNS:mgo-tv.local', '-keyout', privateKey, '-out', certificate], { stdio: 'ignore' });
-  const forward = incoming => request({ hostname: '127.0.0.1', port, agent: false, path: incoming.url, method: incoming.method, headers: { ...incoming.headers, 'x-forwarded-proto': 'https' } });
-  gateway = createServer({ key: readFileSync(privateKey), cert: readFileSync(certificate) }, (incoming, outgoing) => {
-    const upstream = forward(incoming);
-    upstream.on('response', response => { outgoing.writeHead(response.statusCode, response.headers); response.pipe(outgoing); });
-    upstream.on('error', () => outgoing.destroy());
-    incoming.pipe(upstream);
-  });
-  gateway.on('upgrade', (incoming, client, initial) => {
-    const upstream = forward(incoming);
-    upstream.on('upgrade', (response, socket, preserved) => {
-      const headers = [];
-      for (let i = 0; i < response.rawHeaders.length; i += 2) headers.push(`${response.rawHeaders[i]}: ${response.rawHeaders[i + 1]}`);
-      client.write(`HTTP/1.1 101 Switching Protocols\r\n${headers.join('\r\n')}\r\n\r\n`);
-      if (initial.length) socket.write(initial);
-      if (preserved.length) client.write(preserved);
-      socket.on('error', () => client.destroy());
-      client.on('error', () => socket.destroy());
-      socket.once('close', () => client.destroy());
-      client.once('close', () => socket.destroy());
-      client.pipe(socket).pipe(client);
-    });
-    upstream.on('response', response => { response.resume(); client.destroy(); });
-    upstream.on('error', () => client.destroy());
-    upstream.end();
-  });
-  gateway.on('connection', socket => { connections.add(socket); socket.once('close', () => connections.delete(socket)); });
-  gateway.listen(0, '127.0.0.1');
-  await once(gateway, 'listening');
-  const lan = `https://mgo-tv.local:${gateway.address().port}`;
-  browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox', '--no-proxy-server', '--host-resolver-rules=MAP mgo-tv.local 127.0.0.1'] });
-  const untrusted = await browser.newPage();
-  await assert.rejects(untrusted.goto(lan + '/remote'), /ERR_CERT_AUTHORITY_INVALID/);
-  await untrusted.close();
-  const tv = await browser.newPage({ viewport: { width: 3840, height: 2160 }, deviceScaleFactor: 1, ignoreHTTPSErrors: true });
-  const login = async page => {
-    await page.goto(lan + '/tv');
-    const code = await page.evaluate(async token => (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) })).status, accessToken);
-    assert.equal(code, 200);
-  };
-  await login(tv);
+  browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox'] });
+  const tv = await browser.newPage({ viewport: { width: 3840, height: 2160 }, deviceScaleFactor: 1 });
   const errors = [];
   tv.on('pageerror', error => errors.push(error.message));
   await tv.addInitScript(() => {
     window.tvButtons = [];
+    localStorage.setItem('mgo.tv.display', 'clean'); // saved by previous TV Mode releases
     Object.defineProperty(navigator, 'getGamepads', { value: () => [{
       id: 'TV test pad', index: 0, mapping: 'standard', connected: true, axes: [0, 0],
       buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: window.tvButtons.includes(i), value: Number(window.tvButtons.includes(i)) })),
     }] });
   });
-  await tv.goto(lan + '/tv');
-  const pair = tv.getByRole('dialog', { name: 'Phone controller' });
-  await pair.waitFor();
-  await pair.getByRole('img', { name: 'Pairing QR code' }).waitFor();
-  await tv.waitForFunction(() => document.activeElement?.textContent === 'Back');
-  await pad(tv, 'fire');
+  await tv.goto(base + '/tv');
   await tv.locator(tile(first)).waitFor();
+  await tv.waitForFunction(() => document.activeElement?.textContent.trim() === 'Search games');
+  assert.equal(await tv.getByRole('dialog').count(), 0, 'TV opens directly to the library');
+  const legacySockets = await tv.evaluate(() => Promise.all(['relay', 'remote'].map(path => new Promise(resolve => {
+    const socket = new WebSocket(`ws://${location.host}/api/tv/${path}`);
+    socket.onopen = () => { socket.close(); resolve(true); };
+    socket.onerror = () => resolve(false);
+  }))));
+  assert.deepEqual(legacySockets, [false, false]);
+
+  await hid(tv, 'down');
+  await hid(tv, 'fire');
+  assert.equal(await tv.evaluate(() => document.activeElement?.textContent.trim()), 'Search games');
+  assert.equal(await tv.getByRole('dialog').count(), 0);
   await shot(tv, 'tv-library-4k');
   assert.ok(await tv.evaluate(() => document.documentElement.scrollWidth === innerWidth));
+
   const usingPad = key => pad(tv, key);
   await openBy(tv, tile(first), usingPad);
   await tv.getByRole('heading', { name: first.name }).waitFor();
@@ -192,153 +153,104 @@ try {
   await frames(tv);
   await openBy(tv, '.tv-details [data-tv-prefer]', usingPad);
   const status = async () => {
-    const sessions = await fetch(local + '/api/sessions', { headers }).then(response => response.json());
+    const sessions = await fetch(base + '/api/sessions').then(response => response.json());
     const instance = sessions.find(item => item.state === 'running');
-    return instance && fetch(local + '/api/sessions/' + instance.id, { headers }).then(response => response.json());
+    return instance && fetch(base + '/api/sessions/' + instance.id).then(response => response.json());
   };
   async function presses(code) {
     const running = await status();
     return running?.logTail.filter(line => line.includes(`KEY_DOWN ${code}`)).length ?? 0;
   }
   await until(async () => (await status())?.gameId === first.id, 'First game did not start');
-  await tv.locator('.tv-player .player-bare-screen canvas').waitFor();
+  const darkSkin = tv.locator('.tv-player.tv-lights-out .skin-box[data-view="screen"]');
+  await darkSkin.waitFor();
+  await tv.waitForFunction(() => {
+    const image = document.querySelector('.tv-lights-out .skin-body');
+    const canvas = document.querySelector('.tv-lights-out .skin-lcd canvas');
+    return image?.complete && image.naturalWidth > 0 && canvas && Number(getComputedStyle(image).opacity) < .2 &&
+      getComputedStyle(canvas).opacity === '1';
+  });
   for (let i = 0; i < 8 && !(await presses(-5)); i++) { await usingPad('fire'); await delay(150); }
   assert.ok(await presses(-5), 'pad input reaches KEmulator');
-  const lcd = await tv.locator('.tv-player canvas').evaluate(canvas => ({ width: canvas.clientWidth, height: canvas.clientHeight, w: canvas.width, h: canvas.height }));
-  assert.equal(lcd.width / lcd.w, lcd.height / lcd.h);
-  assert.equal(lcd.width % lcd.w, 0);
   await shot(tv, 'tv-game-4k');
-  await usingPad('menu');
+
   const menu = tv.getByRole('dialog', { name: 'TV menu' });
+  await usingPad('menu');
   await menu.waitFor();
   await shot(tv, 'tv-menu-4k');
   await frames(tv);
-  const stopSelector = '.tv-dialog-menu > .tv-actions:last-child button:first-child';
-  await openBy(tv, stopSelector, usingPad);
-  await tv.getByRole('dialog', { name: 'Stop game?' }).waitFor();
-  await frames(tv);
-  await openBy(tv, '.tv-dialog-confirm > button', usingPad);
-  await tv.locator(tile(first)).waitFor();
-  await tv.waitForFunction(selector => document.activeElement === document.querySelector(selector), tile(first));
-  console.log('PASS: gamepad end-to-end, 4K layout, phone selection, integer scaling, stop and focus restoration');
-
-  // Real TV layout at 1080p and a simulated early Sony Ericsson HID profile.
-  await tv.setViewportSize({ width: 1920, height: 1080 });
-  await hid(tv, 'menu');
-  await menu.waitFor();
-  await hid(tv, 'back');
+  await openBy(tv, '.tv-dialog-menu .tv-setting .tv-actions button:last-child', usingPad);
+  await usingPad('back');
   await menu.waitFor({ state: 'hidden' });
-  const usingHid = key => hid(tv, key);
-  await frames(tv);
-  await openBy(tv, tile(first), usingHid);
-  await tv.getByRole('heading', { name: first.name }).waitFor();
-  await frames(tv);
-  await openBy(tv, '.tv-details [data-tv-prefer]', usingHid);
-  await until(async () => (await status())?.gameId === first.id, 'HID game did not start');
-  for (let i = 0; i < 8 && !(await presses(-5)); i++) { await usingHid('fire'); await delay(150); }
-  assert.ok(await presses(-5), 'phone HID input reaches KEmulator');
-  await usingHid('menu');
-  await menu.waitFor();
-  await frames(tv);
-  await openBy(tv, stopSelector, usingHid);
-  await tv.getByRole('dialog', { name: 'Stop game?' }).waitFor();
-  await frames(tv);
-  await openBy(tv, '.tv-dialog-confirm > button', usingHid);
-  await tv.locator(tile(first)).waitFor();
-  assert.ok(await tv.evaluate(() => document.documentElement.scrollWidth === 1920));
-  console.log('PASS: Sony Ericsson HID navigation, game input and menu at 1080p');
+  const bareCanvas = tv.locator('.tv-player .player-bare-screen canvas');
+  await bareCanvas.waitFor();
+  const lcd = await bareCanvas.evaluate(canvas => ({ width: canvas.clientWidth, height: canvas.clientHeight, w: canvas.width, h: canvas.height }));
+  assert.equal(lcd.width / lcd.w, lcd.height / lcd.h);
+  assert.equal(lcd.width % lcd.w, 0);
+  assert.equal(await darkSkin.count(), 0, 'Game only is a separate display setting');
 
-  await usingHid('menu');
+  const stopSelector = '.tv-dialog-menu > .tv-actions:last-child button:first-child';
+  const stopGame = async game => {
+    await openBy(tv, stopSelector, usingPad);
+    await tv.getByRole('dialog', { name: 'Stop game?' }).waitFor();
+    await frames(tv);
+    await openBy(tv, '.tv-dialog-confirm > button', usingPad);
+    await tv.locator(tile(game)).waitFor();
+    await tv.waitForFunction(selector => document.activeElement === document.querySelector(selector), tile(game));
+  };
+  await usingPad('menu');
   await menu.waitFor();
   await frames(tv);
-  await openBy(tv, '.tv-dialog-menu > .tv-actions button:first-child', usingHid);
-  await pair.waitFor();
-  const code = await pair.getByTestId('pairing-code').textContent();
-  const phoneContext = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, ignoreHTTPSErrors: true });
-  const phone = await phoneContext.newPage();
-  phone.on('pageerror', error => errors.push(error.message));
-  await phone.goto(lan + '/remote#' + code);
-  await phone.getByRole('status').filter({ hasText: 'Waiting for TV approval' }).waitFor();
-  const check = await pair.locator('.tv-code').textContent();
-  await phone.getByLabel('TV confirmation number').fill(check);
-  await phone.getByRole('button', { name: 'Confirm pairing' }).tap();
-  await phone.getByRole('status').filter({ hasText: 'Connected' }).waitFor();
-  assert.equal(await phone.evaluate(async () => (await fetch('/api/games')).status), 401);
-  assert.equal(await phone.evaluate(() => new Promise(resolve => {
-    const host = new WebSocket(`wss://${location.host}/api/tv/relay`);
-    host.onopen = () => { host.close(); resolve(false); };
-    host.onerror = () => resolve(true);
-  })), true);
-  const usingPhone = async key => {
-    await phone.locator(`[data-remote-key="${key}"]`).tap();
-    await frames(tv);
-  };
-  await usingPhone('back');
-  await pair.waitFor({ state: 'hidden' });
+  await stopGame(first);
+  console.log('PASS: 4K TV library, gamepad navigation, dimmed phone, integer scaling in Game only and restored focus');
+
+  await tv.setViewportSize({ width: 1920, height: 1080 });
+  await openBy(tv, '.tv-head .tv-actions button:first-child', usingPad);
+  const search = tv.getByRole('dialog', { name: 'Search games' });
+  await search.waitFor();
   await frames(tv);
-  await openBy(tv, '.tv-head .tv-actions button:first-child', usingPhone);
-  await tv.getByRole('dialog', { name: 'Search games' }).waitFor();
-  await phone.getByLabel('Search games').fill(second.name);
-  await tv.getByRole('status').filter({ hasText: second.name }).waitFor();
-  await usingPhone('back');
-  await tv.locator(tile(second)).waitFor();
-  assert.equal(await tv.locator(tile(first)).count(), 0);
+  await openBy(tv, '.tv-dialog-search .tv-letters button:first-child', usingPad);
+  await search.getByRole('status').filter({ hasText: '1' }).waitFor();
+  await openBy(tv, '.tv-dialog-search .tv-keyboard .tv-actions button:nth-last-child(2)', usingPad);
+  await search.getByRole('status').filter({ hasText: 'Search games' }).waitFor();
+  await usingPad('back');
+  await search.waitFor({ state: 'hidden' });
   await frames(tv);
-  await openBy(tv, tile(second), usingPhone);
+  await openBy(tv, tile(second), usingPad);
   await tv.getByRole('heading', { name: second.name }).waitFor();
   await frames(tv);
-  await openBy(tv, '.tv-details [data-tv-prefer]', usingPhone);
-  await until(async () => (await status())?.gameId === second.id, 'Remote game did not start');
-  await phone.locator('[data-remote-key="pound"]').waitFor();
-  for (const key of ['up', 'down', 'left', 'right', 'fire', 'softLeft', 'softRight', 'd0', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'star', 'pound']) {
-    await phone.locator(`[data-remote-key="${key}"]`).waitFor();
+  await openBy(tv, '.tv-details [data-tv-prefer]', usingPad);
+  await until(async () => (await status())?.gameId === second.id, 'Second game did not start');
+  await tv.waitForFunction(() => document.activeElement?.classList.contains('stage'));
+
+  for (const [key, code] of [['up', -1], ['left', -3], ['down', -2], ['right', -4], ['fire', -5], ['pound', 35]]) {
+    const initial = await presses(code);
+    await hid(tv, key);
+    await until(async () => (await presses(code)) > initial, `Sony Ericsson ${key} did not reach the game`);
   }
-  await usingPhone('d9');
-  await until(async () => (await status())?.logTail.some(line => line.includes('KEY_UP 57')), 'Network keypad press/release did not reach KEmulator');
-  const cdp = await phoneContext.newCDPSession(phone);
-  const touchPoints = [];
-  for (const key of ['left', 'fire']) {
-    const box = await phone.locator(`[data-remote-key="${key}"]`).boundingBox();
-    touchPoints.push({ id: touchPoints.length, x: box.x + box.width / 2, y: box.y + box.height / 2 });
-  }
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints });
-  await until(async () => (await presses(-3)) && (await presses(-5)), 'Multitouch did not reach the emulator');
-  await phone.reload();
-  await phone.locator('[data-remote-key="pound"]').waitFor();
-  await until(async () => {
-    const log = (await status())?.logTail ?? [];
-    return log.some(line => line.includes('KEY_UP -3')) && log.some(line => line.includes('KEY_UP -5'));
-  }, 'Reconnecting left a game key held');
-  await shot(phone, 'tv-mobile-remote');
-  await usingPhone('menu');
+  await usingPad('menu');
+  await menu.waitFor();
+  await tv.waitForFunction(() => document.activeElement?.textContent.trim() === 'Resume');
+  await hid(tv, 'down');
+  await hid(tv, 'fire');
+  assert.equal(await tv.evaluate(() => document.activeElement?.textContent.trim()), 'Resume');
+  await stopGame(second);
+  await usingPad('menu');
   await menu.waitFor();
   await frames(tv);
-  await openBy(tv, stopSelector, usingPhone);
-  await tv.getByRole('dialog', { name: 'Stop game?' }).waitFor();
-  await frames(tv);
-  await openBy(tv, '.tv-dialog-confirm > button', usingPhone);
-  await tv.locator(tile(second)).waitFor();
-  await tv.waitForFunction(selector => document.activeElement === document.querySelector(selector), tile(second));
-  await usingPhone('menu');
-  await menu.waitFor();
-  await frames(tv);
-  await openBy(tv, '.tv-dialog-menu > .tv-actions:last-child button:last-child', usingPhone);
-  await tv.waitForURL(lan + '/');
-  const scaled = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2, ignoreHTTPSErrors: true });
-  await login(scaled);
-  await scaled.goto(lan + '/tv');
-  await scaled.getByRole('dialog', { name: 'Phone controller' }).getByRole('button', { name: 'Back' }).click();
+  await openBy(tv, '.tv-dialog-menu > .tv-actions:last-child button:last-child', usingPad);
+  await tv.waitForURL(base + '/');
+  await tv.getByRole('link', { name: 'TV Mode' }).waitFor();
+
+  const scaled = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2 });
+  await scaled.goto(base + '/tv');
   await scaled.locator(tile(second)).waitFor();
   assert.ok(await scaled.evaluate(() => devicePixelRatio === 2 && document.documentElement.scrollWidth === innerWidth));
-  await scaled.close();
   assert.deepEqual(errors, []);
-  console.log('PASS: HTTPS and untrusted certificate handling, TV-code pairing, phone search, multitouch and reconnect, stop and desktop exit');
+  console.log('PASS: 1080p/DPR 2 layout, gamepad search and exit, Sony Ericsson HID stays in gameplay');
 } finally {
   await browser?.close();
-  for (const socket of connections) socket.destroy();
-  gateway?.close();
   const stopped = once(server, 'exit');
-  // The fixture's proxy may still own a rejected upgrade when Chromium closes its contexts.
   const forceStop = setTimeout(() => server.kill('SIGKILL'), 5000);
   server.kill('SIGTERM');
   await stopped;

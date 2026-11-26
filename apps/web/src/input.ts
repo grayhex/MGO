@@ -108,10 +108,6 @@ export class InputController {
     this.emit();
   }
 
-  releaseSources(prefix: string): void {
-    for (const source of this.sources.keys()) if (source.startsWith(prefix)) this.release(source);
-  }
-
   /** Focus loss, tab hidden, disconnect, a different skin or view: nothing may stay pressed. */
   releaseAll(): void {
     const had = this.sources.size > 0;
@@ -129,10 +125,10 @@ export class InputController {
   }
 
   onKeyDown = (e: KeyboardEvent): void => {
-    if (!this.enabled || e.defaultPrevented || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!this.enabled || e.defaultPrevented || e.isComposing) return;
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
-    const keyboard = this.actionForKeyboard(e.code);
+    const keyboard = e.ctrlKey || e.metaKey || e.altKey ? null : this.actionForKeyboard(e.code);
     const action = keyboard ?? phoneAction(e);
     if (!action) return;
     e.preventDefault();
@@ -141,7 +137,8 @@ export class InputController {
 
   onKeyUp = (e: KeyboardEvent): void => {
     const keyboard = `kb:${e.code}`;
-    const source = this.sources.has(keyboard) ? keyboard : `phone:${e.code}`;
+    const phone = `phone:${e.code}`;
+    const source = this.sources.has(phone) && (phoneAction(e) || !this.sources.has(keyboard)) ? phone : keyboard;
     if (this.sources.has(source)) { e.preventDefault(); this.release(source); }
   };
 }

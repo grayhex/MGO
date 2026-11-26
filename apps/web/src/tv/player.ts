@@ -2,7 +2,7 @@ import { useLayoutEffect, useState, type MutableRefObject, type RefObject } from
 import type { InputController } from '../input';
 import type { GamepadPoller } from '../gamepad';
 
-export type TvDisplay = 'clean' | 'screen' | 'full';
+export type TvDisplay = 'lights' | 'screen' | 'full' | 'bare';
 export type TvPlayerStatus = 'opening' | 'game' | 'blocked' | 'paused' | 'idle';
 export interface TvPlayerHandle { leave: () => Promise<void>; resume: () => void; }
 export interface TvPlayerOptions {

@@ -54,13 +54,22 @@ try {
   await p.getByRole('button', { name: 'Pause', exact: true }).click();
   await wait(async () => (await session()).paused === true, 'manual pause before switching views');
   const pausedSession = await session();
-  await p.getByRole('link', { name: 'TV Mode' }).click();
-  await p.getByRole('dialog', { name: 'Phone controller' }).getByRole('button', { name: 'Back' }).click();
+  const { promise: skinGate, resolve: loadTvSkin } = Promise.withResolvers();
+  await p.route('**/phones/*/config.json', async route => {
+    await skinGate;
+    await route.continue();
+  });
+  // A fresh TV page opens the paused game before its handset has loaded.
+  await p.goto(base + '/tv');
   await p.locator('.tv-game-tile').filter({ hasText: game.name }).click();
   await p.locator('.tv-details [data-tv-prefer]').click();
   const resumeFromStage = p.locator('.tv-player').getByRole('button', { name: 'Resume', exact: true });
-  await resumeFromStage.waitFor();
-  await p.waitForFunction(() => document.activeElement?.textContent.trim() === 'Resume');
+  try {
+    await p.locator('.player-bare-controls .tv-stage-pause button:focus').waitFor({ timeout: 5000 });
+  } finally {
+    loadTvSkin();
+  }
+  await p.locator('.skin-lcd .tv-stage-pause button:focus').waitFor({ timeout: 5000 });
   assert.equal((await session()).id, pausedSession.id);
   assert.equal((await session()).paused, true);
 
