@@ -5,6 +5,7 @@ import { api } from '../api';
 import { setServerSettings, useServerSettings } from '../serverSettings';
 import { useCatalog } from '../skin/registry';
 import { Icon } from './Icon';
+import { PhoneRemoteSettings } from './PhoneRemoteSettings';
 import { SkinPicker } from './SkinPicker';
 import { Seg, Switch } from './ui';
 import { VolumeSlider } from './VolumeSlider';
@@ -160,6 +161,7 @@ export function SoundControlsForm({ toast, auto }: { toast: Toaster; auto?: bool
       <Switch checked={c.draft.gamepad} onChange={(v) => c.set({ gamepad: v })}>{translateUI("Use a connected gamepad")}</Switch>
       <p className="muted small">{translateUI("The keyboard keys of each phone button can be changed per player (“Keys…” in the Controls panel). That is stored in this browser.")}</p>
       <SaveBar auto={auto} dirty={c.dirty} busy={c.busy} onSave={() => void c.save('Control settings saved')} />
+      {!auto && <PhoneRemoteSettings />}
       </section>
     </div>
   );

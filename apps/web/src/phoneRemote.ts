@@ -1,0 +1,38 @@
+import type { Action } from './input';
+
+export const K790I_PROFILE_FILE = '/controls/MGO-K790i.hid';
+
+// Sony Ericsson key names → MGO actions and USB keyboard Usage IDs (F13–F24).
+// The joystick has its own unshifted codes, so the shifted keypad still works with it held.
+export const K790I_KEYS = {
+  KEY_UP: ['up', 0x68],
+  KEY_DOWN: ['down', 0x69],
+  KEY_LEFT: ['left', 0x6a],
+  KEY_RIGHT: ['right', 0x6b],
+  KEY_JOY: ['fire', 0x6c],
+  KEY_LSK: ['softLeft', 0x6d],
+  KEY_RSK: ['softRight', 0x6e],
+  KEY_1: ['d1', 0x6d, true],
+  KEY_2: ['d2', 0x6f],
+  KEY_3: ['d3', 0x6e, true],
+  KEY_4: ['d4', 0x70],
+  KEY_5: ['d5', 0x71],
+  KEY_6: ['d6', 0x72],
+  KEY_7: ['d7', 0x6f, true],
+  KEY_8: ['d8', 0x73],
+  KEY_9: ['d9', 0x70, true],
+  KEY_STAR: ['star', 0x71, true],
+  KEY_0: ['d0', 0x72, true],
+  KEY_HASH: ['pound', 0x73, true],
+} satisfies Record<string, [Action, number, boolean?]>;
+
+const keys = new Map<string, Action>();
+for (const [action, usage, shifted] of Object.values(K790I_KEYS)) {
+  const code = `F${13 + usage - 0x68}`;
+  keys.set(shifted ? `Shift+${code}` : code, action);
+}
+
+export function phoneAction(event: Pick<KeyboardEvent, 'code' | 'shiftKey' | 'altKey' | 'ctrlKey' | 'metaKey'>): Action | undefined {
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
+  return (event.shiftKey ? keys.get(`Shift+${event.code}`) : undefined) ?? keys.get(event.code);
+}

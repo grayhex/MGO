@@ -26,6 +26,9 @@
 .switch-line { display: flex; align-items: center; gap: 10px; font-size: 0.875rem; }
 .sound-control-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; align-items: start; }
 .sound-controls-section { padding: 14px; border: 1px solid var(--outline); border-radius: 12px; background: var(--surface-soft); }
+.phone-remote-settings { border-top: 1px solid var(--outline); padding-top: 8px; }
+.phone-remote-settings summary { cursor: pointer; font-size: .875rem; font-weight: 600; }
+.phone-remote-settings > :not(summary) { margin-top: 8px; }
 .small { font-size: 0.8125rem; }
 .mono { font-family: var(--mono); }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }

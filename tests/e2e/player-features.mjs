@@ -1,4 +1,4 @@
-// Real API + KEmulator + Chromium. Gamepad transport is simulated; no USB hardware required.
+// Real API + KEmulator + Chromium. Gamepad and phone HID input are simulated.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync,readFileSync,rmSync } from 'node:fs';
@@ -142,6 +142,23 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  const keyboardBefore = await presses(53);
  await p.keyboard.press('Digit5');
  await wait(async () => (await presses(53)) > keyboardBefore);
+ const inputSource = p.getByTestId('input-source');
+ assert.equal(await inputSource.getAttribute('aria-label'), 'Input: Keyboard');
+ const remoteKey = (code, shiftKey = false) => p.evaluate(({ code, shiftKey }) => {
+   const target = document.activeElement;
+   target.dispatchEvent(new KeyboardEvent('keydown', { code, shiftKey, bubbles: true, cancelable: true }));
+   target.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true, cancelable: true }));
+ }, { code, shiftKey });
+ const nineBefore = await presses(57);
+ await remoteKey('F21', true); // K790i digit 9
+ await p.getByRole('img', { name: 'Input: Bluetooth phone (K790i)' }).waitFor();
+ assert.equal(await inputSource.getAttribute('aria-label'), 'Input: Bluetooth phone (K790i)');
+ await wait(async () => (await presses(57)) > nineBefore);
+ const phoneFireBefore = await presses(-5);
+ await remoteKey('F17'); // K790i joystick press
+ await wait(async () => (await presses(-5)) > phoneFireBefore);
+ await pressPad(0);
+ assert.equal(await inputSource.getAttribute('aria-label'), 'Input: Gamepad');
  const volume = p.getByRole('slider', { name: 'Volume' });
  assert.deepEqual(await p.locator('.volume-ticks span').allTextContents(), ['0%', '25%', '50%', '75%', '100%']);
  await volume.fill('61');
@@ -161,6 +178,7 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  const netUpload = await fetch(base + '/api/games', { method: 'POST', body: net });
  assert.equal(netUpload.status, 201);
  await p.goto(base + '/play/' + (await netUpload.json()).game.id);
+ await p.locator('.player-grid').waitFor();
  if (await p.locator('.lights-out').count()) await p.keyboard.press('Escape');
  await p.locator('.ctrl-col').getByRole('button', { name: 'Start', exact: true }).click();
  await p.waitForFunction(() => document.querySelector('[data-testid=state-badge]').textContent.includes('running'));
@@ -181,4 +199,15 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  assert.equal(await p.evaluate(() => window.padEffects.length), effects, 'a real Java ME vibrate request is ignored when gamepad vibration is off');
  assert.deepEqual(errors, []);
  console.log('PASS: Java ME vibration reaches the gamepad and the control can switch it off.');
+ await p.goto(base + '/settings#sound');
+ await p.getByText('Bluetooth phone · Sony Ericsson K790i', { exact: true }).click();
+ const ready = p.waitForEvent('download');
+ await p.getByRole('link', { name: 'Download .hid profile' }).click();
+ const download = await ready;
+ assert.equal(download.suggestedFilename(), 'MGO-K790i.hid');
+ assert.equal(readFileSync(await download.path()).toString('ascii', 257, 262), 'ustar');
+ await p.getByRole('button', { name: 'Test K790i buttons' }).click();
+ await remoteKey('F13');
+ await p.getByText('Received D-pad up', { exact: true }).waitFor();
+ console.log('PASS: Bluetooth profile download and tester, phone keys reach KEmulator, and input icons follow each device.');
 } finally {await browser?.close();server.kill('SIGTERM');await new Promise(r=>server.once('exit',r));rmSync(dir,{recursive:true,force:true});}

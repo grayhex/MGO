@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { api, ApiError, type JarAnalysisView } from '../api';
 import type { Toast } from '../App';
 import { PcmAudio } from '../audio';
-import { InputController } from '../input';
+import { InputController, type InputSource } from '../input';
 import { isSkinId, useCatalog, usePrefs, useSkin } from '../skin/registry';
 import { keypadCrops } from '../skin/hitboxes';
 import { resolutionEstimateLabel } from '../libraryView';
@@ -137,6 +137,11 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
   }, []);
   const [pad, setPad] = useState<string | null>(null);
+  const [lastInput, setLastInput] = useState<InputSource>();
+  const activeInput = lastInput === 'phone' ? 'phone'
+    : controls.gamepad && pad && lastInput !== 'keyboard' ? 'gamepad' : 'keyboard';
+  const inputLabel = translateUI(activeInput === 'phone' ? 'Input: Bluetooth phone (K790i)'
+    : activeInput === 'gamepad' ? 'Input: Gamepad' : 'Input: Keyboard');
   const [busy, setBusy] = useState(false);
   const [frameSize, setFrameSize] = useState({ w: 240, h: 320 });
   const [vol, setVol] = useState(() => { try { return Number(localStorage.getItem('j2me-web.volume') ?? audioSettings().volume); } catch { return audioSettings().volume; } });
@@ -151,7 +156,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
   const fpsMenu = useRef<HTMLDetailsElement>(null);
   const streamRef = useRef<SessionStream | null>(null);
   const sessionRef = useRef<SessionStatus | null>(null);
-  const input = useMemo(() => new InputController(() => undefined), []);
+  const input = useMemo(() => new InputController(() => undefined, setLastInput), []);
   const [bindings, setBindings] = useState(input.bindings);
 
   useEffect(() => {
@@ -884,7 +889,11 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
           </div>
         </Panel>
 
-        <Panel icon="gamepad" title={translateUI("Controls")}>
+        <Panel icon="gamepad" title={translateUI("Controls")} right={
+          <span className="input-source" data-testid="input-source" title={inputLabel} role="img" aria-label={inputLabel}>
+            <Icon name={activeInput} />
+          </span>
+        }>
           <div className="control-line">
             <Switch checked={showKeypad} disabled={!canShowKeypad} onChange={enabled => { setKeypadOverride(enabled); saveControlPreference('keypad', enabled ? 'on' : 'off'); }}>{translateUI("On-screen keypad")}</Switch>
             <div className="btn-row">

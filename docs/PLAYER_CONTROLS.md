@@ -1,4 +1,4 @@
-# Phones, Lights Out and gamepads
+# Phone controls, Bluetooth and gamepads
 
 ## Automatic phone profiles
 
@@ -26,9 +26,21 @@ Automatic mode applies skinId → device + width/height + layout on the server, 
 
 Screen view shows the original handset controls alongside the display. On N-Gage Classic and QD the directional controls sit above the numeric keypad in the left column.
 
-Use **Controls → On-screen keypad** to show or hide the keypad in Phone and Screen views. Pick 100%, 150% or 200% under **Keypad width**. The size applies to Lights Out too. The player remembers these choices in the browser.
+Use **Controls → On-screen keypad** to show or hide the detached keypad in Screen view. Pick 100%, 150% or 200% under **Keypad width**. The size applies to Lights Out too. Phone view already has interactive keys on the handset. The player remembers these choices in the browser.
 
 Use the moon button or **Alt+L** to toggle Lights Out. **Escape** exits. The player hides the side panels and dims the handset and onscreen controls. The LCD stays at full brightness. Moving or touching the pointer reveals the menu for the touch controls, fullscreen and exit. The presentation preference is saved in the browser and respects reduced motion.
+
+## Sony Ericsson K790i as a Bluetooth controller
+
+1. Pair the K790i with the computer running the browser in your operating system's Bluetooth settings.
+2. Download `MGO-K790i.hid` from **Settings → Sound & controls → Bluetooth phone**. Send the file to the phone over Bluetooth or USB. Open the file on the phone if prompted to install it.
+3. On the K790i, open **Entertainment → Remote Control → MGO-K790i** and choose the paired computer. Click **Test K790i buttons** in MGO and press a key on the phone. Then open a game and use the phone's joystick, soft keys, digits, `*` and `#`.
+
+**Controls** shows the most recently used input source with a phone, gamepad or keyboard icon. The phone icon appears after MGO receives a key from the profile. Bluetooth pairing and link status are managed by the operating system. The profile sends standard USB HID keyboard usages F13–F24, some with Shift. Browser/OS drivers can differ, so use the tester to check that your computer exposes those codes. The player applies the logical keys to the running emulator's layout. Existing custom keyboard bindings for those codes take precedence.
+
+The browser forwards each press and release through the same stream as normal keyboard input. Bluetooth HID is handled by the computer, so the MGO server can be on another machine. The K790i remote exposes keyboard and mouse HID, with no vibration output. Existing vibration on supported gamepads and the device running the browser remains available. [Sony Ericsson K790i guide](https://www.manualslib.com/manual/322651/Sony-Ericsson-K790i.html?page=67) · [Sony Ericsson HID developer guidelines](https://www.yumpu.com/en/document/view/7032510/bluetoothtm-hid-remote-control-sony) · [WebHID protected usages](https://developer.chrome.com/docs/capabilities/hid#security_and_privacy)
+
+The profile is built from `apps/web/src/phoneRemote.ts` and the included handset display image. Regenerate it after changing the mapping with `node --experimental-strip-types tools/controls/build-k790i-profile.mjs` (Node 22+ and GNU tar).
 
 ## Gamepads
 
@@ -49,4 +61,4 @@ Focus loss/hidden page, disconnect and remapping release only relevant sources. 
 - `node tests/e2e/phone-expansion.mjs`: five added handsets, body keys, real pointer coordinates, full/zoom views and session persistence; included in `npm run test:e2e`.
 - `CHROMIUM_PATH=/usr/bin/chromium node tests/e2e/player-features.mjs` for system Chromium; omit the variable to use Playwright's installed browser.
 
-Browser tests use the real backend/MIDlet and simulated Gamepad API data. They cannot certify actual USB/Bluetooth hardware or browser-specific controller drivers. Device disconnect/focus/deadzone/multiple-source behavior also has deterministic unit tests.
+Browser tests use the real backend/MIDlet, simulated Gamepad API data and simulated K790i key events. Actual Bluetooth pairing and OS key delivery need a physical test. Device disconnect, focus, deadzone and multiple-source input also have deterministic unit tests.

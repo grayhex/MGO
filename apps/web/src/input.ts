@@ -1,4 +1,5 @@
 import { KEY_LAYOUTS, KEY_NUM0, KEY_POUND, KEY_STAR, type KeyCodes, type LayoutId } from '@mgo/protocol';
+import { phoneAction } from './phoneRemote';
 
 /** Logical phone keys; the numeric J2ME code is resolved through the selected layout. */
 export type Action = 'up' | 'down' | 'left' | 'right' | 'fire' | 'softLeft' | 'softRight' | 'clear' | 'star' | 'pound' | `d${0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
@@ -51,6 +52,7 @@ export function prettyKey(code: string): string {
 }
 
 type Send = (ev: { t: 'key'; s: 'D' | 'U'; code: number } | { t: 'release-all' }) => void;
+export type InputSource = 'keyboard' | 'phone' | 'gamepad';
 
 /**
  * Tracks every pressed source (keyboard code, gamepad button, touch pointer) and turns it into
@@ -61,11 +63,12 @@ export class InputController {
   private sources = new Map<string, { code: number; action: Action }>();
   private refs = new Map<number, number>();
   private listeners = new Set<() => void>();
+  private lastSource: InputSource | undefined;
   layout: LayoutId = 'nokia';
   bindings: Bindings = loadBindings();
   enabled = true;
 
-  constructor(private send: Send) {}
+  constructor(private send: Send, private onSource?: (source: InputSource) => void) {}
 
   setSend(s: Send) { this.send = s; }
 
@@ -87,6 +90,11 @@ export class InputController {
     const n = (this.refs.get(code) ?? 0) + 1;
     this.refs.set(code, n);
     if (n === 1) this.send({ t: 'key', s: 'D', code });
+    const kind = source.startsWith('kb:') ? 'keyboard' : source.startsWith('phone:') ? 'phone' : source.startsWith('pad:') ? 'gamepad' : undefined;
+    if (kind && this.lastSource !== kind) {
+      this.lastSource = kind;
+      this.onSource?.(kind);
+    }
     this.emit();
   }
 
@@ -117,16 +125,19 @@ export class InputController {
   }
 
   onKeyDown = (e: KeyboardEvent): void => {
-    if (!this.enabled || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!this.enabled || e.defaultPrevented || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
-    const a = this.actionForKeyboard(e.code);
-    if (!a) return;
+    const keyboard = this.actionForKeyboard(e.code);
+    const action = keyboard ?? phoneAction(e);
+    if (!action) return;
     e.preventDefault();
-    if (!e.repeat) this.press(`kb:${e.code}`, a);
+    if (!e.repeat) this.press(`${keyboard ? 'kb' : 'phone'}:${e.code}`, action);
   };
 
   onKeyUp = (e: KeyboardEvent): void => {
-    if (this.sources.has(`kb:${e.code}`)) { e.preventDefault(); this.release(`kb:${e.code}`); }
+    const keyboard = `kb:${e.code}`;
+    const source = this.sources.has(keyboard) ? keyboard : `phone:${e.code}`;
+    if (this.sources.has(source)) { e.preventDefault(); this.release(source); }
   };
 }

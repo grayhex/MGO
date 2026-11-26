@@ -58,6 +58,9 @@
 .ctrl-col .panel-glyph .icon-svg { width: 15px; height: 15px; }
 .ctrl-col .panel > summary .badge { margin-left: auto; border-radius: var(--r-pill); }
 .ctrl-col .panel > summary .badge + .chev { margin-left: 0; }
+.ctrl-col .panel > summary .input-source { margin-inline-start: auto; display: grid; place-items: center; color: var(--muted); }
+.ctrl-col .panel > summary .input-source .icon-svg { width: 15px; height: 15px; }
+.ctrl-col .panel > summary .input-source + .chev { margin-inline-start: 0; }
 .ctrl-col .panel > summary .chev { color: var(--subtle); }
 .ctrl-col .panel-body { padding: 3px 10px 7px; gap: 6px; font-size: .875rem; }
 .ctrl-col .panel-body .input, .ctrl-col .panel-body .select { background-color: var(--surface-soft); }
