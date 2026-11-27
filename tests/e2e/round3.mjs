@@ -60,6 +60,11 @@ try {
   await sleep(500);
   const o = await p.evaluate(() => ({ body: Number(getComputedStyle(document.querySelector('.stage .skin-body')).opacity), glass: document.querySelector('.stage .skin-glass') ? Number(getComputedStyle(document.querySelector('.stage .skin-glass')).opacity) : 0 }));
   assert.equal(o.body, .36, 'the handset uses the same dimming in both players');
+  const background = await p.locator('.lights-out .stage').evaluate(stage => {
+    const style = getComputedStyle(stage);
+    return { color: style.backgroundColor, image: style.backgroundImage };
+  });
+  assert.deepEqual(background, { color: 'rgb(0, 0, 0)', image: 'none' });
   console.log('✔ Lights Out keeps the phone body faintly visible:', JSON.stringify(o));
 
   assert.deepEqual(errors, []);
