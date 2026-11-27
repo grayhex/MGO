@@ -29,7 +29,7 @@ Open **Controller mapping** from the global menu to change gamepad actions and t
 
 The library groups installed versions under a single card. Use **Recently played**, **Favorites**, platform filters or **Search games**. Search and game text entry use an on-screen keyboard with Latin and Cyrillic layouts and an **Uppercase** toggle. The game card contains build and handset choices, available screenshots, and compatibility settings for Java ME. For native games the selector lists compatible firmware and marks what needs to be installed.
 
-**Lights Out** is the default. It uses the same dimmed handset artwork as the desktop player and keeps the LCD at full brightness. Choose **Screen** for the lit close-up, **Phone** for the full handset or **Game only** for the bare canvas. At 4K a 240×320 image in **Game only** can scale to 1440×1920. Turn whole-number scaling off to fit the available area while keeping the aspect ratio. Nearest-neighbor keeps the pixel edges sharp. The emulator still renders at its normal resolution.
+**Lights Out** is the default. It shows a dimmed handset against a black background and keeps the LCD at full brightness, just like the desktop player. Choose **Screen** for the lit close-up, **Phone** for the full handset or **Game only** for the bare canvas. At 4K a 240×320 image in **Game only** can scale to 1440×1920. Turn whole-number scaling off to fit the available area while keeping the aspect ratio. Nearest-neighbor keeps the pixel edges sharp. The emulator still renders at its normal resolution.
 
 ## Screenshots and verification
 

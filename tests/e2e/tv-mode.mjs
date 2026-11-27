@@ -170,8 +170,10 @@ try {
     const stage = document.querySelector('.tv-lights-out .stage');
     const image = document.querySelector('.tv-lights-out .skin-body');
     const canvas = document.querySelector('.tv-lights-out .skin-lcd canvas');
+    const background = stage && getComputedStyle(stage);
     return image?.complete && image.naturalWidth > 0 && getComputedStyle(image).opacity === '0.36' &&
-      canvas && getComputedStyle(canvas).opacity === '1' && getComputedStyle(stage).backgroundImage.startsWith('radial-gradient');
+      canvas && getComputedStyle(canvas).opacity === '1' && background?.backgroundImage === 'none' &&
+      background.backgroundColor === 'rgb(0, 0, 0)';
   });
   await checkDimmedPhone();
   for (let i = 0; i < 8 && !(await presses(-5)); i++) { await usingPad('fire'); await delay(150); }
