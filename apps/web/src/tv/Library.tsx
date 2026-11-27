@@ -1,18 +1,20 @@
 import { useState } from 'react';
-import { GAME_PLATFORM_LABELS, type GameMeta, type GamePlatform } from '@mgo/protocol';
+import { GAME_PLATFORM_LABELS, type GameMeta, type GamePlatform, type Genre } from '@mgo/protocol';
 import { api } from '../api';
 import { Icon } from '../components/Icon';
 import { t } from '../i18n';
 
-export type TvFilter = 'all' | 'recent' | 'favorites' | GamePlatform;
+export type TvFilter = 'all' | 'recent' | 'added' | 'favorites' | GamePlatform | `genre:${Genre}`;
 export const tvPlatform = (game: GameMeta) => game.platform ?? 'j2me';
 
 export function tvLibrary(games: GameMeta[], filter: TvFilter, query: string) {
   const term = query.trim().toLocaleLowerCase();
   const eligible = games.filter(game => !game.sourceMissing && (
-    filter === 'all' || (filter === 'recent' && game.lastPlayedAt !== null) || (filter === 'favorites' && game.favorite) || filter === tvPlatform(game)
+    filter === 'all' || filter === 'added' || (filter === 'recent' && !!game.lastPlayedAt) || (filter === 'favorites' && game.favorite) ||
+    filter === tvPlatform(game) || filter === `genre:${game.classification?.primaryGenre}`
   ) && (!term || (game.name + ' ' + game.vendor).toLocaleLowerCase().includes(term)));
-  eligible.sort((a, b) => filter === 'recent' ? (b.lastPlayedAt ?? '').localeCompare(a.lastPlayedAt ?? '') : a.name.localeCompare(b.name));
+  eligible.sort((a, b) => filter === 'recent' ? (b.lastPlayedAt ?? '').localeCompare(a.lastPlayedAt ?? '')
+    : filter === 'added' ? b.createdAt.localeCompare(a.createdAt) : a.name.localeCompare(b.name));
   const groups = new Map<string, GameMeta[]>();
   for (const game of eligible) {
     const key = `${tvPlatform(game)}:${game.groupKey || game.id}`;
@@ -22,6 +24,8 @@ export function tvLibrary(games: GameMeta[], filter: TvFilter, query: string) {
   }
   return Array.from(groups, ([id, builds]) => ({ id, builds, game: builds[0]! }));
 }
+
+export type TvGameGroup = ReturnType<typeof tvLibrary>[number];
 
 export function GameArtwork({ game, picture = 0 }: { game: GameMeta; picture?: number }) {
   const sources = [
@@ -40,9 +44,9 @@ function Artwork({ sources }: { sources: string[] }) {
   </div>;
 }
 
-export function TvGameTile({ group, onOpen }: { group: ReturnType<typeof tvLibrary>[number]; onOpen: () => void }) {
+export function TvGameTile({ group, onOpen, onFocus, preferred }: { group: TvGameGroup; onOpen: () => void; onFocus?: () => void; preferred?: boolean }) {
   const { game, builds, id } = group;
-  return <button type="button" className="tv-game-tile" data-tv-game={id} onClick={onOpen}>
+  return <button type="button" className="tv-game-tile" data-tv-game={id} data-tv-prefer={preferred || undefined} onFocus={onFocus} onClick={onOpen}>
     <GameArtwork game={game} />
     <div className="tv-game-caption">
       <small>{GAME_PLATFORM_LABELS[tvPlatform(game)]}{game.favorite ? ' · ★' : ''}</small>
@@ -54,7 +58,7 @@ export function TvGameTile({ group, onOpen }: { group: ReturnType<typeof tvLibra
 
 export function TvFilters({ selected, onSelect }: { selected: TvFilter; onSelect: (filter: TvFilter) => void }) {
   return <nav className="tv-filters" aria-label={t('Filter games')}>
-    {([['all', 'All'], ['recent', 'Recently played'], ['favorites', 'Favorites'],
+    {([['all', 'All'], ['recent', 'Recently played'], ['added', 'Recently added'], ['favorites', 'Favorites'],
       ['j2me', GAME_PLATFORM_LABELS.j2me], ['ngage', GAME_PLATFORM_LABELS.ngage], ['ngage2', GAME_PLATFORM_LABELS.ngage2],
       ['symbian', GAME_PLATFORM_LABELS.symbian]] as const).map(([id, label]) =>
       <button type="button" key={id} aria-pressed={id === selected} onClick={() => onSelect(id)}>{id === 'favorites' && <Icon name="star" />}{t(label)}</button>)}

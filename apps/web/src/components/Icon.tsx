@@ -2,6 +2,8 @@ import { t as translateUI } from '../i18n';
 import type { ReactNode } from 'react';
 
 const P: Record<string, ReactNode> = {
+  home: <><path d="M3.5 11 12 4l8.5 7M5.5 10v10h13V10M10 20v-6h4v6" /></>,
+  shuffle: <><path d="M4 6h2c4.5 0 6.5 12 11 12h3m-3-3 3 3-3 3M4 18h2c1.4 0 2.7-1.3 3.7-3m4.5-6c1-1.7 2.4-3 3.8-3h2m-3-3 3 3-3 3" /></>,
   library: <><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>,
   play: <path d="M8 5l11 7-11 7z" />,
   pause: <path d="M9 5v14M15 5v14" />,

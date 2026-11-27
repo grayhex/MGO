@@ -51,8 +51,9 @@ export function moveTvFocus(root: HTMLElement, key: TvKey): void {
   const [fx, fy] = center(from);
   let best: HTMLElement | undefined;
   let distance = Infinity;
+  const row = horizontal && current.closest('[data-tv-row]');
   for (const target of list) {
-    if (target === current) continue;
+    if (target === current || (row && !row.contains(target))) continue;
     const rect = target.getBoundingClientRect();
     const [x, y] = center(rect);
     const primary = (horizontal ? x - fx : y - fy) * sign;

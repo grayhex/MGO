@@ -1,6 +1,8 @@
 # TV Mode
 
-Open **TV Mode** from the sidebar or go directly to `/tv`. The browser remembers the mode. Use **Menu → Exit TV Mode** to return to the desktop interface. In a running game the menu also offers **Resume**, display and sound settings, and a confirmed stop. **Resume** continues the same session when you bring a paused game over from the desktop player. Save in the game before stopping. Games and saves still live on your MGO server.
+Open **TV Mode** from the sidebar or go directly to `/tv`. **Home** shows recently played and added games, collections and phone previews. Move across the top row to change the featured game. Play it from Home or open its card for builds, compatible handsets and screenshots. **Library**, **Collections**, **Phones** and **Settings** are available from the top navigation. TV Mode uses the same light or dark palette as the desktop interface.
+
+The browser remembers TV Mode. Use **Settings → Exit TV Mode** to return to the desktop interface. During gameplay, open the menu to resume, adjust display and sound, or stop the game. **Resume** continues the same session when you bring a paused game over from the desktop player. Save in the game before stopping. Games and saves stay on your MGO server.
 
 ## Raspberry Pi and 4K TV
 
@@ -20,7 +22,7 @@ Some Linux images package the browser as `chromium-browser`. If sound requires a
 
 | Source | Navigate | Confirm | Back | Global menu |
 |---|---|---|---|---|
-| Standard gamepad | D-pad / left stick | South face button | Select / View | Start / Menu |
+| Standard gamepad | D-pad / left stick | South face button | East face button in the UI or Select / View | Start / Menu |
 | Keyboard | Arrow keys | Enter | Backspace in the UI | M |
 
 Open **Controller mapping** from the global menu to change gamepad actions and the dedicated menu/back buttons. Global and per-game mappings are shared with the standard player. Connect a Sony Ericsson phone to the computer running the TV browser to use its HID buttons during gameplay. Use the gamepad or keyboard for the library and menus. [Download and test the Sony Ericsson profiles](PLAYER_CONTROLS.md#sony-ericsson-bluetooth-controllers)
@@ -31,8 +33,8 @@ The library groups installed versions under a single card. Use **Recently played
 
 ## Screenshots and verification
 
-[4K library](img/tv/library.webp) · [4K game card](img/tv/card.webp) · [4K Lights Out](img/tv/game.webp) · [4K game menu](img/tv/menu.webp)
+[Home in dark theme](img/tv/home.webp) · [Home in light theme](img/tv/home-light.webp) · [4K library](img/tv/library.webp) · [4K game card](img/tv/card.webp) · [4K Lights Out](img/tv/game.webp) · [4K game menu](img/tv/menu.webp)
 
-Browser tests exercise real KEmulator games with a simulated gamepad and simulated Sony Ericsson HID keys. They cover the 3840×2160 and 1920×1080 layouts, controller navigation, display modes and HID game input. Physical Raspberry Pi, 4K TV and Sony Ericsson input were unavailable for this run.
+Browser tests exercise real KEmulator games with a simulated gamepad and simulated Sony Ericsson HID keys. They cover the 3840×2160 and 1920×1080 layouts, dashboard shelves, collection filters, phone previews, display modes and HID game input.
 
 To recreate the screenshots, build MGO and its test fixtures, then run `MGO_TV_SCREENSHOTS=/tmp/mgo-tv node tests/e2e/tv-mode.mjs`.

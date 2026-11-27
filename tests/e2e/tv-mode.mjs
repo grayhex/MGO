@@ -54,10 +54,11 @@ async function focusWith(page, selector, drive) {
     const box = items.map(el => el.getBoundingClientRect());
     const edge = (from, horizontal, sign) => {
       const a = box[from];
+      const row = horizontal && items[from].closest('[data-tv-row]');
       let best = -1;
       let distance = Infinity;
       for (let i = 0; i < box.length; i++) {
-        if (i === from) continue;
+        if (i === from || (row && !row.contains(items[i]))) continue;
         const b = box[i];
         const dx = (b.left + b.right - a.left - a.right) / 2;
         const dy = (b.top + b.bottom - a.top - a.bottom) / 2;
@@ -116,8 +117,9 @@ try {
   });
   await tv.goto(base + '/tv');
   await tv.locator(tile(first)).waitFor();
-  await tv.waitForFunction(() => document.activeElement?.textContent.trim() === 'Search games');
-  assert.equal(await tv.getByRole('dialog').count(), 0, 'TV opens directly to the library');
+  await tv.waitForFunction(() => document.activeElement?.matches('.tv-spotlight-cards .tv-game-tile'));
+  assert.equal(await tv.getByRole('button', { name: 'Home', exact: true }).getAttribute('aria-current'), 'page');
+  assert.equal(await tv.getByRole('dialog').count(), 0, 'TV opens directly to the dashboard');
   const legacySockets = await tv.evaluate(() => Promise.all(['relay', 'remote'].map(path => new Promise(resolve => {
     const socket = new WebSocket(`ws://${location.host}/api/tv/${path}`);
     socket.onopen = () => { socket.close(); resolve(true); };
@@ -125,13 +127,23 @@ try {
   }))));
   assert.deepEqual(legacySockets, [false, false]);
 
+  const usingPad = key => pad(tv, key);
+  const initialHighlight = await tv.locator('.tv-spotlight-title h1').textContent();
+  await usingPad('right');
+  const focus = await tv.evaluate(() => ({
+    label: document.activeElement?.textContent,
+    game: document.activeElement?.querySelector('strong')?.textContent,
+    tiles: Array.from(document.querySelectorAll('.tv-spotlight-cards .tv-game-tile strong'), tile => tile.textContent),
+  }));
+  assert.ok(focus.game && focus.tiles.includes(focus.game) && focus.game !== initialHighlight, JSON.stringify(focus));
+  assert.equal(await tv.locator('.tv-spotlight-title h1').textContent(), focus.game);
   await phoneVolumeUp(tv);
-  assert.equal(await tv.evaluate(() => document.activeElement?.textContent.trim()), 'Search games');
   assert.equal(await tv.getByRole('dialog').count(), 0);
+  await openBy(tv, '.tv-nav button:nth-child(2)', usingPad);
+  await tv.waitForFunction(() => document.activeElement?.textContent.trim() === 'Search games');
   await shot(tv, 'tv-library-4k');
   assert.ok(await tv.evaluate(() => document.documentElement.scrollWidth === innerWidth));
 
-  const usingPad = key => pad(tv, key);
   await openBy(tv, tile(first), usingPad);
   await tv.getByRole('heading', { name: first.name }).waitFor();
   await shot(tv, 'tv-card-4k');
@@ -203,9 +215,20 @@ try {
   await frames(tv);
   await stopGame(first);
   console.log('PASS: 4K TV library, gamepad navigation, dimmed phone, integer scaling in Game only and restored focus');
+  await openBy(tv, '.tv-nav button:first-child', usingPad);
+  await tv.getByRole('heading', { name: 'Continue playing' }).waitFor();
+  await tv.locator('.tv-added-grid ' + tile(second)).waitFor();
+  await tv.locator('.tv-home .tv-handset-card').first().waitFor();
+  await shot(tv, 'tv-home-4k');
+  await openBy(tv, '.tv-nav button:nth-child(3)', usingPad);
+  await tv.locator('.tv-catalog .tv-collection-card').last().waitFor();
+  await openBy(tv, '.tv-catalog .tv-collection-card:nth-child(2)', usingPad);
+  await tv.locator('.tv-filters button[aria-pressed="true"]').filter({ hasText: 'Recently played' }).waitFor();
+  assert.equal(await tv.locator('.tv-grid .tv-game-tile').count(), 1);
+  await tv.locator('.tv-filters').getByRole('button', { name: 'All', exact: true }).click();
 
   await tv.setViewportSize({ width: 1920, height: 1080 });
-  await openBy(tv, '.tv-head .tv-actions button:first-child', usingPad);
+  await openBy(tv, '.tv-library-head button', usingPad);
   const search = tv.getByRole('dialog', { name: 'Search games' });
   await search.waitFor();
   await frames(tv);
@@ -244,9 +267,20 @@ try {
   await tv.getByRole('link', { name: 'TV Mode' }).waitFor();
 
   const scaled = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2 });
+  await scaled.addInitScript(() => localStorage.setItem('mgo.theme', 'light'));
   await scaled.goto(base + '/tv');
   await scaled.locator(tile(second)).waitFor();
   assert.ok(await scaled.evaluate(() => devicePixelRatio === 2 && document.documentElement.scrollWidth === innerWidth));
+  assert.equal(await scaled.locator('.tv').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(244, 247, 245)');
+  await scaled.getByRole('navigation', { name: 'TV navigation' }).getByRole('button', { name: 'Phones' }).click();
+  await scaled.locator('.tv-catalog .tv-handset-card').first().click();
+  await scaled.getByRole('dialog').getByText(/Display · \d+×\d+/).waitFor();
+  await scaled.getByRole('dialog').getByRole('button', { name: 'Back' }).click();
+  await scaled.getByRole('navigation', { name: 'TV navigation' }).getByRole('button', { name: 'Home' }).click();
+  await scaled.locator('.tv-home .tv-handset-card').first().waitFor();
+  await shot(scaled, 'tv-home-light-1080p');
+  await scaled.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await scaled.locator('.tv-body').evaluate(body => body.scrollWidth <= body.clientWidth + 1), true);
   assert.deepEqual(errors, []);
   console.log('PASS: 1080p/DPR 2 layout, gamepad search and exit, Sony Ericsson arrow keys reach the emulator');
 } finally {
