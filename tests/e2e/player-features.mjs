@@ -83,7 +83,7 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  assert.equal(style.opacity,'1');assert.equal(style.filter,'none');assert.deepEqual([style.w,style.h],[320,240]);
  await p.keyboard.press('Digit5');
  await wait(async()=>{const s=(await sessions()).find(s=>s.state==='running');return (await(await fetch(base+'/api/sessions/'+s.id)).json()).logTail.some(l=>l.includes('KEY_DOWN 53'));});
- await p.evaluate(()=>window.padButtons=[0]);
+ await p.evaluate(()=>window.padButtons=[2]);
  await wait(async()=>{const s=(await sessions()).find(s=>s.state==='running');return (await(await fetch(base+'/api/sessions/'+s.id)).json()).logTail.some(l=>l.includes('KEY_DOWN -5'));});
  await p.evaluate(()=>window.padButtons=[]);
  const running=(await sessions()).find(s=>s.state==='running').id;
@@ -110,9 +110,9 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
  assert.ok(corner.right>=8&&corner.right<=24&&corner.top>=8&&corner.top<=24,'Controls sit in the corner: '+JSON.stringify(corner));
  await exitLights.click();
  await p.evaluate(()=>document.exitFullscreen());
- // Simulated button 0 must reach InputController and the real game.
+ // The standard A button sends keypad 5 to the real game.
  await p.evaluate(()=>window.padButtons=[0]);
- await wait(async()=>{const s=(await sessions()).find(s=>s.state==='running');return (await(await fetch(base+'/api/sessions/'+s.id)).json()).logTail.some(l=>l.includes('KEY_DOWN -5'));});
+ await wait(async()=>{const s=(await sessions()).find(s=>s.state==='running');return (await(await fetch(base+'/api/sessions/'+s.id)).json()).logTail.some(l=>l.includes('KEY_DOWN 53'));});
  await p.evaluate(()=>window.padButtons=[]);
  const padSettings = p.getByRole('button', {name:'Gamepad settings / UI navigation'});
  const pressPad = async button => {
@@ -120,13 +120,13 @@ await fetch(base + '/api/setup/skip', { method: 'POST' }); // the first-run wiza
    await p.evaluate(async () => { window.padButtons = []; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
  };
  const presses = async code => (await fetch(base + '/api/sessions/' + running).then(r => r.json())).logTail.filter(line => line.includes(`KEY_DOWN ${code}`)).length;
- const fireBefore = await presses(-5);
+ const fiveBefore = await presses(53);
  await p.evaluate(() => { window.focusBeforeMenu = document.activeElement; });
  await pressPad(9);
  assert.equal(await padSettings.getAttribute('aria-expanded'), 'false', 'Menu cannot open UI navigation during gameplay');
  assert.equal(await p.evaluate(() => document.activeElement === window.focusBeforeMenu), true, 'Menu keeps the current focus');
  await pressPad(0);
- await wait(async() => (await presses(-5)) > fireBefore);
+ await wait(async() => (await presses(53)) > fiveBefore);
  await padSettings.click();
  const fireWithSettings = await presses(-5);
  const key = await keypad.locator('polygon[data-action="fire"]').first().boundingBox();

@@ -27,9 +27,13 @@ Some Linux images package the browser as `chromium-browser`. If sound requires a
 
 Open **Controller mapping** from the global menu to change gamepad actions and the dedicated menu/back buttons. Global and per-game mappings are shared with the standard player. Connect a Sony Ericsson phone to the computer running the TV browser to use its HID buttons during gameplay. Use the gamepad or keyboard for the library and menus. [Download and test the Sony Ericsson profiles](PLAYER_CONTROLS.md#sony-ericsson-bluetooth-controllers)
 
-The library groups installed versions under a single card. Use **Recently played**, **Favorites**, platform filters or **Search games**. Search and game text entry use an on-screen keyboard with Latin and Cyrillic layouts and an **Uppercase** toggle. The game card contains build and handset choices, available screenshots, and compatibility settings for Java ME. For native games the selector lists compatible firmware and marks what needs to be installed.
+Tilt the right stick up or down in the library to scroll a screen at a time. In gameplay the standard mapping sends **5** with **A**, **2/4/6/8** with the D-pad and the handset's soft keys with **LB/RB**.
 
-**Lights Out** is the default. It shows a dimmed handset against a black background and keeps the LCD at full brightness, just like the desktop player. Choose **Screen** for the lit close-up, **Phone** for the full handset or **Game only** for the bare canvas. At 4K a 240×320 image in **Game only** can scale to 1440×1920. Turn whole-number scaling off to fit the available area while keeping the aspect ratio. Nearest-neighbor keeps the pixel edges sharp. The emulator still renders at its normal resolution.
+The library groups installed versions under a single card. Use **Recently played**, **Favorites**, platform filters or **Search games**. Search and game text entry use an on-screen keyboard with Latin and Cyrillic layouts and an **Uppercase** toggle. The game card contains build and handset choices, available screenshots, and compatibility settings for Java ME. **Back** from a game card returns to the library and restores that game's focus. In **Phones**, choose **Use this phone** to apply the handset when launching games from TV Mode. The phone picker inside a game card can override that choice for the launch. Symbian and N-Gage use the TV handset when its compatible firmware is installed. Otherwise the game uses its configured phone.
+
+**Display** has three modes. **Phone** shows the full handset, **Lights Out** shows the dimmed handset and bright LCD, and **Game only** shows the bare canvas. All have a black background. **Lights Out** is the default. At 4K a 240×320 image in **Game only** can scale to 1440×1920. Turn whole-number scaling off to fit the available area while keeping the aspect ratio.
+
+Opening the TV menu pauses the running game. Closing the menu resumes a game the menu paused. A previous manual pause remains until you choose **Resume**. Use **Mute** beside the volume control to silence the audio and keep the volume setting.
 
 ## Screenshots and verification
 

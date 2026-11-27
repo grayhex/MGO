@@ -61,9 +61,32 @@ export function moveTvFocus(root: HTMLElement, key: TvKey): void {
     const cross = horizontal
       ? Math.max(0, from.top - rect.bottom, rect.top - from.bottom)
       : Math.max(0, from.left - rect.right, rect.left - from.right);
-    if (primary <= 2) continue;
+    if (primary <= 2 || (row && cross > 2)) continue;
     const score = primary + 0.45 * secondary + 3 * cross;
     if (score < distance) { distance = score; best = target; }
   }
   focusTv(best);
+}
+
+export function pageTvLibrary(body: HTMLElement, direction: -1 | 1): void {
+  const grid = body.querySelector<HTMLElement>('.tv-grid');
+  if (!grid) return;
+  const viewport = body.getBoundingClientRect();
+  const top = body.querySelector('.tv-head')?.getBoundingClientRect().bottom ?? viewport.top;
+  const height = viewport.bottom - top;
+  if (height <= 0 || body.scrollHeight <= body.clientHeight) return;
+  const current = grid.contains(document.activeElement) ? document.activeElement?.getBoundingClientRect() : null;
+  const y = Math.max(top, Math.min(viewport.bottom, current ? (current.top + current.bottom) / 2 : top));
+  const x = current ? (current.left + current.right) / 2 : viewport.left;
+  body.scrollTop += direction * height;
+
+  let focus: HTMLElement | undefined;
+  let distance = Infinity;
+  for (const tile of tvTargets(grid)) {
+    const rect = tile.getBoundingClientRect();
+    if (rect.bottom <= top || rect.top >= viewport.bottom) continue;
+    const score = Math.abs((rect.top + rect.bottom) / 2 - y) + Math.abs((rect.left + rect.right) / 2 - x) * .25;
+    if (score < distance) { distance = score; focus = tile; }
+  }
+  focus?.focus({ preventScroll: true });
 }

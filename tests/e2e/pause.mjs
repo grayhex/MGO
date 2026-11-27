@@ -74,7 +74,15 @@ try {
   assert.equal((await session()).paused, true);
 
   await p.keyboard.press('KeyM');
-  await p.getByRole('dialog', { name: 'TV menu' }).waitFor();
+  const tvMenu = p.getByRole('dialog', { name: 'TV menu' });
+  await tvMenu.waitFor();
+  await p.keyboard.press('Escape');
+  await tvMenu.waitFor({ state: 'hidden' });
+  await resumeFromStage.waitFor();
+  assert.equal((await session()).paused, true, 'closing the TV menu preserves an earlier manual pause');
+
+  await p.keyboard.press('KeyM');
+  await tvMenu.waitFor();
   await p.waitForFunction(() => document.activeElement?.closest('.tv-dialog-menu') && document.activeElement.textContent.trim() === 'Resume');
   await p.keyboard.press('Enter');
   await wait(async () => (await session()).paused === false && (await frames()) > pausedSession.framesReceived + 5, 'TV resumes the paused emulator');

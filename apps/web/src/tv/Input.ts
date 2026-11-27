@@ -1,13 +1,13 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { GamepadPoller, loadPadProfile, type PadState } from '../gamepad';
+import { GamepadPoller, loadPadProfile, PAD_NAVIGATION, type PadState } from '../gamepad';
 import type { Action, InputController } from '../input';
 import { phoneAction } from '../phoneRemote';
 
-export type TvKey = Action | 'menu' | 'back';
+export type TvKey = Action | 'menu' | 'back' | 'pageUp' | 'pageDown';
 
 const uiKey: Partial<Record<Action, TvKey>> = {
   softRight: 'back', softLeft: 'menu',
-  d2: 'up', d4: 'left', d5: 'fire', d6: 'right', d8: 'down', star: 'back', pound: 'menu',
+  ...PAD_NAVIGATION, star: 'back', pound: 'menu',
 };
 
 export function useTvInput(input: InputController, gameId: string | null, gameplay: boolean,
@@ -19,7 +19,7 @@ export function useTvInput(input: InputController, gameId: string | null, gamepl
   useEffect(() => {
     const poller = new GamepadPoller(input);
     poller.reserveMenu = true;
-    poller.setUiMode(true);
+    poller.setUiMode(!current.current.gameplay);
     poller.onUi = action => {
       const route = current.current.onUi;
       if (action === 'ui:menu') route('menu');
@@ -27,6 +27,7 @@ export function useTvInput(input: InputController, gameId: string | null, gamepl
       else if (action !== 'ui:fullscreen' && action !== 'ui:lights') route(uiKey[action] ?? action);
     };
     poller.onState = value => current.current.onPadState(value);
+    poller.onPage = direction => current.current.onUi(direction < 0 ? 'pageUp' : 'pageDown');
     gamepad.current = poller;
     if (gamepadEnabled) poller.start();
     return () => { poller.stop(); gamepad.current = null; };

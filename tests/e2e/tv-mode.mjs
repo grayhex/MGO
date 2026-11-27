@@ -29,7 +29,15 @@ async function shot(page, name) {
   }
 }
 
-const padIndex = { up: 12, down: 13, left: 14, right: 15, fire: 0, menu: 9, back: 8 };
+const padIndex = { up: 12, down: 13, left: 14, right: 15, fire: 0, menu: 9, back: 8, lb: 4, rb: 5 };
+function installGamepad() {
+  window.tvButtons = [];
+  window.rightStick = 0;
+  Object.defineProperty(navigator, 'getGamepads', { value: () => [{
+    id: 'TV test pad', index: 0, mapping: 'standard', connected: true, axes: [0, 0, 0, window.rightStick],
+    buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: window.tvButtons.includes(i), value: Number(window.tvButtons.includes(i)) })),
+  }] });
+}
 const frames = page => page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
 async function pad(page, key) {
   await page.evaluate(index => { window.tvButtons = [index]; }, padIndex[key]);
@@ -66,7 +74,7 @@ async function focusWith(page, selector, drive) {
         const secondary = Math.abs(horizontal ? dy : dx);
         const cross = horizontal ? Math.max(0, a.top - b.bottom, b.top - a.bottom) : Math.max(0, a.left - b.right, b.left - a.right);
         const score = primary + .45 * secondary + 3 * cross;
-        if (primary > 2 && score < distance) { best = i; distance = score; }
+        if (primary > 2 && (!row || cross <= 2) && score < distance) { best = i; distance = score; }
       }
       return best;
     };
@@ -107,14 +115,8 @@ try {
   const tv = await browser.newPage({ viewport: { width: 3840, height: 2160 }, deviceScaleFactor: 1 });
   const errors = [];
   tv.on('pageerror', error => errors.push(error.message));
-  await tv.addInitScript(() => {
-    window.tvButtons = [];
-    localStorage.setItem('mgo.tv.display', 'clean'); // saved by previous TV Mode releases
-    Object.defineProperty(navigator, 'getGamepads', { value: () => [{
-      id: 'TV test pad', index: 0, mapping: 'standard', connected: true, axes: [0, 0],
-      buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: window.tvButtons.includes(i), value: Number(window.tvButtons.includes(i)) })),
-    }] });
-  });
+  await tv.addInitScript(installGamepad);
+  await tv.addInitScript(() => localStorage.setItem('mgo.tv.display', 'screen'));
   await tv.goto(base + '/tv');
   await tv.locator(tile(first)).waitFor();
   await tv.waitForFunction(() => document.activeElement?.matches('.tv-spotlight-cards .tv-game-tile'));
@@ -139,8 +141,15 @@ try {
   assert.equal(await tv.locator('.tv-spotlight-title h1').textContent(), focus.game);
   await phoneVolumeUp(tv);
   assert.equal(await tv.getByRole('dialog').count(), 0);
-  await openBy(tv, '.tv-nav button:nth-child(2)', usingPad);
-  await tv.waitForFunction(() => document.activeElement?.textContent.trim() === 'Search games');
+  await openBy(tv, tile(first), usingPad);
+  await tv.waitForFunction(() => document.activeElement?.textContent.trim() === 'Play');
+  await usingPad('right');
+  assert.equal(await tv.evaluate(() => document.activeElement?.textContent.trim()), 'Choose a phone');
+  await usingPad('back');
+  const currentTab = await tv.locator('.tv-nav [aria-current="page"]').textContent();
+  assert.equal(currentTab, 'Library', await tv.locator('.tv-body main').getAttribute('class'));
+  await tv.locator('.tv-grid ' + tile(first)).waitFor();
+  await tv.waitForFunction(selector => document.activeElement === document.querySelector(selector), tile(first));
   await shot(tv, 'tv-library-4k');
   assert.ok(await tv.evaluate(() => document.documentElement.scrollWidth === innerWidth));
 
@@ -176,14 +185,42 @@ try {
       background.backgroundColor === 'rgb(0, 0, 0)';
   });
   await checkDimmedPhone();
-  for (let i = 0; i < 8 && !(await presses(-5)); i++) { await usingPad('fire'); await delay(150); }
-  assert.ok(await presses(-5), 'pad input reaches KEmulator');
+  assert.equal(await tv.evaluate(() => localStorage.getItem('mgo.tv.display')), 'screen', 'legacy Screen is read as Lights Out');
+  await tv.waitForFunction(() => document.activeElement?.classList.contains('stage'));
+  for (const [button, code] of [['fire', 53], ['up', 50], ['left', 52], ['right', 54], ['down', 56], ['lb', -6], ['rb', -7]]) {
+    const initial = await presses(code);
+    await usingPad(button);
+    await until(async () => (await presses(code)) > initial, `${button} sends phone key ${code}`);
+  }
   await shot(tv, 'tv-game-4k');
 
   const menu = tv.getByRole('dialog', { name: 'TV menu' });
   await usingPad('menu');
   await menu.waitFor();
+  await until(async () => (await status())?.paused, 'TV menu suspends the running game');
+  await delay(200);
+  const frozen = (await status()).framesReceived;
+  await delay(350);
+  assert.equal((await status()).framesReceived, frozen, 'the emulator stops drawing while the menu is open');
+  const display = menu.getByRole('group', { name: 'Display' });
+  assert.deepEqual(await display.getByRole('button').allTextContents(), ['Phone', 'Lights Out', 'Game only']);
   await shot(tv, 'tv-menu-4k');
+  await menu.getByRole('button', { name: 'Mute', exact: true }).click();
+  assert.equal(await menu.getByRole('button', { name: 'Mute', exact: true }).getAttribute('aria-pressed'), 'true');
+  await display.getByRole('button', { name: 'Phone', exact: true }).click();
+  await usingPad('back');
+  await menu.waitFor({ state: 'hidden' });
+  await until(async () => !(await status())?.paused && (await status())?.framesReceived > frozen, 'closing TV menu resumes the same game');
+  await tv.locator('.tv-player .skin-box[data-view="full"]').waitFor();
+  assert.deepEqual(await tv.locator('.tv-player .stage').evaluate(el => {
+    const css = getComputedStyle(el);
+    return [css.backgroundColor, css.backgroundImage];
+  }), ['rgb(0, 0, 0)', 'none']);
+  await usingPad('menu');
+  await menu.waitFor();
+  assert.ok(await menu.getByText('Volume 80%', { exact: true }).isVisible());
+  assert.equal(await menu.getByRole('button', { name: 'Mute', exact: true }).getAttribute('aria-pressed'), 'true');
+  await menu.getByRole('button', { name: 'Mute', exact: true }).click();
   await frames(tv);
   await openBy(tv, '.tv-dialog-menu .tv-setting .tv-actions button:last-child', usingPad);
   await usingPad('back');
@@ -240,6 +277,11 @@ try {
   await search.getByRole('status').filter({ hasText: 'Search games' }).waitFor();
   await usingPad('back');
   await search.waitFor({ state: 'hidden' });
+  await tv.getByRole('navigation', { name: 'TV navigation' }).getByRole('button', { name: 'Phones' }).click();
+  await tv.locator('.tv-handset-card').filter({ hasText: 'K790i' }).click();
+  await tv.getByRole('dialog', { name: 'K790i' }).getByRole('button', { name: 'Use this phone' }).click();
+  await tv.locator('.tv-handset-card[data-selected="true"]').filter({ hasText: 'K790i' }).waitFor();
+  await tv.getByRole('navigation', { name: 'TV navigation' }).getByRole('button', { name: 'Library' }).click();
   await frames(tv);
   await openBy(tv, tile(second), usingPad);
   await tv.getByRole('heading', { name: second.name }).waitFor();
@@ -249,6 +291,7 @@ try {
   await tv.waitForFunction(() => document.activeElement?.classList.contains('stage'));
 
   await checkDimmedPhone();
+  await tv.locator('.tv-player .skin-box[data-skin="sony-ericsson-k790i"]').waitFor();
   await shot(tv, 'tv-game-1080p');
   for (const [key, code] of [['ArrowUp', -1], ['ArrowLeft', -3], ['ArrowDown', -2], ['ArrowRight', -4], ['Enter', -5], ['KeyZ', 35]]) {
     const initial = await presses(code);
@@ -269,6 +312,7 @@ try {
   await tv.getByRole('link', { name: 'TV Mode' }).waitFor();
 
   const scaled = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2 });
+  await scaled.addInitScript(installGamepad);
   await scaled.addInitScript(() => localStorage.setItem('mgo.theme', 'light'));
   await scaled.goto(base + '/tv');
   await scaled.locator(tile(second)).waitFor();
@@ -283,6 +327,34 @@ try {
   await shot(scaled, 'tv-home-light-1080p');
   await scaled.setViewportSize({ width: 390, height: 844 });
   assert.equal(await scaled.locator('.tv-body').evaluate(body => body.scrollWidth <= body.clientWidth + 1), true);
+  await scaled.setViewportSize({ width: 1280, height: 720 });
+  await scaled.route(base + '/api/games', async route => {
+    const response = await route.fetch();
+    const entries = await response.json();
+    const examples = Array.from({ length: 72 }, (_, i) => ({
+      ...first, id: `page-${i}`, groupKey: `page-${i}`, name: `Page fixture ${i}`, lastPlayedAt: null,
+      classification: { primaryGenre: i % 2 ? 'Adventure' : 'Simulation' },
+    }));
+    await route.fulfill({ response, json: entries.concat(examples) });
+  });
+  await scaled.reload();
+  const nav = scaled.getByRole('navigation', { name: 'TV navigation' });
+  await nav.getByRole('button', { name: 'Collections' }).click();
+  for (const genre of ['Adventure', 'Simulation']) {
+    const label = scaled.locator('.tv-collection-card').filter({ hasText: genre }).locator('span');
+    assert.ok(await label.evaluate(el => getComputedStyle(el).whiteSpace === 'nowrap' && el.scrollWidth <= el.clientWidth + 1));
+  }
+  await nav.getByRole('button', { name: 'Library' }).click();
+  await scaled.locator('.tv-grid .tv-game-tile').last().waitFor();
+  await scaled.evaluate(() => { window.rightStick = .95; });
+  await scaled.waitForFunction(() => document.querySelector('.tv-body').scrollTop > 400);
+  await scaled.evaluate(() => { window.rightStick = 0; });
+  await frames(scaled);
+  assert.ok(await scaled.evaluate(() => document.activeElement?.matches('.tv-grid .tv-game-tile')));
+  const scrolled = await scaled.locator('.tv-body').evaluate(el => el.scrollTop);
+  await scaled.evaluate(() => { window.rightStick = -.95; });
+  await scaled.waitForFunction(before => document.querySelector('.tv-body').scrollTop < before, scrolled);
+  await scaled.evaluate(() => { window.rightStick = 0; });
   assert.deepEqual(errors, []);
   console.log('PASS: 1080p/DPR 2 layout, gamepad search and exit, Sony Ericsson arrow keys reach the emulator');
 } finally {

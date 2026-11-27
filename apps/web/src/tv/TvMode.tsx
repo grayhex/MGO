@@ -1,6 +1,6 @@
-import { GAME_PLATFORM_LABELS, GENRES, generationOfOs, generationOfPackage, phoneHasTouch, profilesForSkin, type GameInfo, type GameMeta, type HealthStatus, type PhoneCatalog } from '@mgo/protocol';
+import { GAME_PLATFORM_LABELS, GENRES, generationOfOs, generationOfPackage, phoneHasTouch, profilesForSkin, type GameInfo, type GameMeta, type HealthStatus, type PhoneCatalog, type PhoneSkinId } from '@mgo/protocol';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../api';
+import { api, type GameSettingsPatch } from '../api';
 import type { Toast } from '../App';
 import { EmulationTweaksForm } from '../components/EmulationTweaksForm';
 import { GamepadSettings } from '../components/GamepadSettings';
@@ -10,12 +10,12 @@ import type { PadState } from '../gamepad';
 import { t } from '../i18n';
 import { InputController } from '../input';
 import { navigate } from '../router';
-import { controlSettings, useServerSettings } from '../serverSettings';
+import { audioSettings, controlSettings, useServerSettings } from '../serverSettings';
 import { DEFAULT_SKIN, isSkinId, skinBase, useCatalog } from '../skin/registry';
 import type { LoadedSkin } from '../skin/types';
 import { TvCollectionCards, TvFooter, TvHome, TvNavigation, TvPhoneCards, type TvCollection, type TvSection } from './Dashboard';
 import { useTvInput, type TvKey } from './Input';
-import { focusTv, moveTvFocus, tvTargets } from './focus';
+import { focusTv, moveTvFocus, pageTvLibrary, tvTargets } from './focus';
 import { TvKeyboard } from './Keyboard';
 import { GameArtwork, TvFilters, TvGameTile, tvLibrary, tvPlatform, type TvFilter, type TvGameGroup } from './Library';
 import type { TvDisplay, TvPlayerHandle, TvPlayerStatus } from './player';
@@ -24,6 +24,11 @@ type Overlay = 'menu' | 'search' | 'build' | 'phone' | 'phone-info' | 'options' 
 const preference = {
   read: (key: string) => { try { return localStorage.getItem('mgo.tv.' + key); } catch { return null; } },
   write: (key: string, value: string) => { try { localStorage.setItem('mgo.tv.' + key, value); } catch { /* optional */ } },
+};
+const nativeProfiles = (id: PhoneSkinId, game: GameMeta) => {
+  const generation = generationOfPackage(game.packageFormat);
+  return profilesForSkin(id, tvPlatform(game)).flatMap(device =>
+    device.engine === 'eka2l1' && (!generation || generationOfOs(device.os) === generation) ? [device] : []);
 };
 
 export default function TvMode({ health, toast, exit }: { health: HealthStatus | null; toast: (kind: Toast['kind'], text: string) => void; exit: () => void }) {
@@ -38,6 +43,11 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
   const [section, setSection] = useState<TvSection>('home');
   const [highlighted, setHighlighted] = useState('');
   const [viewedPhone, setViewedPhone] = useState<LoadedSkin>();
+  const [preferredPhone, setPreferredPhone] = useState<PhoneSkinId | null>(() => {
+    const saved = preference.read('phone');
+    return isSkinId(saved) ? saved : null;
+  });
+  const chosenInCard = useRef<string | null>(null);
   const [filter, setFilter] = useState<TvFilter>('all');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<GameMeta | null>(null);
@@ -54,13 +64,14 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
   const [saving, setSaving] = useState(false);
   const [display, setDisplay] = useState<TvDisplay>(() => {
     const saved = preference.read('display');
-    return saved === 'screen' || saved === 'full' || saved === 'bare' ? saved : 'lights';
+    return saved === 'full' || saved === 'bare' ? saved : 'lights';
   });
   const [integer, setInteger] = useState(() => preference.read('integer') !== 'off');
   const [volume, setVolume] = useState(() => {
     const saved = Number(preference.read('volume') ?? 80);
     return Number.isFinite(saved) ? Math.min(100, Math.max(0, saved)) : 80;
   });
+  const [muted, setMuted] = useState(() => (preference.read('mute') ?? (audioSettings().enabled ? 'off' : 'on')) === 'on');
   const [vibration, setVibration] = useState(() => preference.read('vibration') !== 'off');
   const [padState, setPadState] = useState<PadState>({ controllers: [], pressed: [] });
   const input = useMemo(() => new InputController(() => undefined), []);
@@ -125,15 +136,17 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
     }).sort((a, b) => b.count - a.count),
   ], [groups, recentlyPlayed.length]);
   const defaultPhone = isSkinId(settings?.phone.skinId) ? settings.phone.skinId : DEFAULT_SKIN;
-  const phoneOrder = [defaultPhone, ...(settings?.myPhones ?? [])];
+  const activePhone = preferredPhone ?? defaultPhone;
+  const phoneOrder = [activePhone, ...(settings?.myPhones ?? [])];
   const phones = [...(skins ?? [])].sort((a, b) => {
     const priority = (id: string) => isSkinId(id) && phoneOrder.includes(id) ? phoneOrder.indexOf(id) : phoneOrder.length;
     return priority(a.config.id) - priority(b.config.id);
   });
   const platform = spotlight && tvPlatform(spotlight.game);
-  const spotlightPhone = phones.find(({ config }) => config.id === (spotlight?.game.settings.skinId ??
+  const spotlightPhone = phones.find(({ config }) => config.id === ((platform === 'j2me' ? preferredPhone : null) ?? spotlight?.game.settings.skinId ??
     (platform === 'j2me' ? defaultPhone : platform && settings?.nativePhones?.[platform])));
   const selectGroup = (group: TvGameGroup, preferred = group.game) => {
+    chosenInCard.current = null;
     libraryScroll.current = body.current?.scrollTop ?? 0;
     setLastGroup(group.id);
     const allBuilds = (games ?? []).filter(g => tvPlatform(g) === tvPlatform(preferred) &&
@@ -154,12 +167,25 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
     if (next === 'library') { setFilter(libraryFilter); setQuery(''); }
   };
   const showPhone = (phone: LoadedSkin) => { setViewedPhone(phone); rememberOverlay('phone-info'); };
+  const usePhone = (id: PhoneSkinId) => {
+    const next = preferredPhone === id ? null : id;
+    setPreferredPhone(next);
+    preference.write('phone', next ?? '');
+    closeOverlay();
+  };
   const managePhones = () => {
     preference.write('mode', 'off');
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
     navigate('/settings#phone');
   };
   const closeOverlay = () => { setActionError(''); setOverlay(null); };
+  const returnToLibrary = () => {
+    if (section !== 'library') {
+      libraryScroll.current = 0;
+      setFilter('all'); setQuery(''); setSection('library');
+    }
+    setSelected(null);
+  };
   const onBack = () => {
     if (overlay === 'confirm' || overlay === 'controls') { setOverlay('menu'); return; }
     if (overlay) { closeOverlay(); return; }
@@ -169,7 +195,7 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
       rememberOverlay('menu');
       return;
     }
-    if (selected) { setSelected(null); return; }
+    if (selected) { returnToLibrary(); return; }
     if (section !== 'home') { showSection('home'); return; }
     rememberOverlay('menu');
   };
@@ -178,6 +204,10 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
     if (key === 'menu') { if (overlay === 'menu') closeOverlay(); else rememberOverlay('menu'); return; }
     if (key === 'back') { onBack(); return; }
     if (gameplay) return;
+    if (key === 'pageUp' || key === 'pageDown') {
+      if (section === 'library' && !overlay && !selected && !active && body.current) pageTvLibrary(body.current, key === 'pageUp' ? -1 : 1);
+      return;
+    }
     const target = scope();
     if (target) moveTvFocus(target, key);
   };
@@ -232,18 +262,46 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
       const result = await api.patchGame(selected.id, patch);
       setSelected(game => game?.id === result.id ? result : game);
       setGames(list => list?.map(game => game.id === result.id ? result : game));
-      if (overlay === 'phone') closeOverlay();
+      if (overlay === 'phone') { chosenInCard.current = result.id; closeOverlay(); }
     } catch (error) { setActionError((error as Error).message); }
     finally { setSaving(false); }
   }
 
   const selectDisplay = (mode: TvDisplay) => { setDisplay(mode); preference.write('display', mode); };
-  const start = (game: GameMeta) => { setActionError(''); report('opening'); setActive(game.id); };
+  const start = async (game: GameMeta) => {
+    if (saving) return;
+    setActionError('');
+    if (preferredPhone && chosenInCard.current !== game.id) {
+      setSaving(true);
+      try {
+        let patch: GameSettingsPatch | undefined;
+        if (tvPlatform(game) === 'j2me') {
+          if (game.settings.skinId !== preferredPhone) patch = { skinId: preferredPhone };
+        } else {
+          const profiles = nativeProfiles(preferredPhone, game);
+          const catalog = profiles.length ? await api.phones() : null;
+          const installed = profiles.filter(device => catalog?.availability.some(item => item.deviceId === device.id && item.available));
+          const device = installed.find(item => item.firmware.product === game.settings.symbianDevice) ?? installed[0];
+          if (device && (game.settings.skinId !== preferredPhone || game.settings.emulatedDeviceId !== device.id)) {
+            patch = { skinId: preferredPhone, emulatedDeviceId: device.id, symbianDevice: device.firmware.product };
+          }
+          if (!device) toast('info', t('Using the game’s phone. The TV phone needs compatible firmware for this game.'));
+        }
+        if (patch) {
+          const saved = await api.patchGame(game.id, { settings: patch });
+          setSelected(saved);
+          setGames(list => list?.map(item => item.id === saved.id ? saved : item));
+        }
+      } catch (error) { setActionError((error as Error).message); return; }
+      finally { setSaving(false); }
+    }
+    report('opening'); setActive(game.id);
+  };
   const playSpotlight = (lights?: boolean) => {
     if (!spotlight) return;
     if (lights) selectDisplay('lights');
     selectGroup(spotlight);
-    start(spotlight.game);
+    void start(spotlight.game);
   };
   const shuffle = () => {
     const candidates = groups.filter(group => group.id !== spotlight?.id);
@@ -288,9 +346,9 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
       {active ? <>
         {playerStatus !== 'game' && <div className="tv-player-nav"><button type="button" onClick={() => rememberOverlay('menu')}><Icon name="menu" />{t('Menu')}</button></div>}
         <Player key={active} gameId={active} autoStart onAutoStartConsumed={() => undefined} toast={toast} onExit={stopped} health={health}
-          tv={{ input, gamepad, handle, report, blocked: !!overlay, display, integer, volume, vibration }} />
+          tv={{ input, gamepad, handle, report, blocked: !!overlay, display, integer, volume, muted, vibration }} />
       </> : selected ? <main className="tv-details">
-        <button type="button" className="tv-details-back" onClick={() => setSelected(null)}><Icon name="back" />{t('Back')}</button>
+        <button type="button" className="tv-details-back" onClick={returnToLibrary}><Icon name="back" />{t('Back')}</button>
         <div className="tv-gallery">
           <GameArtwork game={selected} picture={picture} />
           {screenshots > 0 && <div className="tv-actions">
@@ -307,8 +365,8 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
           {info?.description && info.attribution && <small className="muted">{info.attribution}</small>}
           {nativeWarning && <p className="note warn" role="status">{t(nativeWarning)}</p>}
           {actionError && <p className="error" role="alert">{t(actionError)}</p>}
-          <div className="tv-actions">
-            <button type="button" className="tv-primary" data-tv-prefer onClick={() => start(selected)}><Icon name="play" />{t(selected.lastPlayedAt ? 'Play again / Resume' : 'Play')}</button>
+          <div className="tv-actions" data-tv-row>
+            <button type="button" className="tv-primary" data-tv-prefer disabled={saving} onClick={() => void start(selected)}><Icon name="play" />{t(selected.lastPlayedAt ? 'Play again / Resume' : 'Play')}</button>
             <button type="button" onClick={() => rememberOverlay('phone')}><Icon name="phone" />{t('Choose a phone')}</button>
             {builds.length > 1 && <button type="button" onClick={() => rememberOverlay('build')}>{t('Choose a build')}</button>}
             {tvPlatform(selected) === 'j2me' && <button type="button" onClick={() => rememberOverlay('options')}>{t('Compatibility')}</button>}
@@ -316,7 +374,7 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
           </div>
         </article>
       </main> : section === 'home' ? libraryStatus ?? <TvHome highlights={highlights} spotlight={spotlight} played={recentlyPlayed.length > 0}
-        added={addedShelf} collections={collections} phones={phones} phone={spotlightPhone} activePhone={defaultPhone}
+        added={addedShelf} collections={collections} phones={phones} phone={spotlightPhone} activePhone={activePhone}
         shuffle={groups.length > 1 ? shuffle : undefined} onHighlight={setHighlighted} onOpen={selectGroup} onPlay={playSpotlight}
         onChoosePhone={() => { if (spotlight) { selectGroup(spotlight); rememberOverlay('phone'); } }}
         onLibrary={value => showSection('library', value)} onSection={showSection} onPhone={showPhone} />
@@ -326,7 +384,7 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
         </main> : section === 'phones' ? <main className="tv-catalog">
           <div className="tv-library-head"><h1>{t('Phones')}</h1><button type="button" onClick={managePhones}>{t('My phones')}</button></div>
           {skinsError ? <p role="alert">{skinsError}</p> : !skins ? <p role="status">{t('Loading…')}</p>
-            : <TvPhoneCards phones={phones} active={defaultPhone} onView={showPhone} />}
+            : <TvPhoneCards phones={phones} active={activePhone} onView={showPhone} />}
         </main> : <main className="tv-library">
         <div className="tv-library-head"><h1>{t('Library')}</h1>
           <button type="button" data-tv-prefer onClick={() => rememberOverlay('search')}><Icon name="search" />{query || t('Search games')}</button>
@@ -346,7 +404,10 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
         {overlay === 'phone-info' && viewedPhone && <div className="tv-handset-info">
           <img src={skinBase(viewedPhone.config.id) + 'preview.webp'} alt="" />
           <div><p>{viewedPhone.config.manufacturer} · {viewedPhone.config.year}</p>
-            <p>{t('Display')} · {viewedPhone.config.screen.width}×{viewedPhone.config.screen.height}</p></div>
+            <p>{t('Display')} · {viewedPhone.config.screen.width}×{viewedPhone.config.screen.height}</p>
+            {isSkinId(viewedPhone.config.id) && <button type="button" className="tv-primary" data-tv-prefer
+              onClick={() => { if (isSkinId(viewedPhone.config.id)) usePhone(viewedPhone.config.id); }}>
+              <Icon name="phone" />{t(preferredPhone === viewedPhone.config.id ? 'Use saved game phones' : 'Use this phone')}</button>}</div>
         </div>}
         {overlay === 'build' && <div className="tv-choices">{builds.map(build =>
           <button type="button" key={build.id} aria-pressed={selected?.id === build.id} onClick={() => { setSelected(build); closeOverlay(); }}>
@@ -361,10 +422,8 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
             const name = manufacturer + ' ' + model;
             if (java) return <button type="button" key={id} disabled={saving} aria-pressed={selected.settings.skinId === id}
               onClick={() => void updateGame({ settings: { skinId: id } })}>{preview}<span>{name}</span></button>;
-            const generation = generationOfPackage(selected.packageFormat);
-            const profiles = profilesForSkin(id, tvPlatform(selected)).filter(device => device.engine === 'eka2l1' && (!generation || generationOfOs(device.os) === generation));
+            const profiles = nativeProfiles(id, selected);
             return profiles.map(device => {
-              if (device.engine !== 'eka2l1') return null;
               const available = phoneCatalog?.availability.some(item => item.deviceId === device.id && item.available);
               const current = selected.settings.skinId === id && (!selected.settings.emulatedDeviceId || selected.settings.emulatedDeviceId === device.id);
               return <button type="button" key={device.id} disabled={!available || saving} aria-pressed={current}
@@ -389,7 +448,7 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
           </div>
           {fullscreenError && <p className="note warn">{t(fullscreenError)}</p>}
           <div className="tv-setting">
-            <span>{t('Display')}</span><div className="tv-actions">{([['lights', 'Lights Out'], ['screen', 'Screen'], ['full', 'Phone'], ['bare', 'Game only']] as const).map(([value, label]) =>
+            <span>{t('Display')}</span><div className="tv-actions" role="group" aria-label={t('Display')}>{([['full', 'Phone'], ['lights', 'Lights Out'], ['bare', 'Game only']] as const).map(([value, label]) =>
               <button type="button" key={value} aria-pressed={display === value} onClick={() => selectDisplay(value)}>{t(label)}</button>)}</div>
           </div>
           <div className="tv-setting">
@@ -400,6 +459,7 @@ export default function TvMode({ health, toast, exit }: { health: HealthStatus |
             <span>{t('Volume')} {volume}%</span>
             <button type="button" aria-label={t('Lower volume')} onClick={() => { const value = Math.max(0, volume - 10); setVolume(value); preference.write('volume', String(value)); }}>−</button>
             <button type="button" aria-label={t('Raise volume')} onClick={() => { const value = Math.min(100, volume + 10); setVolume(value); preference.write('volume', String(value)); }}>+</button>
+            <button type="button" aria-pressed={muted} onClick={() => { setMuted(!muted); preference.write('mute', muted ? 'off' : 'on'); }}><Icon name={muted ? 'mute' : 'volume'} />{t('Mute')}</button>
           </div>
           <div className="tv-actions">
             {active && <button type="button" onClick={() => exitRequest('library')}>{t('Stop and return to library')}</button>}
