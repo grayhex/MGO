@@ -7,9 +7,11 @@ export const PAD_ACTIONS: PadAction[] = [...ACTIONS, 'ui:menu', 'ui:back', 'ui:f
 const button = (index: number): PadBinding => ({ kind: 'button', index });
 const axis = (index: number, direction: -1 | 1): PadBinding => ({ kind: 'axis', index, direction });
 export const DEFAULT_PAD: PadProfile = { deadzone: .35, bindings: {
-  up: [button(12), axis(1,-1)], down: [button(13), axis(1,1)], left: [button(14), axis(0,-1)], right: [button(15), axis(0,1)],
-  fire: [button(0)], softLeft: [button(2)], softRight: [button(1)], d5: [button(3)], star: [button(4)], pound: [button(5)], 'ui:menu': [button(9)], 'ui:back': [button(8)],
+  up: [axis(1,-1)], down: [axis(1,1)], left: [axis(0,-1)], right: [axis(0,1)],
+  d2: [button(12)], d8: [button(13)], d4: [button(14)], d6: [button(15)], d5: [button(0)], fire: [button(2)],
+  softLeft: [button(4)], softRight: [button(5), button(1)], star: [button(6)], pound: [button(7)], 'ui:menu': [button(9)], 'ui:back': [button(8)],
 } };
+export const PAD_NAVIGATION: Partial<Record<PadAction, Action>> = { d2: 'up', d4: 'left', d5: 'fire', d6: 'right', d8: 'down' };
 export function sanitizeProfile(raw: unknown): PadProfile {
   const p = raw as Partial<PadProfile> | null;
   const bindings: PadProfile['bindings'] = {};
@@ -35,12 +37,17 @@ export class GamepadPoller {
   private raf = 0;
   private active = new Map<string, PadAction>();
   private blocked = new Set<string>();
+  private heldBindings = new Set<string>();
+  private profileBlocked = new Set<string>();
   private suspended = false;
+  private pageDirection = 0;
+  private nextPageAt = 0;
   private vibration?: { index: number; id: string; actuator: GamepadHapticActuator };
   profile: PadProfile;
   uiMode = false;
   reserveMenu = false;
   onUi?: (action: PadAction) => void;
+  onPage?: (direction: -1 | 1) => void;
   onState?: (state: PadState) => void;
   capture?: (binding: PadBinding) => void;
   constructor(private input: InputController, private onName?: (name: string | null) => void, profile = loadPadProfile()) { this.profile = profile; }
@@ -54,7 +61,12 @@ export class GamepadPoller {
     this.release();
     this.uiMode = uiMode;
   }
-  setProfile(profile: PadProfile): void { this.release(); this.profile = sanitizeProfile(profile); }
+  setProfile(profile: PadProfile): void {
+    // A card and its library can select different profiles while Back is still held.
+    for (const binding of this.heldBindings) this.profileBlocked.add(binding);
+    this.release();
+    this.profile = sanitizeProfile(profile);
+  }
   rumble(ms: number): void {
     if (!Number.isFinite(ms) || ms <= 0) { this.stopRumble(); return; }
     if (this.suspended || document.hidden || !document.hasFocus()) return;
@@ -73,11 +85,16 @@ export class GamepadPoller {
   }
   tick(pads: readonly (Gamepad | null)[], focused = true): void {
     const capturing=!!this.capture; const now = new Map<string, PadAction>(); const present = new Set<string>();
+    const bindings = new Set<string>();
+    const page = this.uiMode && focused && !this.suspended && !capturing ? this.onPage : undefined;
+    let pageDirection: -1 | 0 | 1 = 0;
     const controllers = pads.filter((p): p is Gamepad => !!p?.connected).map((p) => ({ id:p.id,index:p.index,mapping:p.mapping }));
     if (this.vibration && (!focused || !controllers.some(p => p.index === this.vibration?.index && p.id === this.vibration.id))) this.stopRumble();
     this.onName?.(controllers[0]?.id ?? null);
     for (const p of pads) {
       if (!p?.connected) continue;
+      const rightY = p.mapping === 'standard' ? p.axes[3] ?? 0 : 0;
+      if (page && !pageDirection && Math.abs(rightY) >= Math.max(.65, this.profile.deadzone)) pageDirection = rightY < 0 ? -1 : 1;
       const found: PadBinding[] = [];
       p.buttons.forEach((b,i) => { if(b.pressed || b.value > .5) found.push(button(i)); });
       p.axes.forEach((a,i) => { if(Math.abs(a) > Math.max(.6,this.profile.deadzone)) found.push(axis(i,a < 0 ? -1 : 1)); });
@@ -85,11 +102,15 @@ export class GamepadPoller {
       for (const action of PAD_ACTIONS) for (const b of this.profile.bindings[action] ?? []) {
         const source=`pad:${p.index}:${action}:${b.kind}:${b.index}:${b.kind === 'axis' ? b.direction : ''}`;
         if (!bindingOn(p,b,this.profile.deadzone)) continue;
+        const physical = `${p.index}:${b.kind}:${b.index}:${b.kind === 'axis' ? b.direction : ''}`;
+        bindings.add(physical);
         present.add(source);
         if (!focused || this.suspended || (!this.input.enabled && !this.uiMode) || capturing) { this.blocked.add(source); continue; }
-        if (!this.blocked.has(source)) now.set(source,action);
+        if (!this.blocked.has(source) && !this.profileBlocked.has(physical)) now.set(source,action);
       }
     }
+    this.heldBindings = bindings;
+    for (const binding of this.profileBlocked) if (!bindings.has(binding)) this.profileBlocked.delete(binding);
     for(const source of this.blocked) if(!present.has(source)) this.blocked.delete(source);
     if (this.reserveMenu && [...now].some(([source, action]) => (action === 'ui:menu' || action === 'ui:back') && !this.active.has(source))) {
       for (const [source, action] of now) {
@@ -106,6 +127,14 @@ export class GamepadPoller {
       } else if (this.input.enabled) this.input.press(source,action as Action);
     }
     this.active=now;
+    if (page && pageDirection) {
+      const time = performance.now();
+      if (pageDirection !== this.pageDirection || time >= this.nextPageAt) {
+        page(pageDirection);
+        this.nextPageAt = time + 320;
+      }
+    }
+    this.pageDirection = pageDirection;
     this.onState?.({controllers,pressed:[...new Set(now.values())]});
   }
   start(): void {

@@ -50,7 +50,7 @@ GamepadPoller reuses InputController's per-source/reference-counted input. It po
 
 Open **Gamepad settings / UI navigation** or press default Start (button 9). Input is released while configuring. Select an action, press a button or move a stick; adjust deadzone and Save mapping globally or for the game. Per-game overrides take precedence; Use global removes the override. Fn/physical handset functions not implemented by the existing logical input system remain unmapped.
 
-Default standard controls: D-pad/left stick directions, face bottom = Fire, face left/right = soft keys, face top = 5, shoulders = */#. Start enters/exits player UI navigation; Back exits menus/Lights Out. In navigation mode directions move focus, Fire activates; left/right on selects change the value. Every Java ME digit/action plus UI lights/fullscreen/menu/back can be explicitly bound. Connected IDs and held actions are shown, and shared keypad/PhoneSkin feedback uses InputController.
+The default standard mapping sends 2/4/6/8 with the D-pad, directional keys with the left stick, 5 with A and Fire with X. LB/RB send the left/right soft keys and LT/RT send */#. Start enters or exits player UI navigation. Back exits menus and Lights Out. In navigation mode directions move focus, A confirms, and left/right on selects change the value. Saved custom mappings take precedence. Connected IDs and held actions appear in the mapping panel, and the on-screen keypad follows the held keys.
 
 Focus loss/hidden page, disconnect and remapping release only relevant sources. Unfocused/disabled held inputs are blocked until neutral before rearming. Multiple controllers, keyboard, skin and touches can hold the same action without releasing one another.
 

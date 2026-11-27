@@ -12,7 +12,7 @@ import { navigate } from '../router';
 import { EmulationTweaksForm } from './EmulationTweaksForm';
 import { Recorder, Replayer } from '../recording';
 import { downloadBlob, fileSafe, framePng } from '../snapshot';
-import { GamepadPoller, loadPadProfile, type PadAction, type PadState } from '../gamepad';
+import { GamepadPoller, loadPadProfile, PAD_NAVIGATION, type PadAction, type PadState } from '../gamepad';
 import { GamepadSettings } from './GamepadSettings';
 import { phoneHasTouch, KEY_LAYOUTS, SCREEN_PRESETS, type PhoneCatalog, type DevicePreset, type EmulationTweaks, type GameMeta, type HealthStatus, type LayoutId, type ServerEvent, type SessionState, type SessionStatus } from '@mgo/protocol';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
@@ -370,7 +370,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     return () => { window.removeEventListener('pointerdown', go); window.removeEventListener('keydown', go); audio.close(); };
   }, [audio]);
   useEffect(() => { audio.setVolume((tv?.volume ?? vol) / 100); if (!tv) try { localStorage.setItem('j2me-web.volume', String(vol)); } catch { /* ignore */ } }, [audio, vol, tv?.volume]);
-  useEffect(() => { audio.setMuted(tv ? tv.volume === 0 : muted); }, [audio, muted, tv?.volume]);
+  useEffect(() => { audio.setMuted(tv ? tv.muted || tv.volume === 0 : muted); }, [audio, muted, tv?.muted, tv?.volume]);
 
   // client stats every second, server-side resources every two
   useEffect(() => {
@@ -421,6 +421,19 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
 
   // ---- input wiring: keyboard, focus loss, gamepad
   const tvStatus = tv?.report;
+  const menuPause = useRef<string | null>(null);
+  const tvBlocked = !!tv?.blocked;
+  useEffect(() => {
+    if (!tvStatus || !live || menuPause.current !== session?.id) menuPause.current = null;
+    if (!tvStatus || !live || !session?.id || conn !== 'open') return;
+    if (tvBlocked && !pausedByPlayer && !menuPause.current) {
+      menuPause.current = session.id;
+      send({ t: 'pause', on: true });
+    } else if (!tvBlocked && menuPause.current) {
+      menuPause.current = null;
+      send({ t: 'pause', on: false });
+    }
+  }, [tvStatus, tvBlocked, live, session?.id, conn, pausedByPlayer, send]);
   const tvPaused = !!tv && live && pausedByPlayer;
   const tvTextOpen = !!tv && live && !tvPaused && !!textArea && textField !== dismissedText && !(textArea.constraints & TEXT_CONSTRAINT.UNEDITABLE);
   const suppressInput = !!(menu || perm || keymap || (tv && link) || tvTextOpen);
@@ -460,7 +473,8 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     setPadMenu(false);
     if (live) stage.current?.focus({ preventScroll: true });
   };
-  uiRef.current = (action) => {
+  uiRef.current = (padAction) => {
+    const action = PAD_NAVIGATION[padAction] ?? padAction;
     wake();
     if (action === 'ui:menu') {
       if (padMenu) closePadSettings();
@@ -548,7 +562,7 @@ export function Player({ gameId, autoStart, onAutoStartConsumed, toast, onExit, 
     } finally { setBusy(false); }
   };
   const leave = async () => { if (sessionRef.current && (state === 'running' || state === 'starting' || state === 'stopping') && !await stop()) return; onExit(); };
-  const resume = () => { if (live && pausedByPlayer && conn === 'open') send({ t: 'pause', on: false }); };
+  const resume = () => { if (live && pausedByPlayer && !menuPause.current && conn === 'open') send({ t: 'pause', on: false }); };
   if (tv) tv.handle.current = { leave, resume };
   const shot = async (how: 'save' | 'copy') => {
     const c = canvasEl.current;

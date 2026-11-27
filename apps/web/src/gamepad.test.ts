@@ -5,11 +5,50 @@ import { GamepadPoller, DEFAULT_PAD, sanitizeProfile, loadPadProfile, savePadPro
 const pad = (buttons: number[] = [], axes = [0,0], index=0) => ({index,id:'Test standard controller',connected:true,mapping:'standard',buttons:Array.from({length:17},(_,i)=>({pressed:buttons.includes(i),value:buttons.includes(i)?1:0})),axes}) as unknown as Gamepad;
 it('gamepad, keyboard and skin share references; simultaneous directions and fire, disconnect only releases pad',()=>{
  const events: unknown[]=[]; const input=new InputController(e=>events.push(e)),gp=new GamepadPoller(input,undefined,structuredClone(DEFAULT_PAD));
- input.press('keyboard','fire');input.press('skin','fire');gp.tick([pad([0,12])]);
- assert.deepEqual([...input.heldActions()].sort(),['fire','up']);
+ input.press('keyboard','fire');input.press('skin','fire');gp.tick([pad([2,12])]);
+ assert.deepEqual([...input.heldActions()].sort(),['d2','fire']);
  gp.tick([]);assert.deepEqual([...input.heldActions()],['fire']);
  input.release('keyboard');assert.equal(input.heldCodes().length,1);input.release('skin');assert.equal(input.heldCodes().length,0);
  assert.equal(events.filter((e:any)=>e.s==='D'&&e.code===-5).length,1);
+});
+
+it('maps standard A, shoulders and the D-pad to phone keys', () => {
+ const input = new InputController(() => {});
+ const gp = new GamepadPoller(input, undefined, DEFAULT_PAD);
+ gp.tick([pad([0, 4, 5, 12, 13, 14, 15])]);
+ assert.deepEqual(input.heldActions(), new Set(['d5', 'softLeft', 'softRight', 'd2', 'd4', 'd6', 'd8']));
+});
+
+it('pages with the standard right stick only during focused UI navigation', () => {
+ const input = new InputController(() => {});
+ const gp = new GamepadPoller(input, undefined, DEFAULT_PAD);
+ const pages: number[] = [];
+ gp.onPage = direction => pages.push(direction);
+ gp.tick([pad([], [0, 0, 0, .9])]);
+ gp.setUiMode(true);
+ gp.tick([pad([], [0, 0, 0, .9])], false);
+ gp.tick([pad([], [0, 0, 0, .3])]);
+ assert.deepEqual(pages, []);
+ gp.tick([pad([], [0, 0, 0, .9])]);
+ gp.tick([pad([], [0, 0, 0, .9])]);
+ gp.tick([pad([])]);
+ gp.tick([pad([], [0, 0, 0, -.9])]);
+ assert.deepEqual(pages, [1, -1]);
+ assert.equal(input.heldCodes().length, 0);
+});
+
+it('waits for Back to be released when switching profiles between a card and the library', () => {
+ const gp = new GamepadPoller(new InputController(() => {}), undefined, DEFAULT_PAD);
+ const actions: string[] = [];
+ gp.setUiMode(true);
+ gp.onUi = action => actions.push(action);
+ gp.tick([pad([8])]);
+ gp.setProfile(DEFAULT_PAD);
+ gp.tick([pad([8])]);
+ assert.deepEqual(actions, ['ui:back']);
+ gp.tick([pad()]);
+ gp.tick([pad([8])]);
+ assert.deepEqual(actions, ['ui:back', 'ui:back']);
 });
 it('deadzone, negative axes, focus loss and neutral rearm',()=>{
  const input=new InputController(()=>{}), gp=new GamepadPoller(input,undefined,structuredClone(DEFAULT_PAD));
@@ -51,11 +90,11 @@ it('reserves a remapped menu chord and waits for neutral when TV input modes cha
  assert.deepEqual(actions, ['ui:menu']);
  gp.tick([pad()]);
  gp.tick([pad([12])]);
- assert.deepEqual(actions, ['ui:menu', 'up']);
+ assert.deepEqual(actions, ['ui:menu', 'd2']);
  gp.setUiMode(false);
  gp.tick([pad([12])]);
  assert.deepEqual(events, []);
  gp.tick([pad()]);
  gp.tick([pad([12])]);
- assert.deepEqual(input.heldActions(), new Set(['up']));
+ assert.deepEqual(input.heldActions(), new Set(['d2']));
 });

@@ -10,6 +10,16 @@ import { GameArtwork, TvGameTile, tvPlatform, type TvFilter, type TvGameGroup } 
 export type TvSection = 'home' | 'library' | 'collections' | 'phones';
 export type TvCollection = { filter: TvFilter; label: string; icon: string; count: number };
 
+function collectionTone(filter: TvFilter): string {
+  switch (filter) {
+    case 'favorites': case 'genre:Action': case 'genre:Fighting': return 'pink';
+    case 'recent': case 'genre:Racing': case 'genre:Simulation': return 'blue';
+    case 'genre:RPG': case 'genre:Strategy': return 'violet';
+    case 'genre:Adventure': case 'genre:Arcade': case 'genre:Platformer': return 'amber';
+    default: return 'teal';
+  }
+}
+
 export function TvNavigation({ section, onSelect, onSettings }: {
   section: TvSection; onSelect: (section: TvSection) => void; onSettings: () => void;
 }) {
@@ -17,9 +27,9 @@ export function TvNavigation({ section, onSelect, onSettings }: {
   return <header className="tv-head">
     <img className="tv-brand" src={theme === 'dark' ? '/graphics/brand/logo-horizontal.svg' : '/graphics/brand/logo-light.svg'} alt="MGO" />
     <nav className="tv-nav" data-tv-row aria-label={t('TV navigation')}>
-      {([['home', 'Home', 'home'], ['library', 'Library', 'library'], ['collections', 'Collections', 'layers'], ['phones', 'Phones', 'phone']] as const).map(([id, label, icon]) =>
-        <button key={id} type="button" aria-current={section === id ? 'page' : undefined} onClick={() => onSelect(id)}><Icon name={icon} />{t(label)}</button>)}
-      <button type="button" onClick={onSettings}><Icon name="sliders" />{t('Settings')}</button>
+      {([['home', 'Home', 'home', 'teal'], ['library', 'Library', 'library', 'blue'], ['collections', 'Collections', 'layers', 'violet'], ['phones', 'Phones', 'phone', 'amber']] as const).map(([id, label, icon, tone]) =>
+        <button key={id} type="button" data-tv-tone={tone} aria-current={section === id ? 'page' : undefined} onClick={() => onSelect(id)}><Icon name={icon} />{t(label)}</button>)}
+      <button type="button" data-tv-tone="pink" onClick={onSettings}><Icon name="sliders" />{t('Settings')}</button>
     </nav>
   </header>;
 }
@@ -37,7 +47,7 @@ export function TvFooter() {
 
 export function TvCollectionCards({ collections, onSelect }: { collections: TvCollection[]; onSelect: (filter: TvFilter) => void }) {
   return <div className="tv-collection-grid" data-tv-row>{collections.map(({ filter, label, icon, count }) =>
-    <button type="button" className="tv-collection-card" key={filter} onClick={() => onSelect(filter)}>
+    <button type="button" className="tv-collection-card" key={filter} data-tv-tone={collectionTone(filter)} title={t(label)} onClick={() => onSelect(filter)}>
       <Icon name={icon} /><span>{t(label)}</span><small>{count}</small>
     </button>)}
   </div>;
